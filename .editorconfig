@@ -1,0 +1,15 @@
+# Repo-wide editor/analyzer settings. This repo's convention is using directives OUTSIDE the
+# namespace (every file follows it). A user-level IDE profile (VS / ReSharper / StyleCop
+# extension) that enforces inside-namespace placement would squiggle every file red — this file
+# overrides such profiles for code under this repo. It does not affect `dotnet build`
+# (EnforceCodeStyleInBuild is off), so the CI gate is unchanged.
+root = true
+
+[*.cs]
+# using placement: outside the namespace, and never flag it
+csharp_using_directive_placement = outside_namespace:silent
+dotnet_diagnostic.IDE0065.severity = none
+# StyleCop's inside-namespace rule (only active if the host IDE has the StyleCop extension)
+dotnet_diagnostic.SA1200.severity = none
+# ReSharper: keep new usings at the top of the file, not inside the namespace
+resharper_csharp_add_imports_to_deepest_scope = false
