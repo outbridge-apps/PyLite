@@ -32,8 +32,9 @@ jobs:
               throw "release $tag does not match project version $v"
           }
 
+      # An explicit output folder: where pack puts the package must not depend on project settings.
       - name: Pack
-        run: dotnet pack PyLite.sln -c Release -p:ContinuousIntegrationBuild=true
+        run: dotnet pack PyLite.sln -c Release -p:ContinuousIntegrationBuild=true --output artifacts
 
       - name: Trade the workflow identity for a short-lived key
         uses: NuGet/login@v1
@@ -42,4 +43,4 @@ jobs:
           user: OlekSt
 
       - name: Push to nuget.org
-        run: dotnet nuget push src/PyLite/bin/Release/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
