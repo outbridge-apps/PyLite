@@ -29,7 +29,7 @@ namespace Outbridge.PyLite.Hosting
         }
     }
 
-    // A prod AOS may install this: every sleep returns instantly (but is still charged a Step).
+    // A production host may install this: every sleep returns instantly (but is still charged a Step).
     public sealed class NoOpSleepPolicy : ISleepPolicy
     {
         private static readonly TimeSpan Q = TimeSpan.FromMilliseconds(25);

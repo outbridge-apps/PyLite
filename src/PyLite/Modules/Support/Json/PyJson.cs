@@ -489,7 +489,7 @@ namespace Outbridge.PyLite.Modules.Support
             SkipKeys = skipKeys;
         }
 
-        // Hosting JsonOut: compact, EnsureAscii=false (X++ is UTF-16), AllowNan=false, no indent.
+        // Hosting JsonOut: compact, EnsureAscii=false (the host string is UTF-16), AllowNan=false, no indent.
         public static readonly JsonDumpOptions MarshalDefault =
             new JsonDumpOptions(false, false, false, ",", ":", null);
     }

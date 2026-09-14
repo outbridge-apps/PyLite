@@ -16,7 +16,7 @@ namespace Outbridge.PyLite.Hosting
     // The engine's public entry point. Immutable after construction: it owns the
     // shared frozen ModuleRegistry (built-in + host C# + Python modules), the CompiledScript cache
     // the concurrency gate and the run pipeline. Every Run executes on a dedicated 32 MB RunnerThread
-    // (parser+evaluator off the AOS 1 MB stack) admitted through RunGate (semaphore + memory ceiling + leaked-
+    // (parser+evaluator off the host's 1 MB stack) admitted through RunGate (semaphore + memory ceiling + leaked-
     // thread circuit breaker). Compilation runs on the calling thread (bounded recursion via StackGuard).
     public sealed class ScriptEngine
     {

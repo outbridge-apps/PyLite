@@ -43,7 +43,7 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.ValueError(c, "chr() arg not in range(0x110000)");
             int cp = (int)i;
             if (cp <= 0xFFFF)
-                return c.Values.StrFromChar((char)cp);   // lone surrogates allowed (IronPython parity)
+                return c.Values.StrFromChar((char)cp);   // lone surrogates allowed: a str is UTF-16 code units
             int v = cp - 0x10000;
             char hi = (char)(0xD800 + (v >> 10));
             char lo = (char)(0xDC00 + (v & 0x3FF));

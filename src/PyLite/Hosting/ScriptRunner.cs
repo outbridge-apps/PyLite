@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // The flat facade for calls from X++ (#11): no generics/Task/IEnumerable in the
+    // The flat facade for a host that cannot consume generics: no generics/Task/IEnumerable in the
     // public surface, every exception is extinguished inside, results come back through getters. One runner
     // holds one configuration; Run builds a RunRequest, invokes the shared ScriptEngine, and unpacks the
     // RunResult. Configuration survives across Run calls; Reset() clears it.
@@ -115,7 +115,7 @@ namespace Outbridge.PyLite.Hosting
             }
             catch (Exception ex)
             {
-                // The top-level guarantee: nothing ever flies out to X++ (ScriptEngine.Run itself never throws,
+                // The top-level guarantee: nothing ever flies out to the host (ScriptEngine.Run itself never throws,
                 // so this is a defensive net → EngineFault, code 5).
                 _last = null;
                 _lastError = new ScriptError(ScriptErrorKind.EngineFault, null,

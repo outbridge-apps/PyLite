@@ -20,12 +20,12 @@ namespace Outbridge.PyLite.Hosting
         public int CompiledScriptCacheEntries { get; set; } = 256;
 
         // The str/bytes hash seed. Fixed by default, so hash('a') is the same number in every run and
-        // after every AOS recycle — the engine is deterministic everywhere else (no addresses in repr,
+        // after every host restart — the engine is deterministic everywhere else (no addresses in repr,
         // id() is a counter, gzip mtime is 0) and a hash that moved under the host would be the odd one
         // out. Set to null for a fresh cryptographic seed per engine: that trades the reproducibility
         // for hash-flooding resistance, which matters when dict keys come from outside (json.loads of a
         // partner payload) — though a flood there burns the step budget and aborts the run rather than
-        // hanging the AOS, because every table probe charges a step.
+        // hanging the host, because every table probe charges a step.
         public uint? StrHashSeed { get; set; } = 0x9E3779B9;
 
         // C#-implemented host modules (native capabilities live here — reviewed as engine code).
@@ -48,7 +48,7 @@ namespace Outbridge.PyLite.Hosting
         public MemoryHygieneOptions MemoryHygiene { get; set; }
 
         // Concurrency + protection. Each run executes on a dedicated 32 MB thread (stack safety on the
-        // AOS 1 MB stack); the gate admits at most MaxConcurrentRuns and Σ(MaxAllocBytes) ≤ the ceiling.
+        // host's 1 MB stack); the gate admits at most MaxConcurrentRuns and Σ(MaxAllocBytes) ≤ the ceiling.
         public int MaxConcurrentRuns { get; set; } = 8;                             // clamped to hard cap 32
         public long GlobalMemoryCeilingBytes { get; set; } = 1L << 30;              // 1 GB
         public int CircuitBreakerLeakedThreads { get; set; } = 4;                   // open the breaker at N leaks

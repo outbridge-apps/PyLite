@@ -1,6 +1,6 @@
 namespace Outbridge.PyLite.Hosting
 {
-    // explicit RAM-return knobs, defaults off. The AOS process is shared, so an
+    // explicit RAM-return knobs, defaults off. The host process is shared, so an
     // unconditional GC.Collect per run would trade RAM for pauses in other workloads; the hint runs on the
     // dying runner thread, is threshold-gated, and uses GCCollectionMode.Optimized (the CLR may decline).
     public sealed class MemoryHygieneOptions

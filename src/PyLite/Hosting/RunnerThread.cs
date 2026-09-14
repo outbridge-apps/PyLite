@@ -45,7 +45,7 @@ namespace Outbridge.PyLite.Hosting
             long id = Interlocked.Increment(ref _runIdCounter);
             _thread = new Thread(ThreadMain, StackSizeBytes)
             {
-                IsBackground = true,   // AOS must not wait for our threads at shutdown
+                IsBackground = true,   // the host must not wait for our threads at shutdown
                 Name = "PyLite-Run-" + id.ToString(CultureInfo.InvariantCulture),
             };
         }

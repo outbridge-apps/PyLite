@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // The flat X++-mappable error code. Numeric values are the X++ contract.
+    // The flat error code for a host that maps results to numbers. Numeric values are the host contract.
     public enum ScriptErrorKind
     {
         Ok = 0,

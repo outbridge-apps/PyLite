@@ -6,7 +6,7 @@ namespace Outbridge.PyLite.Runtime
 {
     // C# stack guard. #1: TryEnsureSufficientExecutionStack does NOT exist in
     // net472, so we use the throwing EnsureSufficientExecutionStack + catch. An uncaught
-    // StackOverflowException would kill the AOS process, so every recursive descent must Probe.
+    // StackOverflowException would kill the host process, so every recursive descent must Probe.
     //
     // Call cadence (normative for): Evaluator.Call prologue — always; EvalExpr — when
     // (++ctx.ExprProbeCounter & 15) == 0 (parser bounds expr nesting to 64, so at most 16 small
