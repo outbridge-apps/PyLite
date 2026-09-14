@@ -1,5 +1,7 @@
 # PyLite
 
+[![build](https://github.com/outbridge-apps/PyLite/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/outbridge-apps/PyLite/actions/workflows/build.yml)
+
 An embeddable interpreter of a Python dialect for .NET Framework hosts, written in C#.
 
 PyLite runs scripts written in a modern-syntax Python dialect (f-strings, `match`/`case`, the
