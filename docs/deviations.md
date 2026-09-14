@@ -15,15 +15,36 @@ strings, and nothing is re-encoded on the way in. A character outside the Basic 
 therefore counts as two units:
 
 ```python
-len('\U0001F600')      # 2, CPython says 1
-'\U0001F600'[0]        # '\ud83d' — one half of the pair
+len('\U0001F600')            # 2, CPython says 1
+'\U0001F600'[0]              # '\ud83d' — one half of the pair
+'a\U0001F600b'[0:2]          # 'a\ud83d' — a slice can cut a character in half
+len([c for c in '\U0001F600'])   # 2 — so can iteration
+''.join(reversed('\U0001F600'))  # not the same string back to front
 ```
 
-Indexing, slicing and iteration walk those units, so they can split a pair. Encoding is unaffected
-(`'\U0001F600'.encode('utf-8')` is 4 bytes, as in CPython), and every library that works in code
-points — `unicodedata`, case mapping, `str.translate`, `isidentifier` — works in code points here
-too. Comparison and sorting are ordinal over the same units, which puts an astral character before
+This is the one deviation that can produce a broken string rather than a different answer, so it is
+worth knowing where it bites: emoji, the rarer CJK, musical and mathematical symbols — anything
+above U+FFFF. Text that stays inside the Basic Multilingual Plane, which includes every European
+and most Asian script, behaves exactly as in CPython.
+
+The rest of the engine is not fooled by it. `ord('\U0001F600')` is `128512` and `chr(128512)` gives
+those two units back, so the pair is read as one character where a character is what is being
+asked for. Everything with a Unicode table behind it — `unicodedata.name`, case mapping,
+`str.translate`, `isidentifier` — works in code points. `re`, on the other hand, matches in units:
+`re.findall('.', 'a\U0001F600b')` finds four matches, not three, and match offsets are unit
+offsets.
+
+Encoding a whole character is unaffected (`'\U0001F600'.encode('utf-8')` is 4 bytes, as in
+CPython); encoding a half raises `UnicodeEncodeError: surrogates not allowed`, also as in CPython.
+A half handed back to the host arrives as the bare surrogate — not a replacement character — so a
+host that writes it out as UTF-8 meets the same error on its side.
+
+Comparison and sorting are ordinal over the same units, which puts an astral character before
 `U+FFFD` where CPython puts it after.
+
+Combining marks are not affected by any of this: a base letter plus a combining accent is two
+characters and the precomposed letter is one, here and in CPython alike — those are code points,
+not a surrogate pair.
 
 Case mapping is Unicode 16.0 and includes the mappings that change length: `'straße'.upper()` is
 `'STRASSE'`, so `len(s.upper()) == len(s)` does not hold — as in CPython.
