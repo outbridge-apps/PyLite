@@ -42,5 +42,14 @@ jobs:
         with:
           user: OlekSt
 
+      # The push client does not expand wildcards here, so the path is resolved before the call.
       - name: Push to nuget.org
-        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem artifacts -Filter *.nupkg
+          if (-not $pkg)
+          {
+              throw "pack produced no package in artifacts"
+          }
+          $pkg.FullName
+          dotnet nuget push $pkg.FullName --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
