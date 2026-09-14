@@ -39,6 +39,20 @@ design:
 `hashlib`, `hmac`, `struct`, `zlib`, `gzip`, `csv`, `io`, `uuid`, `bisect`, `heapq`, `urllib.parse`,
 `xml.etree.ElementTree`, `traceback`.
 
+`io` is `StringIO` only, and `zlib`/`gzip` are one-shot; [docs/modules.md](docs/modules.md) lists
+every name each module exposes.
+
+## Documentation
+
+- [docs/modules.md](docs/modules.md) — every builtin, type method and module member that exists,
+  read off a running engine rather than written by hand.
+- [docs/deviations.md](docs/deviations.md) — where the dialect knowingly behaves differently from
+  CPython: UTF-16 strings, the range of `decimal`, record classes, and what a resource limit does
+  to your `except`.
+- [docs/performance.md](docs/performance.md) — measured against IronPython 3.4.2: money in
+  `decimal` ×66–91 faster, JSON ×8.5–10.1 faster, a new engine in a warm process ×73–173 faster,
+  `sorted` with a `key` ×2.6–3.3 slower.
+
 ## Using it from C#
 
 ```csharp

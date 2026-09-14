@@ -48,8 +48,8 @@
 
   <!-- The package carries the repository README, and only the public tree has the public one. -->
   <Target Name="RefusePackFromInternalTree" BeforeTargets="Pack"
-          Condition="Exists('$(MSBuildThisFileDirectory)..\..\docs')">
-    <Error Text="Pack from the public tree: this one carries internal documents." />
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\tests')">
+    <Error Text="Pack from the public tree: this one has the internal README." />
   </Target>
 
 </Project>

@@ -14,3 +14,6 @@ coverage*.xml
 Thumbs.db
 .DS_Store
 *.swp
+
+# Local package output (the publish workflow packs here)
+artifacts/
