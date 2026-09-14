@@ -118,7 +118,7 @@ namespace Outbridge.PyLite.Modules
         // The document is parsed up front and the events are replayed from the finished tree. That is not
         // incremental, which is the whole point of iterparse in CPython — but it cannot be here anyway: a
         // source is an in-memory object, so the text is already materialised before the first event, and
-        // reading it twice would cost more than the tree. Documented in docs/deviations.md.
+        // reading it twice would cost more than the tree.
         private static ScriptValue IterParse(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             Args.Between(ctx, a, "iterparse", 1, 2);

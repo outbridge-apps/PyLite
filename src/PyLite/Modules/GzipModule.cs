@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Modules
 {
     // gzip (integration payloads): one-shot compress/decompress over the shared zlib deflate core.
     // No GzipFile/open (no filesystem in the sandbox). mtime defaults to 0 — deterministic output,
-    // unlike CPython's wall-clock default (deviations.md). Multi-member streams are concatenated, with
+    // unlike CPython's wall-clock default. Multi-member streams are concatenated, with
     // the member boundaries found by trailer validation (see InflateMember).
     public static class GzipModule
     {
