@@ -12,6 +12,12 @@
     <Copyright>Copyright (c) 2026 Outbridge</Copyright>
     <Description>An embeddable interpreter of a Python dialect for .NET Framework hosts: managed-only, deterministic, with resource limits on steps, time, memory and depth.</Description>
     <PackageId>PyLite</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/outbridge-apps/PyLite</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/outbridge-apps/PyLite.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>python;interpreter;scripting;sandbox;embedded;net472</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <NeutralLanguage>en</NeutralLanguage>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
@@ -35,5 +41,15 @@
       <_Parameter1>Outbridge.PyLite.Tests</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- The package carries the repository README, and only the public tree has the public one. -->
+  <Target Name="RefusePackFromInternalTree" BeforeTargets="Pack"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\docs')">
+    <Error Text="Pack from the public tree: this one carries internal documents." />
+  </Target>
 
 </Project>
