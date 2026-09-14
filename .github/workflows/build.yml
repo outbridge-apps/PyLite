@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push supersedes a run in flight.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # net472 needs the .NET Framework targeting packs, and only the Windows images carry them.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The project file treats warnings as errors, so a green build is a warning-free one.
+      - name: Build
+        run: dotnet build PyLite.sln -c Release -p:ContinuousIntegrationBuild=true
+
+      - name: Upload the assembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: Outbridge.PyLite
+          path: src/PyLite/bin/Release/Outbridge.PyLite.dll
+          if-no-files-found: error
