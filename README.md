@@ -52,8 +52,8 @@ every name each module exposes.
   CPython: UTF-16 strings, the range of `decimal`, record classes, and what a resource limit does
   to your `except`.
 - [docs/performance.md](docs/performance.md) — measured against IronPython 3.4.2: money in
-  `decimal` ×59–77 faster, JSON ×8–15 faster, a new engine in a warm process ×196–224 faster,
-  `sorted` with a `key` ×1.4 slower.
+  `decimal` ×65–73 faster, JSON ×13–14 faster, a new engine in a warm process ×187–226 faster,
+  `sorted` with a `key` ×1.08–1.36 slower.
 
 ## Using it from C#
 
