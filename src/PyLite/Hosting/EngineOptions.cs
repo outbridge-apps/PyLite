@@ -28,6 +28,9 @@ namespace Outbridge.PyLite.Hosting
         // hanging the host, because every table probe charges a step.
         public uint? StrHashSeed { get; set; } = 0x9E3779B9;
 
+        // Tests only: runs every script on the tree walk alone (EvalContext.InterpretOnly).
+        internal bool InterpretOnly { get; set; }
+
         // C#-implemented host modules (native capabilities live here — reviewed as engine code).
         public IReadOnlyList<IModuleProvider> ExtraModules { get; set; }
 

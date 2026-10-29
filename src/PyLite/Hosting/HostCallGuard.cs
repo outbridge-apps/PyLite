@@ -25,22 +25,14 @@ namespace Outbridge.PyLite.Hosting
             {
                 result = impl(null, args, kw, ctx);   // free builtin: self == null
             }
-            catch (EngineAbort)
+            catch (Exception ex) when (IsHostFault(ex))
             {
-                RecordHostTime(ctx, t0);
-                throw;
-            }
-            catch (ScriptException)
-            {
-                RecordHostTime(ctx, t0);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                RecordHostTime(ctx, t0);
                 throw new HostCallFailure(name, ex);
             }
-            RecordHostTime(ctx, t0);
+            finally
+            {
+                RecordHostTime(ctx, t0);
+            }
             if (ctx.Budget.IsTerminating)
                 throw ctx.Budget.PendingAbort;   // the host may have swallowed a budget abort
             ctx.Budget.CheckDeadlineNow();
@@ -55,22 +47,20 @@ namespace Outbridge.PyLite.Hosting
             {
                 sink(line);
             }
-            catch (EngineAbort)
+            catch (Exception ex) when (IsHostFault(ex))
             {
-                RecordHostTime(ctx, t0);
-                throw;
-            }
-            catch (ScriptException)
-            {
-                RecordHostTime(ctx, t0);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                RecordHostTime(ctx, t0);
                 throw new HostCallFailure("print", ex);
             }
-            RecordHostTime(ctx, t0);
+            finally
+            {
+                RecordHostTime(ctx, t0);
+            }
+        }
+
+        // EngineAbort and ScriptException are the engine's own and fly through unwrapped.
+        private static bool IsHostFault(Exception ex)
+        {
+            return !(ex is EngineAbort || ex is ScriptException);
         }
 
         private static void RecordHostTime(EvalContext ctx, long t0)

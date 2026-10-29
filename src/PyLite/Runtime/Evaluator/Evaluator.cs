@@ -7,17 +7,17 @@ using Outbridge.PyLite.Syntax.Ast;
 
 namespace Outbridge.PyLite.Runtime.Evaluator
 {
-    // The central tree-walker. Dispatch is a flat switch over the C# node type (there is no
-    // NodeKind discriminator), delegating immediately to a per-node EvalXxx/ExecXxx method so EvalExpr /
+    // The central tree-walker. Dispatch is a flat switch over each node's NodeKind, delegating immediately to a per-node EvalXxx/ExecXxx method so EvalExpr /
     // ExecStmt stay small-frame. The only immutable state is the resolved program; all mutable
     // run state lives in EvalContext + Environment (reentrancy, A8-#5).
     internal sealed partial class Evaluator
     {
         private readonly ResolvedProgram _program;
-        private Dictionary<ResolvedProgram, Evaluator> _peers;   // evaluators for other compiled units
         private ScriptValue[] _builtinCache;   // per-run resolved builtins (safe: the script provably never
                                                // assigns a Builtin-classified name, host inputs are fixed pre-run)
         private Environment.GlobalCacheEntry[] _globalCache;   // per-run versioned dict-entry cache (lever E)
+        private LiteralNode[] _literalNodes;    // per-run str/float/bytes literal values by CacheSlot (P4); the node
+        private ScriptValue[] _literalValues;   // is kept beside its value, so a slot can never answer for another one
 
         private Environment.GlobalCacheEntry[] GlobalCache
         {
@@ -28,38 +28,47 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             _program = program;
         }
-
         // The evaluator that owns a function's program, so its body's name bindings resolve against the right
         // binding table. A function defined in one module (e.g. a host prelude) and called from another must
         // execute under its own program, not the caller's. Self for the common single-program case.
-        internal Evaluator OwnerOf(ResolvedProgram program)
+        internal Evaluator OwnerOf(ResolvedProgram program, EvalContext ctx)
         {
-            if (program == null || ReferenceEquals(program, _program))
-            {
-                return this;
-            }
-            if (_peers == null)
-            {
-                _peers = new Dictionary<ResolvedProgram, Evaluator>();
-            }
+            return program == null || ReferenceEquals(program, _program) ? this : For(program, ctx);
+        }
+
+        // The run's one evaluator per compiled unit: a function executes on its own program's evaluator
+        // whichever module calls it, so each program's caches are built once per run.
+        internal static Evaluator For(ResolvedProgram program, EvalContext ctx)
+        {
             Evaluator ev;
-            if (!_peers.TryGetValue(program, out ev))
-            {
-                ev = new Evaluator(program);
-                _peers[program] = ev;
-            }
+            if (ctx.Evaluators == null)
+                ctx.Evaluators = new Dictionary<ResolvedProgram, Evaluator>();
+            else if (ctx.Evaluators.TryGetValue(program, out ev))
+                return ev;
+            ev = new Evaluator(program);
+            ctx.Evaluators[program] = ev;
             return ev;
+        }
+
+        // The context's callbacks into script code (modules calling a key function, dataclass __init__),
+        // bound once per run; the host installs them from the main script's evaluator.
+        internal void InstallHooks(EvalContext ctx)
+        {
+            ctx.CallHook = (callee, a, kw) => Call(callee, a, kw, ctx);
+            ctx.CallHook1 = (callee, a0) => callee.Kind == ValueKind.Function
+                ? OwnerOf(((FunctionValue)callee).Program, ctx).CallFunctionDirect((FunctionValue)callee, 1, a0, null, ctx)
+                : Call(callee, new[] { a0 }, KwArgs.Empty, ctx);
+            ctx.DataclassInitHook = (cls, inst, a, kw) => RunDataclassInit(cls, inst, a, kw, ctx);
         }
 
         public ExecSignal RunModule(Environment moduleEnv, EvalContext ctx)
         {
+            if (ctx.Evaluators == null)
+                ctx.Evaluators = new Dictionary<ResolvedProgram, Evaluator>();
+            if (!ctx.Evaluators.ContainsKey(_program))
+                ctx.Evaluators[_program] = this;   // a harness that built this evaluator itself
             if (ctx.CallHook == null)
-            {
-                ctx.CallHook = (callee, a, kw) => Call(callee, a, kw, ctx);
-                ctx.CallHook1 = (callee, a0) => callee.Kind == ValueKind.Function
-                    ? OwnerOf(((FunctionValue)callee).Program).CallFunctionDirect((FunctionValue)callee, 1, a0, null, ctx)
-                    : Call(callee, new[] { a0 }, KwArgs.Empty, ctx);
-            }
+                InstallHooks(ctx);
             try
             {
                 ExecSignal sig = ExecBlock(_program.Module.Body, moduleEnv, ctx);
@@ -85,18 +94,18 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         public ScriptValue EvalExpr(ExprNode e, Environment env, EvalContext ctx)
         {
-            if ((++ctx.NodeCounter & 63) == 0)
+            // One counter for both cadences (P18): every 64th node charges the batch, every 16th probes the stack
+            // (consecutive within an expression, so a nesting of 16 always passes a probe); one test per node.
+            int node = ++ctx.NodeCounter;
+            if ((node & 15) == 0)
             {
-                ctx.Budget.Step(BudgetCost.NodeBatch);
-            }
-            if ((++ctx.ExprProbeCounter & 15) == 0)
-            {
+                if ((node & 63) == 0)
+                    ctx.Budget.Step(BudgetCost.NodeBatch);
                 StackGuard.Probe(ctx);
             }
             switch (e.NodeKind)   // P2: int switch = jump table, not a sequential isinst chain
             {
                 case NodeKind.Literal: return EvalLiteral((LiteralNode)e, ctx);
-                case NodeKind.ConstFolded: return EvalLiteral(((ConstFoldedNode)e).Folded, ctx);
                 case NodeKind.Name: return EvalName((NameNode)e, env, ctx);
                 case NodeKind.BinOp: return EvalBinOp((BinOpNode)e, env, ctx);
                 case NodeKind.UnaryOp: return EvalUnaryOp((UnaryOpNode)e, env, ctx);
@@ -170,7 +179,27 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             return ExecSignal.Normal;
         }
 
-        private static ScriptValue EvalLiteral(LiteralNode lit, EvalContext ctx)
+        private ScriptValue EvalLiteral(LiteralNode lit, EvalContext ctx)
+        {
+            int slot = lit.CacheSlot;
+            if (slot >= 0 && slot < _program.LiteralCount)
+            {
+                if (_literalNodes == null)
+                {
+                    _literalNodes = new LiteralNode[_program.LiteralCount];
+                    _literalValues = new ScriptValue[_program.LiteralCount];
+                }
+                if (ReferenceEquals(_literalNodes[slot], lit))
+                    return _literalValues[slot];
+                ScriptValue v = NewLiteral(lit, ctx);
+                _literalValues[slot] = v;
+                _literalNodes[slot] = lit;
+                return v;
+            }
+            return NewLiteral(lit, ctx);
+        }
+
+        private static ScriptValue NewLiteral(LiteralNode lit, EvalContext ctx)
         {
             switch (lit.Kind)
             {

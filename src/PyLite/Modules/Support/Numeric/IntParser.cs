@@ -15,12 +15,6 @@ namespace Outbridge.PyLite.Modules.Support
                 throw Raise.ValueError(ctx, "int() base must be >= 2 and <= 36");
 
             int n = original.Length;
-            // Quadratic-cost pre-charge (BigInteger accumulation) before the loop.
-            ctx.Budget.Step((int)Math.Min(int.MaxValue, 1 + (long)n * n / 1024));
-            ctx.Values.PreCharge(n / 2 + 16);
-            if (n > 64)
-                ctx.Budget.CheckDeadlineNow();
-
             int i = 0;
             while (i < n && PyUnicode.IsPythonSpace(original[i]))
                 i++;
@@ -75,6 +69,25 @@ namespace Outbridge.PyLite.Modules.Support
                 i += 2;
             }
 
+            // A value within MaxIntBits has at most maxDigits significant digits. Longer input is counted
+            // first (linear): past maxDigits it is a MaxIntBits refusal before the quadratic accumulation,
+            // and leading zeros are not charged as BigInteger work.
+            long costDigits = n;
+            double log2Base = Math.Log(actualBase, 2);
+            long maxDigits = (long)(ctx.Limits.MaxIntBits / log2Base) + 2;
+            if (n - i > maxDigits)
+            {
+                ctx.Budget.ChargeLinear(n - i);
+                costDigits = SignificantDigits(original, i, actualBase);
+                if (costDigits > maxDigits)
+                    throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits,
+                        (long)((costDigits - 1) * log2Base));
+            }
+            ctx.Budget.Step((int)Math.Min(int.MaxValue, 1 + costDigits * costDigits / 1024));
+            ctx.Values.PreCharge(costDigits / 2 + 16);
+            if (n > 64)
+                ctx.Budget.CheckDeadlineNow();
+
             // Dual accumulator: one scan with every validation branch shared, but the arithmetic
             // stays in a long until the next multiply-add could overflow, then seeds the exact
             // BigInteger continuation. Short numbers (the overwhelming majority) never touch
@@ -82,6 +95,7 @@ namespace Outbridge.PyLite.Modules.Support
             const long LongSafe = (long.MaxValue - 35) / 36;   // safe to *base(<=36) + digit(<=35)
             long accL = 0;
             BigInteger acc = BigInteger.Zero;
+            long chunk = 0, chunkMul = 1;   // past the long range, digits gather here and fold into acc ~18 at a time (P17)
             bool big = false;
             bool any = false;
             int scanned = 0;
@@ -107,7 +121,14 @@ namespace Outbridge.PyLite.Modules.Support
                     throw Invalid(ctx, original, baseArg);
                 if (big)
                 {
-                    acc = acc * actualBase + v;
+                    chunk = chunk * actualBase + v;
+                    chunkMul *= actualBase;
+                    if (chunkMul > LongSafe)
+                    {
+                        acc = acc * chunkMul + chunk;
+                        chunk = 0;
+                        chunkMul = 1;
+                    }
                 }
                 else if (accL <= LongSafe)
                 {
@@ -121,7 +142,12 @@ namespace Outbridge.PyLite.Modules.Support
                 any = true;
                 i++;
                 if ((++scanned & 1023) == 0)
+                {
+                    // The quadratic work was charged up front, so the step cadence alone would not see the
+                    // deadline pass during a long parse (300k digits: seconds).
                     ctx.Budget.Step(16);
+                    ctx.Budget.CheckDeadlineNow();
+                }
             }
             if (!any)
                 throw Invalid(ctx, original, baseArg);
@@ -131,7 +157,26 @@ namespace Outbridge.PyLite.Modules.Support
             if (i != n)
                 throw Invalid(ctx, original, baseArg);
 
+            if (big && chunkMul > 1)
+                acc = acc * chunkMul + chunk;
             return big ? sign * acc : sign * (BigInteger)accL;
+        }
+
+        // Digits of numBase after the leading zeros, up to the first character the loop would not take as one.
+        private static long SignificantDigits(string s, int i, int numBase)
+        {
+            long count = 0;
+            for (; i < s.Length; i++)
+            {
+                if (s[i] == '_')
+                    continue;
+                int v = DigitValue(s[i]);
+                if (v < 0 || v >= numBase)
+                    break;
+                if (count > 0 || v != 0)
+                    count++;
+            }
+            return count;
         }
 
         private static bool HasPrefix(string s, int i, char lower)

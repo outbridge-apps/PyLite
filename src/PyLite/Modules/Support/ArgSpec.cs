@@ -7,7 +7,7 @@ using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules.Support
 {
-    // One arg/kwargs binder for every builtin and type method. Built once per function
+    // An arg/kwargs binder for a builtin or method with defaults or keyword parameters. Built once per function
     // in a static readonly field, sealed, then reused. Bind fills a caller-provided slots array in
     // declaration order (Req/Opt/KwOnly), with *args in a separate out. Deviation from the doc signature:
     // Bind takes ctx, because the count/keyword errors are script exceptions.

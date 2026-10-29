@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // csv.Sniffer and the dialect object it answers with - a port of Lib/csv.py's Sniffer: the
     // quote-and-delimiter regexes first, the per-character frequency consistency second, and the
     // has_header column-type heuristic.
-    public static partial class CsvModule
+    internal static partial class CsvModule
     {
         // A dialect as a value: what sniff() returns, what csv.excel is, what reader()/writer() accept in
         // place of a name. Read-only; the fmtparams of a reader call override a COPY of it.
@@ -67,7 +67,7 @@ namespace Outbridge.PyLite.Modules
             {
                 var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
                 d["sniff"] = SlotDescriptor.MakeMethod("sniff", (self, a, kw, c) => SniffFn(c, a, kw));
-                d["has_header"] = SlotDescriptor.MakeMethod("has_header", (self, a, kw, c) => HasHeaderFn(c, a));
+                d["has_header"] = SlotDescriptor.MakeMethod("has_header", Args.Positional("has_header", 1, 1, (self, a, kw, c) => HasHeaderFn(c, a)));
                 return d;
             }
         }

@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Modules.Support
     // The single point where a double is rendered. Repr uses a
     // shortest round-tripping G-ladder; the fixed/scientific/general renderers and round() use an EXACT
     // decimal decomposition of the double (BigInteger) so half-even rounding matches CPython.
-    public static class FloatRepr
+    internal static class FloatRepr
     {
         public static bool IsNegativeZero(double d)
         {
@@ -20,6 +20,33 @@ namespace Outbridge.PyLite.Modules.Support
         private static bool IsNegative(double d)
         {
             return BitConverter.DoubleToInt64Bits(d) < 0L;
+        }
+
+        // The shortest round-tripping significant digits of a finite non-zero double, and the decimal exponent
+        // of the first one. A normal double needs three conversions at most (P11): a k <= 15 digit decimal that
+        // round-trips is the 15-digit rounding padded with zeros (half an ulp is far below the 15-digit
+        // spacing), so E14 settles all of those; otherwise the 16-digit rounding, else 17 digits, which always
+        // round-trip. A subnormal's ulp is not small against its value, so it searches every precision.
+        internal static string ShortestDigits(double d, out bool neg, out int decExp)
+        {
+            long bits = BitConverter.DoubleToInt64Bits(d);
+            string sci = null;
+            int first = Math.Abs(d) < 2.2250738585072014e-308 ? 1 : 15;
+            for (int prec = first; prec <= 16 && sci == null; prec++)
+            {
+                string cand = d.ToString("E" + (prec - 1).ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+                double parsed;
+                if (double.TryParse(cand, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)
+                    && BitConverter.DoubleToInt64Bits(parsed) == bits)
+                    sci = cand;
+            }
+            if (sci == null)
+                sci = d.ToString("E16", CultureInfo.InvariantCulture);
+            neg = sci[0] == '-';
+            int eIdx = sci.IndexOf('E');
+            decExp = int.Parse(sci.Substring(eIdx + 1), CultureInfo.InvariantCulture);
+            string digits = sci.Substring(neg ? 1 : 0, eIdx - (neg ? 1 : 0)).Replace(".", "").TrimEnd('0');
+            return digits.Length == 0 ? "0" : digits;
         }
 
         public static string Repr(double d)
@@ -33,37 +60,9 @@ namespace Outbridge.PyLite.Modules.Support
             if (d == 0.0)
                 return IsNegativeZero(d) ? "-0.0" : "0.0";
 
-            // Shortest scientific string that round-trips: smallest significant-digit count.
-            long targetBits = BitConverter.DoubleToInt64Bits(d);
-            string sci = null;
-            for (int prec = 1; prec <= 17; prec++)
-            {
-                string cand = d.ToString("E" + (prec - 1).ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
-                double parsed;
-                try
-                {
-                    parsed = double.Parse(cand, CultureInfo.InvariantCulture);
-                }
-                catch (OverflowException)
-                {
-                    continue;
-                } // low-precision round-up overflowed; try more digits
-
-                if (BitConverter.DoubleToInt64Bits(parsed) == targetBits)
-                {
-                    sci = cand;
-                    break;
-                }
-            }
-            if (sci == null)
-                sci = d.ToString("E16", CultureInfo.InvariantCulture);
-
-            // Decompose: sign, significant digits, exponent of the leading digit.
-            bool neg = sci[0] == '-';
-            int eIdx = sci.IndexOf('E');
-            string mant = sci.Substring(neg ? 1 : 0, eIdx - (neg ? 1 : 0));
-            int decExp = int.Parse(sci.Substring(eIdx + 1), CultureInfo.InvariantCulture);
-            string digits = mant.Replace(".", "");
+            bool neg;
+            int decExp;
+            string digits = ShortestDigits(d, out neg, out decExp);
 
             string body = (decExp < -4 || decExp >= 16)
                 ? FormatExponential(digits, decExp)
@@ -202,6 +201,9 @@ namespace Outbridge.PyLite.Modules.Support
         // the same small-exponent powers on every call — half the cost of round(float, n) was these two
         // BigInteger.Pow calls. Fast path = a volatile read + index; the lock is taken only to grow, which
         // stops happening once the largest exponent a program uses has been seen. Callers pass k >= 0.
+        // The cache is process-wide, so it stops at PowCacheMax: a larger exponent comes from a script-chosen
+        // precision (format(x, ".100000f")) and is computed per call, never kept for every later run.
+        private const int PowCacheMax = 1400;   // covers Pow5(1074), the smallest subnormal, and round()'s k - ndigits
         private static volatile BigInteger[] _pow5 = { BigInteger.One };
         private static volatile BigInteger[] _pow10 = { BigInteger.One };
         private static readonly object _powLock = new object();
@@ -209,13 +211,13 @@ namespace Outbridge.PyLite.Modules.Support
         internal static BigInteger Pow5(int k)
         {
             BigInteger[] t = _pow5;
-            return k < t.Length ? t[k] : GrowPow5(k);
+            return k < t.Length ? t[k] : k <= PowCacheMax ? GrowPow5(k) : BigInteger.Pow(5, k);
         }
 
         internal static BigInteger Pow10(int k)
         {
             BigInteger[] t = _pow10;
-            return k < t.Length ? t[k] : GrowPow10(k);
+            return k < t.Length ? t[k] : k <= PowCacheMax ? GrowPow10(k) : BigInteger.Pow(10, k);
         }
 
         private static BigInteger GrowPow5(int k)

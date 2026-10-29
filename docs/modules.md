@@ -1,37 +1,43 @@
 # What is implemented
 
-The surface below was read off a running engine at version 1.0.0 — every name in it is what
-`dir()` returns for that module — so it says what exists, not what was intended. It does not say
-how each name behaves; where behaviour differs from CPython, that belongs in `deviations.md`.
+The surface below was read off a running engine at version 1.1.0 — every name in it is what
+`dir()` returns for that module, private `_names` left out — so it says what exists, not what was
+intended. It does not say how each name behaves; where behaviour differs from CPython, that
+belongs in `deviations.md`. `tests/PyLite.Tests/Infra/ModulesDocTests.cs` writes this file and
+fails when it falls behind the engine.
 
 ## Builtins
 
-`abs` `all` `any` `ascii` `bin` `bool` `bytes` `callable` `chr` `dict` `dir` `divmod` `enumerate` `filter` `float` `format` `frozenset` `getattr` `hasattr` `hash` `hex` `id` `int` `isinstance` `issubclass` `iter` `len` `list` `map` `max` `min` `next` `oct` `ord` `pow` `print` `range` `repr` `reversed` `round` `set` `setattr` `slice` `sorted` `str` `sum` `tuple` `type` `zip`
+`abs` `all` `any` `ascii` `bin` `bool` `bytes` `callable` `chr` `dict` `dir` `divmod` `enumerate` `filter` `float` `format` `frozenset` `getattr` `hasattr` `hash` `hex` `id` `int` `isinstance` `issubclass` `iter` `len` `list` `map` `max` `min` `next` `oct` `ord` `pow` `print` `range` `repr` `reversed` `round` `set` `setattr` `slice` `sorted` `str` `sum` `super` `tuple` `type` `zip`
 
 Absent by design. Using one raises `NameError: name 'eval' is not defined: this builtin is not
 supported in this environment`:
 
-`bytearray` `classmethod` `complex` `eval` `exec` `globals` `input` `locals` `memoryview` `object` `open` `property` `staticmethod` `super` `vars`
+`__import__` `bytearray` `classmethod` `compile` `complex` `delattr` `eval` `exec` `globals` `input` `locals` `memoryview` `object` `open` `property` `staticmethod` `vars`
+
+Not defined at all (a plain `NameError`): `aiter` `anext` `breakpoint`.
+
+Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseException` `EOFError` `Exception` `FloatingPointError` `ImportError` `IndexError` `KeyError` `LookupError` `NameError` `NotImplementedError` `OSError` `OverflowError` `RecursionError` `RuntimeError` `StopIteration` `SyntaxError` `TypeError` `UnboundLocalError` `UnicodeDecodeError` `UnicodeEncodeError` `UnicodeError` `ValueError` `ZeroDivisionError`.
 
 `import` reaches the modules listed below and the modules the host registers, nothing else.
 
 ## Methods on the built-in types
 
-**str** — `capitalize` `casefold` `center` `count` `encode` `endswith` `expandtabs` `find` `format` `format_map` `index` `isalnum` `isalpha` `isascii` `isdecimal` `isdigit` `isidentifier` `islower` `isnumeric` `isprintable` `isspace` `istitle` `isupper` `join` `ljust` `lower` `lstrip` `partition` `removeprefix` `removesuffix` `replace` `rfind` `rindex` `rjust` `rpartition` `rsplit` `rstrip` `split` `splitlines` `startswith` `strip` `swapcase` `title` `translate` `upper` `zfill`
+**str** — `capitalize` `casefold` `center` `count` `encode` `endswith` `expandtabs` `find` `format` `format_map` `index` `isalnum` `isalpha` `isascii` `isdecimal` `isdigit` `isidentifier` `islower` `isnumeric` `isprintable` `isspace` `istitle` `isupper` `join` `ljust` `lower` `lstrip` `maketrans` `partition` `removeprefix` `removesuffix` `replace` `rfind` `rindex` `rjust` `rpartition` `rsplit` `rstrip` `split` `splitlines` `startswith` `strip` `swapcase` `title` `translate` `upper` `zfill`
 
-**bytes** — `capitalize` `center` `count` `decode` `endswith` `expandtabs` `find` `hex` `index` `isalnum` `isalpha` `isascii` `isdigit` `islower` `isspace` `istitle` `isupper` `join` `ljust` `lower` `lstrip` `partition` `removeprefix` `removesuffix` `replace` `rfind` `rindex` `rjust` `rpartition` `rsplit` `rstrip` `split` `splitlines` `startswith` `strip` `swapcase` `title` `translate` `upper` `zfill`
+**bytes** — `capitalize` `center` `count` `decode` `endswith` `expandtabs` `find` `fromhex` `hex` `index` `isalnum` `isalpha` `isascii` `isdigit` `islower` `isspace` `istitle` `isupper` `join` `ljust` `lower` `lstrip` `maketrans` `partition` `removeprefix` `removesuffix` `replace` `rfind` `rindex` `rjust` `rpartition` `rsplit` `rstrip` `split` `splitlines` `startswith` `strip` `swapcase` `title` `translate` `upper` `zfill`
 
 **list** — `append` `clear` `copy` `count` `extend` `index` `insert` `pop` `remove` `reverse` `sort`
 
-**dict** — `clear` `copy` `get` `items` `keys` `pop` `popitem` `setdefault` `update` `values`
+**dict** — `clear` `copy` `fromkeys` `get` `items` `keys` `pop` `popitem` `setdefault` `update` `values`
 
 **set** — `add` `clear` `copy` `difference` `difference_update` `discard` `intersection` `intersection_update` `isdisjoint` `issubset` `issuperset` `pop` `remove` `symmetric_difference` `symmetric_difference_update` `union` `update`
 
 **tuple** — `count` `index`
 
-**int** — `as_integer_ratio` `bit_count` `bit_length` `conjugate` `denominator` `imag` `numerator` `real` `to_bytes`
+**int** — `as_integer_ratio` `bit_count` `bit_length` `conjugate` `denominator` `from_bytes` `imag` `numerator` `real` `to_bytes`
 
-**float** — `as_integer_ratio` `conjugate` `hex` `imag` `is_integer` `real`
+**float** — `as_integer_ratio` `conjugate` `fromhex` `hex` `imag` `is_integer` `real`
 
 ## Modules
 
@@ -41,7 +47,7 @@ supported in this environment`:
 
 ### decimal
 
-`Decimal` `DecimalException` `DivisionByZero` `InvalidOperation` `Overflow` `ROUND_05UP` `ROUND_CEILING` `ROUND_DOWN` `ROUND_FLOOR` `ROUND_HALF_DOWN` `ROUND_HALF_EVEN` `ROUND_HALF_UP` `ROUND_UP` `Underflow` `getcontext`
+`Context` `Decimal` `DecimalException` `DivisionByZero` `InvalidOperation` `Overflow` `ROUND_05UP` `ROUND_CEILING` `ROUND_DOWN` `ROUND_FLOOR` `ROUND_HALF_DOWN` `ROUND_HALF_EVEN` `ROUND_HALF_UP` `ROUND_UP` `Underflow` `getcontext` `localcontext` `setcontext`
 
 ### fractions
 
@@ -105,7 +111,7 @@ supported in this environment`:
 
 ### copyreg
 
-`_extension_cache` `_extension_registry` `_inverted_registry` `add_extension` `clear_extension_cache` `constructor` `dispatch_table` `pickle` `remove_extension`
+`add_extension` `clear_extension_cache` `constructor` `dispatch_table` `pickle` `remove_extension`
 
 ### dataclasses
 
@@ -115,9 +121,17 @@ supported in this environment`:
 
 `AbstractSet` `Annotated` `Any` `AnyStr` `BinaryIO` `Callable` `ChainMap` `ClassVar` `Collection` `Concatenate` `Container` `Counter` `DefaultDict` `Deque` `Dict` `Final` `FrozenSet` `Generator` `Generic` `Hashable` `IO` `Iterable` `Iterator` `List` `Literal` `LiteralString` `Mapping` `MutableMapping` `MutableSequence` `MutableSet` `NamedTuple` `Never` `NewType` `NoReturn` `NotRequired` `Optional` `OrderedDict` `ParamSpec` `Protocol` `Required` `Reversible` `Self` `Sequence` `Set` `Sized` `TYPE_CHECKING` `Text` `TextIO` `Tuple` `Type` `TypeAlias` `TypeVar` `TypeVarTuple` `TypedDict` `Union` `Unpack` `assert_type` `cast` `final` `get_args` `get_origin` `get_type_hints` `no_type_check` `overload` `override` `runtime_checkable`
 
+### enum
+
+`Enum` `IntEnum` `StrEnum` `auto` `unique`
+
+### contextlib
+
+`closing` `nullcontext` `suppress`
+
 ### string
 
-`ascii_letters` `ascii_lowercase` `ascii_uppercase` `capwords` `digits` `hexdigits` `octdigits` `printable` `punctuation` `whitespace`
+`Template` `ascii_letters` `ascii_lowercase` `ascii_uppercase` `capwords` `digits` `hexdigits` `octdigits` `printable` `punctuation` `whitespace`
 
 ### textwrap
 
@@ -159,13 +173,17 @@ supported in this environment`:
 
 `BadGzipFile` `compress` `decompress`
 
+### zipfile
+
+`BadZipFile` `BadZipfile` `DEFAULT_VERSION` `LargeZipFile` `ZIP64_LIMIT` `ZIP64_VERSION` `ZIP_BZIP2` `ZIP_DEFLATED` `ZIP_FILECOUNT_LIMIT` `ZIP_LZMA` `ZIP_MAX_COMMENT` `ZIP_STORED` `ZipExtFile` `ZipFile` `ZipInfo` `error` `is_zipfile`
+
 ### csv
 
 `DictReader` `DictWriter` `Error` `QUOTE_ALL` `QUOTE_MINIMAL` `QUOTE_NONE` `QUOTE_NONNUMERIC` `QUOTE_NOTNULL` `QUOTE_STRINGS` `Sniffer` `__version__` `excel` `excel_tab` `field_size_limit` `get_dialect` `list_dialects` `reader` `register_dialect` `unix_dialect` `unregister_dialect` `writer`
 
 ### io
 
-`StringIO`
+`BytesIO` `StringIO`
 
 ### uuid
 
@@ -183,6 +201,10 @@ supported in this environment`:
 
 `DefragResult` `ParseResult` `SplitResult` `clear_cache` `parse_qs` `parse_qsl` `quote` `quote_plus` `scheme_chars` `unquote` `unquote_plus` `unwrap` `urldefrag` `urlencode` `urljoin` `urlparse` `urlsplit` `urlunparse` `urlunsplit` `uses_netloc` `uses_params` `uses_relative`
 
+### email.utils
+
+`format_datetime` `formatdate` `mktime_tz` `parsedate` `parsedate_to_datetime` `parsedate_tz`
+
 ### xml.etree.ElementTree
 
 `Comment` `Element` `ElementTree` `PI` `ParseError` `ProcessingInstruction` `QName` `SubElement` `XML` `XMLID` `dump` `fromstring` `fromstringlist` `indent` `iselement` `iterparse` `parse` `register_namespace` `tostring` `tostringlist`
@@ -190,4 +212,3 @@ supported in this environment`:
 ### traceback
 
 `format_exc` `format_exception` `format_exception_only` `print_exc` `print_exception`
-

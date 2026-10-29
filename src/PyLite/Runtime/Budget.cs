@@ -19,6 +19,7 @@ namespace Outbridge.PyLite.Runtime
         private long _stepsUsed;
         private long _allocBytesUsed;
         private long _regexTicksUsed;
+        private int _regexOps;
         private long _outputBytesUsed;
         private long _sleepMsUsed;
         private int _stepsSinceDeadlineCheck;
@@ -132,6 +133,7 @@ namespace Outbridge.PyLite.Runtime
         public void ChargeRegexTime(TimeSpan consumed)
         {
             checked { _regexTicksUsed += consumed.Ticks; }
+            _regexOps++;
             if (TimeSpan.FromTicks(_regexTicksUsed).TotalMilliseconds > _limits.DeadlineMs)
                 throw CreateAbort(EngineAbortKind.RegexTimeout, "RegexTotalTime", _limits.DeadlineMs,
                     (long)TimeSpan.FromTicks(_regexTicksUsed).TotalMilliseconds);
@@ -180,7 +182,9 @@ namespace Outbridge.PyLite.Runtime
         internal long AllocBytesUsed { get { return _allocBytesUsed; } }
         internal long OutputBytesUsed { get { return _outputBytesUsed; } }
         internal long RegexTicksUsed { get { return _regexTicksUsed; } }
+        internal int RegexOps { get { return _regexOps; } }
         internal long SleepMsUsed { get { return _sleepMsUsed; } }
+        internal TimeSpan Elapsed { get { return _clock.Elapsed; } }
 
         internal void EnterTerminating(EngineAbort first)
         {

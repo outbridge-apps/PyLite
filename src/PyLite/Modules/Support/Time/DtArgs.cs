@@ -61,15 +61,9 @@ namespace Outbridge.PyLite.Modules.Support
         // int|bool|float -> double, for fromtimestamp/utcfromtimestamp.
         public static double Timestamp(EvalContext ctx, ScriptValue v)
         {
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return (double)iv.Value;
-            BoolValue bv = v as BoolValue;
-            if (bv != null)
-                return bv.Value ? 1.0 : 0.0;
-            FloatValue fv = v as FloatValue;
-            if (fv != null)
-                return fv.Value;
+            double d;
+            if (Coerce.TryToReal(ctx, v, false, out d))
+                return d;
             throw Raise.TypeError(ctx, "an integer is required (got type " + v.PyTypeName + ")");
         }
     }

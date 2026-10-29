@@ -30,24 +30,19 @@ namespace Outbridge.PyLite.Modules
             return Raise.Make(ctx, PyExceptionTypes.StatisticsError, msg);
         }
 
+        // fmean and friends answer in float, as they do in CPython
         private static double ToDouble(EvalContext ctx, ScriptValue v)
         {
-            if (v.Kind == ValueKind.Float)
-                return ((FloatValue)v).Value;
-            if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
-                return (double)Outbridge.PyLite.Runtime.Values.NumericOps.AsBigInteger(v);
-            FractionValue fr = v as FractionValue;
-            if (fr != null)
-                return fr.AsDouble(ctx);
-            DecimalValue dv = v as DecimalValue;
-            if (dv != null)
-                return (double)dv.Value;   // fmean and friends answer in float, as they do in CPython
+            double d;
+            if (Coerce.TryToReal(ctx, v, true, out d))
+                return d;
             throw Raise.TypeError(ctx, "can't convert type '" + v.PyTypeName + "' to float");
         }
 
         private static double[] Doubles(EvalContext ctx, ScriptValue data)
         {
             List<ScriptValue> lst = Materialize(ctx, data);
+            ctx.Values.PreCharge(8L * lst.Count);
             var d = new double[lst.Count];
             for (int i = 0; i < lst.Count; i++)
                 d[i] = ToDouble(ctx, lst[i]);
@@ -101,15 +96,15 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue HarmonicMean(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             Args.Between(ctx, a, "harmonic_mean", 1, 2);
-            double[] xs = Doubles(ctx, a[0]);
-            if (xs.Length == 0)
-                throw StatsError(ctx, "harmonic_mean requires at least one data point");
             ScriptValue wArg = a.Length == 2 ? a[1] : null;
             ScriptValue wkw;
             if (kw.TryGet("weights", out wkw))
                 wArg = wkw;
             // Exact-Fraction reciprocals (CPython computes via _sum, so harmonic_mean([40,60]) == 48.0 exactly).
+            // The data is read once: an iterator has nothing left for a second pass.
             List<ScriptValue> data = Materialize(ctx, a[0]);
+            if (data.Count == 0)
+                throw StatsError(ctx, "harmonic_mean requires at least one data point");
             List<ScriptValue> weights = null;
             if (wArg != null && wArg.Kind != ValueKind.None)
             {
@@ -184,13 +179,12 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue Quantiles(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             Args.Exactly(ctx, a, "quantiles", 1);
-            int n = 4;
-            ScriptValue v;
-            if (kw.TryGet("n", out v))
-                n = Coerce.ToInt32(ctx, v, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-            string method = "exclusive";
-            if (kw.TryGet("method", out v) && v.Kind == ValueKind.Str)
-                method = ((StrValue)v).Value;
+            var r = new KwReader(ctx, kw, "quantiles");   // n and method are keyword-only; anything else is refused
+            ScriptValue v = r.GetOrNull("n");
+            int n = v == null ? 4 : Coerce.ToInt32(ctx, v, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
+            v = r.GetOrNull("method");
+            string method = v != null && v.Kind == ValueKind.Str ? ((StrValue)v).Value : "exclusive";
+            r.RejectInvalid();
             if (n < 1)
                 throw StatsError(ctx, "n must be at least 1");
             ScriptValue[] data = SortedArray(ctx, a[0]);
@@ -238,14 +232,22 @@ namespace Outbridge.PyLite.Modules
         private static void CenteredPair(EvalContext ctx, ScriptValue[] a, string fn,
             out double[] cx, out double[] cy)
         {
+            double xbar, ybar;
+            CenteredPair(ctx, a, fn, out cx, out cy, out xbar, out ybar);
+        }
+
+        // Each input is read once (an iterator has no second pass); the means come back for the caller.
+        private static void CenteredPair(EvalContext ctx, ScriptValue[] a, string fn,
+            out double[] cx, out double[] cy, out double xbar, out double ybar)
+        {
             double[] xs = Doubles(ctx, a[0]);
             double[] ys = Doubles(ctx, a[1]);
             if (xs.Length != ys.Length)
                 throw StatsError(ctx, fn + " requires that both inputs have same number of data points");
             if (xs.Length < 2)
                 throw StatsError(ctx, fn + " requires at least two data points");
-            double xbar = ShewchukSum.Sum(ctx, xs) / xs.Length;
-            double ybar = ShewchukSum.Sum(ctx, ys) / ys.Length;
+            xbar = ShewchukSum.Sum(ctx, xs) / xs.Length;
+            ybar = ShewchukSum.Sum(ctx, ys) / ys.Length;
             cx = new double[xs.Length];
             cy = new double[ys.Length];
             for (int i = 0; i < xs.Length; i++)
@@ -313,13 +315,12 @@ namespace Outbridge.PyLite.Modules
             else
             {
                 double[] cx, cy;
-                CenteredPair(ctx, new[] { a[0], a[1] }, "linear regression", out cx, out cy);
+                double xbar, ybar;
+                CenteredPair(ctx, a, "linear regression", out cx, out cy, out xbar, out ybar);
                 double sxx = SumProducts(ctx, cx, cx);
                 if (sxx == 0.0)
                     throw StatsError(ctx, "x is constant");
                 slope = SumProducts(ctx, cx, cy) / sxx;
-                double xbar = ShewchukSum.Sum(ctx, Doubles(ctx, a[0])) / cx.Length;
-                double ybar = ShewchukSum.Sum(ctx, Doubles(ctx, a[1])) / cy.Length;
                 intercept = ybar - slope * xbar;
             }
             // LinearRegression(slope=..., intercept=...) namedtuple (CPython parity).

@@ -10,17 +10,17 @@ namespace Outbridge.PyLite.Modules
 {
     // heapq: the binary min-heap of Lib/heapq.py over a list, plus nlargest / nsmallest / merge. Ordering
     // is the script's own '<', so a TypeError on unorderable items surfaces exactly where CPython's would.
-    public static class HeapqModule
+    internal static class HeapqModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["heappush"] = BuiltinFunctionValue.Make("heappush", (s, a, k, c) => HeapPush(c, a)),
-                ["heappop"] = BuiltinFunctionValue.Make("heappop", (s, a, k, c) => HeapPop(c, a)),
-                ["heapify"] = BuiltinFunctionValue.Make("heapify", (s, a, k, c) => Heapify(c, a)),
-                ["heapreplace"] = BuiltinFunctionValue.Make("heapreplace", (s, a, k, c) => HeapReplace(c, a)),
-                ["heappushpop"] = BuiltinFunctionValue.Make("heappushpop", (s, a, k, c) => HeapPushPop(c, a)),
+                ["heappush"] = BuiltinFunctionValue.Make("heappush", Args.Positional("heappush", 2, 2, (s, a, k, c) => HeapPush(c, a))),
+                ["heappop"] = BuiltinFunctionValue.Make("heappop", Args.Positional("heappop", 1, 1, (s, a, k, c) => HeapPop(c, a))),
+                ["heapify"] = BuiltinFunctionValue.Make("heapify", Args.Positional("heapify", 1, 1, (s, a, k, c) => Heapify(c, a))),
+                ["heapreplace"] = BuiltinFunctionValue.Make("heapreplace", Args.Positional("heapreplace", 2, 2, (s, a, k, c) => HeapReplace(c, a))),
+                ["heappushpop"] = BuiltinFunctionValue.Make("heappushpop", Args.Positional("heappushpop", 2, 2, (s, a, k, c) => HeapPushPop(c, a))),
                 ["nlargest"] = BuiltinFunctionValue.Make("nlargest", (s, a, k, c) => NBest(c, a, k, "nlargest", true)),
                 ["nsmallest"] = BuiltinFunctionValue.Make("nsmallest", (s, a, k, c) => NBest(c, a, k, "nsmallest", false)),
                 ["merge"] = BuiltinFunctionValue.Make("merge", (s, a, k, c) => Merge(c, a, k)),
@@ -145,23 +145,15 @@ namespace Outbridge.PyLite.Modules
             key = r.GetOrNull("key");
             r.RejectUnknown();
             int n = Coerce.ToInt32(ctx, a[0], "n must be an integer");
-            var values = new List<ScriptValue>();
-            IScriptIterator it = PyOps.GetIterator(a[1], ctx);
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-            {
-                ctx.Budget.Step();
-                values.Add(v);
-            }
+            ScriptValue[] arr = Iter.ToArray(ctx, a[1]);
             if (n <= 0)
                 return ctx.Values.List(0);
-            ScriptValue[] arr = values.ToArray();
             ScriptValue[] keys = null;
             if (key != null)
             {
                 keys = new ScriptValue[arr.Length];
                 for (int i = 0; i < arr.Length; i++)
-                    keys[i] = ctx.CallHook(key, new[] { arr[i] }, KwArgs.Empty);
+                    keys[i] = ctx.CallHook1(key, arr[i]);
             }
             if (largest)
             {
@@ -222,7 +214,7 @@ namespace Outbridge.PyLite.Modules
                 if (_its[i] != null && _its[i].MoveNext(ctx, out v))
                 {
                     _head[i] = v;
-                    _key[i] = _keyFn == null ? v : ctx.CallHook(_keyFn, new[] { v }, KwArgs.Empty);
+                    _key[i] = _keyFn == null ? v : ctx.CallHook1(_keyFn, v);
                     return;
                 }
                 _its[i] = null;

@@ -15,17 +15,17 @@ namespace Outbridge.PyLite.Runtime.Values
             // Case mapping goes through PyUnicodeCase (the generated Unicode tables), not the BCL: a
             // mapping may change LENGTH ('ss'.upper() == 'SS') and the BCL's tables are both incomplete
             // and unpinned. See PyUnicodeCase.cs.
-            s.Linear("upper", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Upper(S(self))));
-            s.Linear("lower", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Lower(S(self))));
-            s.Linear("casefold", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Fold(S(self))));
-            s.Linear("capitalize", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Capitalize(S(self))));
-            s.Linear("title", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Title(S(self))));
-            s.Linear("istitle", (self, a, kw, c) => c.Values.Bool(IsTitle(S(self))));
-            s.Linear("swapcase", (self, a, kw, c) => c.Values.Str(PyUnicodeCase.SwapCase(S(self))));
-            s.Linear("zfill", (self, a, kw, c) => ZFill(c, self, a));
-            s.Linear("ljust", (self, a, kw, c) => Justify(c, self, a, '<'));
-            s.Linear("rjust", (self, a, kw, c) => Justify(c, self, a, '>'));
-            s.Linear("center", (self, a, kw, c) => Justify(c, self, a, '^'));
+            s.Linear("upper", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Upper(S(self))));
+            s.Linear("lower", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Lower(S(self))));
+            s.Linear("casefold", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Fold(S(self))));
+            s.Linear("capitalize", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Capitalize(S(self))));
+            s.Linear("title", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.Title(S(self))));
+            s.Linear("istitle", 0, 0, (self, a, kw, c) => c.Values.Bool(IsTitle(S(self))));
+            s.Linear("swapcase", 0, 0, (self, a, kw, c) => c.Values.Str(PyUnicodeCase.SwapCase(S(self))));
+            s.Linear("zfill", 1, 1, (self, a, kw, c) => ZFill(c, self, a));
+            s.Linear("ljust", 1, 2, (self, a, kw, c) => Justify(c, self, a, '<'));
+            s.Linear("rjust", 1, 2, (self, a, kw, c) => Justify(c, self, a, '>'));
+            s.Linear("center", 1, 2, (self, a, kw, c) => Justify(c, self, a, '^'));
             s.Linear("expandtabs", (self, a, kw, c) => c.Values.StrPrecharged(ExpandTabs(c, S(self), ArgInt(c, WithKw(c, a, kw, "expandtabs", "tabsize"), 0, 8))));
         }
 
@@ -106,9 +106,20 @@ namespace Outbridge.PyLite.Runtime.Values
             return c.Values.StrPrecharged(sb.ToString());
         }
 
+        // Two passes: the result length is charged and capped once, then the exact buffer is filled
+        // (charging the running length per tab cost tabs^2 and failed on a few thousand tabs).
         private static string ExpandTabs(EvalContext c, string s, int tabsize)
         {
-            var sb = new StringBuilder(s.Length);
+            long len = 0, column = 0;
+            for (int i = 0; i < s.Length && len <= c.Limits.MaxStrChars; i++)
+            {
+                char ch = s[i];
+                long n = ch != '\t' ? 1 : tabsize > 0 ? tabsize - column % tabsize : 0;
+                len += n;
+                column = ch == '\n' || ch == '\r' ? 0 : column + n;
+            }
+            c.Values.EnsureStrLen(len);
+            var sb = new StringBuilder((int)len);
             int col = 0;
             for (int i = 0; i < s.Length; i++)
             {
@@ -118,7 +129,6 @@ namespace Outbridge.PyLite.Runtime.Values
                     if (tabsize > 0)
                     {
                         int n = tabsize - col % tabsize;
-                        c.Values.EnsureStrLen((long)sb.Length + n);   // a huge tabsize would otherwise OOM here
                         sb.Append(' ', n);
                         col += n;
                     }
@@ -141,18 +151,18 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static void AddPredicateSlots(Slots s)
         {
-            s.Linear("isdecimal", (self, a, kw, c) => c.Values.Bool(All(S(self), IsDecimal)));
-            s.Linear("isdigit", (self, a, kw, c) => c.Values.Bool(All(S(self), IsDigit)));
-            s.Linear("isnumeric", (self, a, kw, c) => c.Values.Bool(All(S(self), IsNumeric)));
-            s.Linear("isalpha", (self, a, kw, c) => c.Values.Bool(All(S(self), IsAlpha)));
-            s.Linear("isalnum", (self, a, kw, c) => c.Values.Bool(All(S(self), IsAlnum)));
-            s.Linear("isspace", (self, a, kw, c) => c.Values.Bool(All(S(self), cp => cp < 0x10000 && PyUnicode.IsPythonSpace((char)cp))));
-            s.Linear("islower", (self, a, kw, c) => c.Values.Bool(IsLowerUpper(S(self), false)));
-            s.Linear("isupper", (self, a, kw, c) => c.Values.Bool(IsLowerUpper(S(self), true)));
+            s.Linear("isdecimal", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), IsDecimal)));
+            s.Linear("isdigit", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), IsDigit)));
+            s.Linear("isnumeric", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), IsNumeric)));
+            s.Linear("isalpha", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), IsAlpha)));
+            s.Linear("isalnum", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), IsAlnum)));
+            s.Linear("isspace", 0, 0, (self, a, kw, c) => c.Values.Bool(All(S(self), cp => cp < 0x10000 && PyUnicode.IsPythonSpace((char)cp))));
+            s.Linear("islower", 0, 0, (self, a, kw, c) => c.Values.Bool(IsLowerUpper(S(self), false)));
+            s.Linear("isupper", 0, 0, (self, a, kw, c) => c.Values.Bool(IsLowerUpper(S(self), true)));
             // isascii/isprintable are true on the EMPTY string (CPython), unlike the All() family.
-            s.Linear("isascii", (self, a, kw, c) => c.Values.Bool(AllOrEmpty(S(self), ch => ch < 0x80)));
-            s.Linear("isprintable", (self, a, kw, c) => c.Values.Bool(AllOrEmpty(S(self), IsPrintable)));
-            s.Linear("isidentifier", (self, a, kw, c) => c.Values.Bool(IsIdentifier(S(self))));
+            s.Linear("isascii", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOrEmpty(S(self), ch => ch < 0x80)));
+            s.Linear("isprintable", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOrEmpty(S(self), IsPrintable)));
+            s.Linear("isidentifier", 0, 0, (self, a, kw, c) => c.Values.Bool(IsIdentifier(S(self))));
         }
 
         // The predicates walk code POINTS: a surrogate pair is one character (as len() does not count
@@ -219,7 +229,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // PEP 3131 exactly: the first code point must be XID_Start (or '_', which the property itself
         // does not carry), the rest XID_Continue. Walks code POINTS, so an astral letter counts once.
-        private static bool IsIdentifier(string s)
+        internal static bool IsIdentifier(string s)
         {
             if (s.Length == 0)
                 return false;

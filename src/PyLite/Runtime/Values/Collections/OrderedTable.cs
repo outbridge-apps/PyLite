@@ -1,4 +1,5 @@
 using System;
+using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -10,8 +11,8 @@ namespace Outbridge.PyLite.Runtime.Values
     }
 
     // Insertion-ordered open-addressing table: dense entries array (insertion order) + sparse index.
-    // Port of the CPython 3.6 compact-dict design. The single permitted reentrant
-    // Equals chain flows through PyOps.Equals with a threaded depth (R3).
+    // Port of the CPython 3.6 compact-dict design. Key comparison may reenter script code (a record
+    // __eq__); it goes through PyOps.Equals with a threaded depth.
     internal sealed class OrderedTable
     {
         private const int EMPTY = -1;
@@ -23,6 +24,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private int[] _index;            // power of two, >= 8
         private int _usedSlots;          // live + DUMMY
         private ulong _version;
+        private int _head;               // no live entry below it: FindFirstLive resumes here
 
         private OrderedTable() { }   // structural-clone ctor: the caller fills every field
 
@@ -36,8 +38,9 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             else
             {
-                indexSize = NextPow2(capacityHint * 3);
-                entriesCap = (indexSize * 2) / 3;
+                // CPython's presize: room for exactly capacityHint keys, the index at most 2/3 full
+                indexSize = NextPow2(capacityHint + capacityHint / 2 + 2);
+                entriesCap = capacityHint;
             }
             ctx.Budget.ChargeAllocation(4L * indexSize + 24L * entriesCap);
             _index = NewIndex(indexSize);
@@ -131,21 +134,89 @@ namespace Outbridge.PyLite.Runtime.Values
         public bool InsertOrUpdateWithPos(ScriptValue key, long hash, ScriptValue value, EvalContext ctx,
             int depth, out int pos)
         {
-            int slot = FindSlot(key, hash, ctx, depth);
+            int free;
+            ulong before = _version;   // a script __eq__ called by the lookup may have changed the table
+            int slot = FindSlotOrFree(key, hash, ctx, depth, out free);
             if (slot >= 0)
             {
                 _entries[slot].Value = value;
                 pos = slot;
                 return false;
             }   // update: version unchanged (R6)
-            EnsureCapacityForInsert(ctx);
-            InsertNewKey(key, hash, value, ctx);
-            pos = _entriesUsed - 1;   // InsertNewKey appends
+            if (_version == before && _liveCount < ctx.Limits.MaxCollectionItems
+                && (_usedSlots + 1) * 3 < _index.Length * 2 && _entriesUsed < _entries.Length)
+            {
+                Place(free, key, hash, value, ctx);   // the lookup's probe already ended where the key goes
+            }
+            else
+            {
+                EnsureCapacityForInsert(ctx);
+                InsertNewKey(key, hash, value, ctx);
+            }
+            pos = _entriesUsed - 1;   // both append
             return true;
+        }
+
+        // FindSlot that also reports, on a miss, the index position InsertNewKey would pick: the first
+        // DUMMY on the probe path, else the EMPTY that ended it.
+        private int FindSlotOrFree(ScriptValue key, long hash, EvalContext ctx, int depth, out int free)
+        {
+            ulong mask = (ulong)(_index.Length - 1);
+            ulong i = (ulong)hash & mask;
+            ulong perturb = (ulong)hash;
+            int probes = 0;
+            int dummy = -1;
+            while (true)
+            {
+                int slot = _index[(int)i];
+                if (slot == EMPTY)
+                {
+                    free = dummy >= 0 ? dummy : (int)i;
+                    return -1;
+                }
+                if (slot != DUMMY)
+                {
+                    TableEntry e = _entries[slot];
+                    if (e.Hash == hash && (ReferenceEquals(e.Key, key) || PyOps.Equals(e.Key, key, ctx, depth + 1)))
+                    {
+                        free = -1;
+                        return slot;
+                    }
+                }
+                else if (dummy < 0)
+                {
+                    dummy = (int)i;
+                }
+
+                perturb >>= 5;
+                i = (i * 5 + perturb + 1) & mask;
+                probes++;
+                if (probes > 8)
+                    ctx.Budget.Step();
+            }
+        }
+
+        private void Place(int target, ScriptValue key, long hash, ScriptValue value, EvalContext ctx)
+        {
+            ctx.Budget.ChargeAllocation(48); // per live entry (R5)
+            _entries[_entriesUsed] = new TableEntry
+            {
+                Hash = hash,
+                Key = key,
+                Value = value
+            };
+            if (_index[target] == EMPTY)
+                _usedSlots++; // consumed an EMPTY slot
+            _index[target] = _entriesUsed;
+            _entriesUsed++;
+            _liveCount++;
+            _version++;
         }
 
         private void EnsureCapacityForInsert(EvalContext ctx)
         {
+            if (_liveCount >= ctx.Limits.MaxCollectionItems)
+                throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxCollectionItems", ctx.Limits.MaxCollectionItems, _liveCount + 1L);
             if ((_usedSlots + 1) * 3 >= _index.Length * 2)
             {
                 Resize(ctx);
@@ -172,20 +243,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 int slot = _index[(int)i];
                 if (slot == EMPTY)
                 {
-                    int target = freeslot >= 0 ? freeslot : (int)i;
-                    ctx.Budget.ChargeAllocation(48); // per live entry (R5)
-                    _entries[_entriesUsed] = new TableEntry
-                    {
-                        Hash = hash,
-                        Key = key,
-                        Value = value
-                    };
-                    _index[target] = _entriesUsed;
-                    if (freeslot < 0)
-                        _usedSlots++; // consumed an EMPTY slot
-                    _entriesUsed++;
-                    _liveCount++;
-                    _version++;
+                    Place(freeslot >= 0 ? freeslot : (int)i, key, hash, value, ctx);
                     return;
                 }
 
@@ -224,6 +282,15 @@ namespace Outbridge.PyLite.Runtime.Values
                         _entries[slot].Value = null;
                         _liveCount--;
                         _version++;
+                        // Trailing tombstones are dropped (as CPython's popitem does), so draining from
+                        // the end never rescans them.
+                        if (slot == _entriesUsed - 1)
+                        {
+                            while (_entriesUsed > 0 && _entries[_entriesUsed - 1].Key == null)
+                                _entriesUsed--;
+                            if (_head > _entriesUsed)
+                                _head = _entriesUsed;
+                        }
                         return true;
                     }
                 }
@@ -244,6 +311,7 @@ namespace Outbridge.PyLite.Runtime.Values
             _entriesUsed = 0;
             _liveCount = 0;
             _usedSlots = 0;
+            _head = 0;
             _version++;
         }
 
@@ -261,12 +329,46 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
+        // Constant time after a trailing delete: Delete trims the tombstones at the end.
         public int FindLastLive()
         {
             for (int p = _entriesUsed - 1; p >= 0; p--)
                 if (_entries[p].Key != null)
                     return p;
             return -1;
+        }
+
+        // OrderedDict.move_to_end(key, last=False): the entry moves to position 0 and the ones before it shift
+        // up by one. Linear array moves and one pass over the index, but no rehash and no allocation (it used
+        // to rebuild the whole table). False when the key is absent.
+        public bool MoveToFront(ScriptValue key, long hash, EvalContext ctx, int depth)
+        {
+            int p = FindSlot(key, hash, ctx, depth);
+            if (p < 0)
+                return false;
+            ctx.Budget.ChargeLinear((long)p + _index.Length);
+            TableEntry e = _entries[p];
+            Array.Copy(_entries, 0, _entries, 1, p);
+            _entries[0] = e;
+            for (int k = 0; k < _index.Length; k++)
+            {
+                int slot = _index[k];
+                if (slot == p)
+                    _index[k] = 0;
+                else if (slot >= 0 && slot < p)
+                    _index[k] = slot + 1;
+            }
+            _head = 0;
+            _version++;
+            return true;
+        }
+
+        // Amortised constant time while draining from the front (set.pop, OrderedDict.popitem(False)).
+        public int FindFirstLive()
+        {
+            while (_head < _entriesUsed && _entries[_head].Key == null)
+                _head++;
+            return _head < _entriesUsed ? _head : -1;
         }
 
         public OrderedTable CloneShallow(EvalContext ctx)
@@ -281,6 +383,7 @@ namespace Outbridge.PyLite.Runtime.Values
             t._entriesUsed = _entriesUsed;
             t._liveCount = _liveCount;
             t._usedSlots = _usedSlots;
+            t._head = _head;
             return t;
         }
 
@@ -313,6 +416,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     newEntries[w++] = _entries[r];
             _entries = newEntries;
             _entriesUsed = w;
+            _head = 0;
             _index = NewIndex(indexSize);
             for (int k = 0; k < _entriesUsed; k++)
                 ReinsertIndex(k, _entries[k].Hash);

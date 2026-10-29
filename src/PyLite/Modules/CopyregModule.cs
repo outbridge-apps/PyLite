@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules
     // copyreg: a stub so `import copyreg` and `from copyreg import pickle, constructor`
     // succeed. pickle validates and writes into a per-run dispatch_table that is never read (copy does not
     // consult it). `import pickle` still fails with ImportError — the real boundary.
-    public static class CopyregModule
+    internal static class CopyregModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -24,15 +24,15 @@ namespace Outbridge.PyLite.Modules
             m["_extension_registry"] = extRegistry;
             m["_inverted_registry"] = invRegistry;
             m["_extension_cache"] = extCache;
-            m["pickle"] = BuiltinFunctionValue.Make("pickle", (s, a, k, c) => Pickle(c, a, dispatch));
+            m["pickle"] = BuiltinFunctionValue.Make("pickle", Args.Positional("pickle", 2, 3, (s, a, k, c) => Pickle(c, a, dispatch)));
             m["constructor"] = BuiltinFunctionValue.Make("constructor", Constructor);
-            m["add_extension"] = BuiltinFunctionValue.Make("add_extension", (s, a, k, c) => AddExtension(c, a, extRegistry, invRegistry));
-            m["remove_extension"] = BuiltinFunctionValue.Make("remove_extension", (s, a, k, c) => RemoveExtension(c, a, extRegistry, invRegistry, extCache));
-            m["clear_extension_cache"] = BuiltinFunctionValue.Make("clear_extension_cache", (s, a, k, c) =>
+            m["add_extension"] = BuiltinFunctionValue.Make("add_extension", Args.Positional("add_extension", 3, 3, (s, a, k, c) => AddExtension(c, a, extRegistry, invRegistry)));
+            m["remove_extension"] = BuiltinFunctionValue.Make("remove_extension", Args.Positional("remove_extension", 3, 3, (s, a, k, c) => RemoveExtension(c, a, extRegistry, invRegistry, extCache)));
+            m["clear_extension_cache"] = BuiltinFunctionValue.Make("clear_extension_cache", Args.Positional("clear_extension_cache", 0, 0, (s, a, k, c) =>
             {
                 extCache.Table.Clear(c);
                 return c.Values.None;
-            });
+            }));
             return ctx.Values.Module("copyreg", m);
         }
 

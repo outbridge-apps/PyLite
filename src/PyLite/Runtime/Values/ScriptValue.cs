@@ -58,7 +58,7 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal virtual void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         { ReprLeafCore(sb, ctx, depth); }
 
-        // ---- Markers used by later packages (callable()/len over a big range) ----
+        // ---- Markers: callable(), len() over a big range ----
         internal virtual bool IsCallable { get { return false; } }
         // A callable opaque value's dispatch (functools.partial); CallMachinery consults
         // this when IsCallable is true but the Kind is not a built-in callable.

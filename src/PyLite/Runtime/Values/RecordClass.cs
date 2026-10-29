@@ -5,6 +5,9 @@ using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
+    // The protocol dunders a record class resolves once (RecordClassValue.Dunder), in DunderNames' order.
+    internal enum RecordDunder { Hash, Eq, Str, Repr, Bool, Len, Call, Contains, GetItem, SetItem, DelItem, Iter, Reversed, Next }
+
     // record class object. Callable to construct instances; methods resolve child-first up the
     // single-inheritance chain; reachable statically (ClassName.method) for explicit base calls. Hashable.
     public sealed class RecordClassValue : ScriptValue
@@ -19,14 +22,16 @@ namespace Outbridge.PyLite.Runtime.Values
         internal readonly string[] MatchArgs;                                 // __match_args__ for class patterns
         internal readonly IReadOnlyDictionary<string, FieldDefault> AnnotationDefaults;   // class-body field defaults
         internal readonly DataclassSpec Dataclass;                            // null => not a @dataclass
+        internal readonly Dictionary<string, ScriptValue> Constants;          // own class attributes (NAME = value)
         private readonly long _identity;
 
         internal RecordClassValue(string name, RecordClassValue baseCls, IReadOnlyList<string> allSlots,
             Dictionary<string, int> slotIndex, Dictionary<string, FunctionValue> methods, bool frozen,
             string[] matchArgs, IReadOnlyDictionary<string, FieldDefault> annotationDefaults,
-            DataclassSpec dataclass, long identity)
+            DataclassSpec dataclass, long identity, Dictionary<string, ScriptValue> constants = null)
         {
             Name = name;
+            Constants = constants ?? new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             Base = baseCls;
             AllSlots = allSlots;
             SlotIndex = slotIndex;
@@ -43,7 +48,7 @@ namespace Outbridge.PyLite.Runtime.Values
         internal RecordClassValue WithDataclass(bool frozen, string[] matchArgs, DataclassSpec spec)
         {
             return new RecordClassValue(Name, Base, AllSlots, SlotIndex, Methods, frozen, matchArgs,
-                AnnotationDefaults, spec, _identity);
+                AnnotationDefaults, spec, _identity, Constants);   // the same attribute table: it is the same class
         }
 
         public override ScriptTypeInfo TypeInfo { get { return _type; } }
@@ -61,6 +66,41 @@ namespace Outbridge.PyLite.Runtime.Values
             return null;
         }
 
+        // The protocol dunders, resolved once per class (P9): methods never change after the class is made,
+        // and a dunder cannot be assigned to a class afterwards (TrySetAttrCore), so neither can the answer.
+        private static readonly string[] DunderNames =
+        {
+            "__hash__", "__eq__", "__str__", "__repr__", "__bool__", "__len__", "__call__", "__contains__",
+            "__getitem__", "__setitem__", "__delitem__", "__iter__", "__reversed__", "__next__",
+        };
+
+        private FunctionValue[] _dunders;
+        private bool _hashIsNone;
+
+        internal FunctionValue Dunder(RecordDunder d)
+        {
+            if (_dunders == null)
+            {
+                var all = new FunctionValue[DunderNames.Length];
+                for (int i = 0; i < all.Length; i++)
+                    all[i] = FindMethod(DunderNames[i]);
+                ScriptValue hk;
+                FunctionValue hm;
+                _hashIsNone = TryFindClassAttr("__hash__", out hk, out hm) && hk != null;   // __hash__ = None in the body
+                _dunders = all;
+            }
+            return _dunders[(int)d];
+        }
+
+        internal bool HashIsNone
+        {
+            get
+            {
+                Dunder(RecordDunder.Hash);
+                return _hashIsNone;
+            }
+        }
+
         internal bool IsSubclassOf(RecordClassValue other)
         {
             for (RecordClassValue c = this; c != null; c = c.Base)
@@ -69,25 +109,96 @@ namespace Outbridge.PyLite.Runtime.Values
             return false;
         }
 
+        // The same class statement: @dataclass hands back a copy that keeps the identity.
+        internal bool SameClass(RecordClassValue other) { return other != null && other._identity == _identity; }
+
+        // The __init__ CPython's MRO walk finds from this class up: a written one, or the one @dataclass
+        // generated for the nearest dataclass (which takes precedence over a base's written __init__).
+        // Both null: object.__init__.
+        internal void ResolveInit(out FunctionValue written, out RecordClassValue generated)
+        {
+            for (RecordClassValue c = this; c != null; c = c.Base)
+            {
+                if (c.Methods.TryGetValue("__init__", out written))
+                {
+                    generated = null;
+                    return;
+                }
+                if (c.Dataclass != null && c.Dataclass.Init)
+                {
+                    generated = c;
+                    return;
+                }
+            }
+            written = null;
+            generated = null;
+        }
+
+        // A class body's own __match_args__ = (...) wins over the one @dataclass writes; CPython's TypeError if
+        // it is not a tuple of str.
+        internal string[] EffectiveMatchArgs(EvalContext ctx)
+        {
+            ScriptValue k;
+            FunctionValue m;
+            if (!TryFindClassAttr("__match_args__", out k, out m) || k == null)
+                return MatchArgs;
+            TupleValue t = k as TupleValue;
+            if (t == null)
+                throw Raise.TypeError(ctx, Name + ".__match_args__ must be a tuple (got " + k.PyTypeName + ")");
+            var r = new string[t.Items.Length];
+            for (int i = 0; i < r.Length; i++)
+            {
+                StrValue s = t.Items[i] as StrValue;
+                if (s == null)
+                    throw Raise.TypeError(ctx, "__match_args__ elements must be strings (got " + t.Items[i].PyTypeName + ")");
+                r[i] = s.Value;
+            }
+            return r;
+        }
+
         // __match_args__ as @dataclass writes it: a tuple of the positional __init__ names. A plain
         // class has none (null), which is CPython's AttributeError too.
         internal bool TryMatchArgs(EvalContext ctx, out ScriptValue value)
         {
             value = null;
-            if (MatchArgs == null)
+            string[] ma = EffectiveMatchArgs(ctx);
+            if (ma == null)
                 return false;
-            var items = new ScriptValue[MatchArgs.Length];
+            var items = new ScriptValue[ma.Length];
             for (int i = 0; i < items.Length; i++)
-                items[i] = ctx.Values.Str(MatchArgs[i]);
+                items[i] = ctx.Values.Str(ma[i]);
             value = ctx.Values.Tuple(items);
             return true;
         }
 
+        // A class attribute as CPython's MRO walk finds it: a constant or a method, whichever the nearest
+        // class defines (within one class a constant, which is the later binding in practice). False if none.
+        internal bool TryFindClassAttr(string name, out ScriptValue constant, out FunctionValue method)
+        {
+            for (RecordClassValue c = this; c != null; c = c.Base)
+            {
+                if (c.Constants.TryGetValue(name, out constant))
+                {
+                    method = null;
+                    return true;
+                }
+                if (c.Methods.TryGetValue(name, out method))
+                {
+                    constant = null;
+                    return true;
+                }
+            }
+            constant = null;
+            method = null;
+            return false;
+        }
+
         internal ScriptValue GetStaticAttr(string name, EvalContext ctx)
         {
-            FunctionValue f = FindMethod(name);
-            if (f != null)
-                return f;   // ClassName.method -> plain function (explicit base calls: Base.__init__(self, ...))
+            ScriptValue k;
+            FunctionValue f;
+            if (TryFindClassAttr(name, out k, out f))
+                return k ?? f;   // ClassName.method -> plain function (explicit base calls: Base.__init__(self, ...))
             FieldDefault cv;
             if (AnnotationDefaults != null && AnnotationDefaults.TryGetValue(name, out cv)
                 && cv.Kind == FieldKind.ClassVar && cv.HasDefault)
@@ -96,6 +207,16 @@ namespace Outbridge.PyLite.Runtime.Values
             if (name == "__match_args__" && TryMatchArgs(ctx, out ma))
                 return ma;
             throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "type object '" + Name + "' has no attribute '" + name + "'");
+        }
+
+        // C.NAME = value sets (or adds) a class attribute, which every instance then reads, as in CPython.
+        protected internal override bool TrySetAttrCore(string name, ScriptValue value, EvalContext ctx)
+        {
+            if (name.StartsWith("__", StringComparison.Ordinal) && name.EndsWith("__", StringComparison.Ordinal))
+                return false;
+            ctx.Values.PreCharge(48);
+            Constants[name] = value;
+            return true;
         }
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth) { return _identity; }
@@ -116,41 +237,53 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal ScriptValue GetAttribute(string name, EvalContext ctx)
         {
-            int idx;
-            if (Class.SlotIndex.TryGetValue(name, out idx))
-            {
-                ScriptValue v = Slots[idx];
-                if (v == null)
-                    throw NoAttr(name, ctx);
+            ScriptValue v;
+            if (TryGetAttribute(name, ctx, out v))
                 return v;
-            }
-            FunctionValue m = Class.FindMethod(name);
-            if (m != null)
-                return new BoundUserMethodValue(this, m);
-            ScriptValue ma;
-            if (name == "__match_args__" && Class.TryMatchArgs(ctx, out ma))
-                return ma;
             throw NoAttr(name, ctx);
+        }
+
+        // The function obj.name(...) would run with obj as self: a method, or a script function stored as a
+        // class attribute; null when a set instance field of that name wins or there is no such function.
+        internal FunctionValue FindMethod(string name)
+        {
+            int idx;
+            if (Class.SlotIndex.TryGetValue(name, out idx) && Slots[idx] != null)
+                return null;
+            ScriptValue k;
+            FunctionValue m;
+            if (!Class.TryFindClassAttr(name, out k, out m))
+                return null;
+            return m ?? k as FunctionValue;
         }
 
         // GetAttribute without the exception: for callers that probe several optional attributes on
         // an object, where a raised AttributeError per miss would cost more than the lookup itself.
+        // An instance field first (unset ones fall through), then the class: a method or a script function
+        // stored as a class attribute comes back bound, any other class attribute as it is.
         internal bool TryGetAttribute(string name, EvalContext ctx, out ScriptValue value)
         {
             int idx;
-            if (Class.SlotIndex.TryGetValue(name, out idx))
+            if (Class.SlotIndex.TryGetValue(name, out idx) && Slots[idx] != null)
             {
                 value = Slots[idx];
-                return value != null;
+                return true;
             }
-            FunctionValue m = Class.FindMethod(name);
-            if (m != null)
+            ScriptValue k;
+            FunctionValue m;
+            if (Class.TryFindClassAttr(name, out k, out m))
             {
-                value = new BoundUserMethodValue(this, m);
+                FunctionValue kf = k as FunctionValue;
+                value = m != null ? new BoundUserMethodValue(this, m) : kf != null ? new BoundUserMethodValue(this, kf) : k;
                 return true;
             }
             if (name == "__match_args__")
                 return Class.TryMatchArgs(ctx, out value);
+            if (name == "__class__")
+            {
+                value = Class;   // self.__class__.__name__ in a __repr__
+                return true;
+            }
             value = null;
             return false;
         }
@@ -159,7 +292,16 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             int idx;
             if (!Class.SlotIndex.TryGetValue(name, out idx))
+            {
+                ScriptValue k;
+                FunctionValue m;
+                if (Class.TryFindClassAttr(name, out k, out m) && k != null)
+                {
+                    throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "'" + Class.Name + "' object attribute '" + name
+                        + "' is a class attribute; in this dialect an instance gets its own only when __init__ assigns self." + name);
+                }
                 throw NoAttr(name, ctx);
+            }
             if (Class.Frozen)
                 throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "cannot assign to field '" + name + "'");
             Slots[idx] = value;
@@ -180,7 +322,9 @@ namespace Outbridge.PyLite.Runtime.Values
         // a written __eq__ took the hash away, which is the data model's rule for any class.
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
         {
-            FunctionValue h = Class.FindMethod("__hash__");
+            if (Class.HashIsNone)
+                throw Raise.TypeError(ctx, "unhashable type: '" + Class.Name + "'");   // __hash__ = None in the class body
+            FunctionValue h = Class.Dunder(RecordDunder.Hash);
             if (h != null)
             {
                 ScriptValue r = ctx.CallHook1(h, this);
@@ -202,7 +346,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 // is a RecursionError at MaxDataDepth and not a walk down the C# stack.
                 return PyOps.Hash(ctx.Values.Tuple(items.ToArray()), ctx, depth);   // the tuple is the engine's own frame: its items sit one level down
             }
-            if (Class.FindMethod("__eq__") != null)
+            if (Class.Dunder(RecordDunder.Eq) != null)
                 throw Raise.TypeError(ctx, "unhashable type: '" + Class.Name + "'");
             return ctx.Values.IdOf(this);
         }
@@ -239,12 +383,12 @@ namespace Outbridge.PyLite.Runtime.Values
             RecordInstanceValue o = other as RecordInstanceValue;
             if (o == null)
                 return false;
-            FunctionValue eq = Class.FindMethod("__eq__");
+            FunctionValue eq = Class.Dunder(RecordDunder.Eq);
             if (eq != null)
                 return PyOps.Truth(ctx.CallHook(eq, new ScriptValue[] { this, other }, KwArgs.Empty), ctx);
             // Reflected: only the right side defines __eq__ (CPython would get NotImplemented from
             // the left and try it; when both define one, the left wins — no NotImplemented here).
-            FunctionValue req = o.Class.FindMethod("__eq__");
+            FunctionValue req = o.Class.Dunder(RecordDunder.Eq);
             if (req != null)
                 return PyOps.Truth(ctx.CallHook(req, new ScriptValue[] { o, this }, KwArgs.Empty), ctx);
             // Field equality is generated by @dataclass(eq=True) and by nothing else: a bare class
@@ -267,7 +411,7 @@ namespace Outbridge.PyLite.Runtime.Values
         // never equals a non-record — decline so the other operand's hook gets its turn.
         protected internal override bool TryEqualsAcrossKindCore(ScriptValue other, EvalContext ctx, int depth, out bool equal)
         {
-            FunctionValue eq = Class.FindMethod("__eq__");
+            FunctionValue eq = Class.Dunder(RecordDunder.Eq);
             if (eq != null)
             {
                 equal = PyOps.Truth(ctx.CallHook(eq, new ScriptValue[] { this, other }, KwArgs.Empty), ctx);
@@ -307,7 +451,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            FunctionValue f = Class.FindMethod("__str__");
+            FunctionValue f = Class.Dunder(RecordDunder.Str);
             if (f == null)
             {
                 ReprLeafCore(sb, ctx, depth);   // CPython's default __str__ is __repr__
@@ -322,7 +466,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override bool IsTruthyCore(EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__bool__");
+            FunctionValue f = Class.Dunder(RecordDunder.Bool);
             if (f != null)
             {
                 ScriptValue r = ctx.CallHook1(f, this);
@@ -337,7 +481,7 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override bool TryLengthWithContextCore(EvalContext ctx, out long length)
         {
             length = 0;
-            FunctionValue f = Class.FindMethod("__len__");
+            FunctionValue f = Class.Dunder(RecordDunder.Len);
             if (f == null)
                 return false;
             ScriptValue r = ctx.CallHook1(f, this);
@@ -352,11 +496,11 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        internal override bool IsCallable { get { return Class.FindMethod("__call__") != null; } }
+        internal override bool IsCallable { get { return Class.Dunder(RecordDunder.Call) != null; } }
 
         protected internal override ScriptValue CallCore(ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__call__");
+            FunctionValue f = Class.Dunder(RecordDunder.Call);
             if (f == null)
                 return null;
             var a = new ScriptValue[args.Length + 1];
@@ -369,7 +513,7 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override bool TryContainsCore(ScriptValue item, EvalContext ctx, int depth, out bool found)
         {
             found = false;
-            FunctionValue f = Class.FindMethod("__contains__");
+            FunctionValue f = Class.Dunder(RecordDunder.Contains);
             if (f == null)
                 return false;
             found = PyOps.Truth(ctx.CallHook(f, new ScriptValue[] { this, item }, KwArgs.Empty), ctx);
@@ -378,13 +522,13 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override ScriptValue GetItemCore(ScriptValue index, EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__getitem__");
+            FunctionValue f = Class.Dunder(RecordDunder.GetItem);
             return f == null ? null : ctx.CallHook(f, new ScriptValue[] { this, index }, KwArgs.Empty);
         }
 
         protected internal override bool TrySetItemCore(ScriptValue index, ScriptValue value, EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__setitem__");
+            FunctionValue f = Class.Dunder(RecordDunder.SetItem);
             if (f == null)
                 return false;
             ctx.CallHook(f, new ScriptValue[] { this, index, value }, KwArgs.Empty);
@@ -393,7 +537,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override bool TryDelItemCore(ScriptValue index, EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__delitem__");
+            FunctionValue f = Class.Dunder(RecordDunder.DelItem);
             if (f == null)
                 return false;
             ctx.CallHook(f, new ScriptValue[] { this, index }, KwArgs.Empty);
@@ -402,11 +546,11 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override IScriptIterator GetIteratorCore(EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__iter__");
+            FunctionValue f = Class.Dunder(RecordDunder.Iter);
             if (f == null)
             {
                 // the legacy sequence protocol: only __getitem__, indexed from 0 until IndexError
-                FunctionValue get = Class.FindMethod("__getitem__");
+                FunctionValue get = Class.Dunder(RecordDunder.GetItem);
                 return get == null ? null : new SeqProtocolIterator(this, get);
             }
             return AsIterator(ctx, ctx.CallHook1(f, this));
@@ -414,7 +558,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override IScriptIterator GetReverseIteratorCore(EvalContext ctx)
         {
-            FunctionValue f = Class.FindMethod("__reversed__");
+            FunctionValue f = Class.Dunder(RecordDunder.Reversed);
             return f == null ? null : AsIterator(ctx, ctx.CallHook1(f, this));
         }
 
@@ -426,7 +570,7 @@ namespace Outbridge.PyLite.Runtime.Values
             RecordInstanceValue ri = r as RecordInstanceValue;
             if (ri != null)
             {
-                FunctionValue next = ri.Class.FindMethod("__next__");
+                FunctionValue next = ri.Class.Dunder(RecordDunder.Next);
                 if (next != null)
                     return new RecordIterator(ri, next);
             }
@@ -494,7 +638,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            FunctionValue rep = Class.FindMethod("__repr__");
+            FunctionValue rep = Class.Dunder(RecordDunder.Repr);
             if (rep != null)
             {
                 ScriptValue r = ctx.CallHook1(rep, this);

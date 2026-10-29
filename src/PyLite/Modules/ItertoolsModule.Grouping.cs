@@ -8,7 +8,7 @@ using Outbridge.PyLite.Modules.Support;
 namespace Outbridge.PyLite.Modules
 {
     // itertools grouping/combining iterators: groupby (+_grouper), starmap, zip_longest.
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         private static ScriptValue GroupBy(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
@@ -151,12 +151,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue[] MaterializeArgs(EvalContext ctx, ScriptValue tup)
         {
-            IScriptIterator it = PyOps.GetIterator(tup, ctx);
-            var list = new List<ScriptValue>();
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-                list.Add(v);
-            return list.ToArray();
+            return Iter.ToArray(ctx, tup);
         }
     }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime.Errors;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
@@ -146,19 +147,19 @@ namespace Outbridge.PyLite.Runtime.Values
             s["parents"] = SlotDescriptor.MakeProperty("parents", (self, ctx) => Parents((ChainMapValue)self, ctx));
             s["new_child"] = SlotDescriptor.MakeMethod("new_child", NewChild);
             s["get"] = SlotDescriptor.MakeMethod("get", Get_);
-            s["keys"] = SlotDescriptor.MakeMethod("keys", (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).KeysView(ctx));
-            s["values"] = SlotDescriptor.MakeMethod("values", (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ValuesView(ctx));
-            s["items"] = SlotDescriptor.MakeMethod("items", (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ItemsView(ctx));
+            s["keys"] = SlotDescriptor.MakeMethod("keys", Args.Positional("keys", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).KeysView(ctx)));
+            s["values"] = SlotDescriptor.MakeMethod("values", Args.Positional("values", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ValuesView(ctx)));
+            s["items"] = SlotDescriptor.MakeMethod("items", Args.Positional("items", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ItemsView(ctx)));
             s["copy"] = SlotDescriptor.MakeMethod("copy", Copy_);
             s["update"] = SlotDescriptor.MakeMethod("update", Update_);
             s["pop"] = SlotDescriptor.MakeMethod("pop", Pop_);
             s["popitem"] = SlotDescriptor.MakeMethod("popitem", PopItem_);
             s["setdefault"] = SlotDescriptor.MakeMethod("setdefault", SetDefault_);
-            s["clear"] = SlotDescriptor.MakeMethod("clear", (self, a, kw, ctx) =>
+            s["clear"] = SlotDescriptor.MakeMethod("clear", Args.Positional("clear", 0, 0, (self, a, kw, ctx) =>
             {
                 ((ChainMapValue)self).First(ctx).Table.Clear(ctx);   // first map only (MutableMapping semantics)
                 return ctx.Values.None;
-            });
+            }));
             return s;
         }
 
@@ -198,8 +199,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Get_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ChainMapValue cm = (ChainMapValue)self;
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(ctx, "get expected at most 2 arguments, got " + a.Length);
+            Args.Unpack(ctx, a, "get", 1, 2);
             for (int i = 0; i < cm.Maps.Items.Count; i++)
             {
                 ScriptValue v;
@@ -213,8 +213,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Update_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ChainMapValue cm = (ChainMapValue)self;
-            if (a.Length > 1)
-                throw Raise.TypeError(ctx, "update expected at most 1 argument, got " + a.Length);
+            Args.Unpack(ctx, a, "update", 0, 1);
             DictValue first = cm.First(ctx);
             if (a.Length == 1 && a[0].Kind != ValueKind.None)
                 DictMethods.Merge(ctx, first, a[0]);
@@ -227,8 +226,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Pop_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ChainMapValue cm = (ChainMapValue)self;
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(ctx, "pop expected at most 2 arguments, got " + a.Length);
+            Args.Unpack(ctx, a, "pop", 1, 2);
             DictValue first = cm.First(ctx);
             ScriptValue v;
             if (first.TryGet(a[0], ctx, out v))
@@ -259,8 +257,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue SetDefault_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ChainMapValue cm = (ChainMapValue)self;
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(ctx, "setdefault expected at most 2 arguments, got " + a.Length);
+            Args.Unpack(ctx, a, "setdefault", 1, 2);
             for (int i = 0; i < cm.Maps.Items.Count; i++)
             {
                 ScriptValue v;

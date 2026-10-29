@@ -10,7 +10,6 @@ namespace Outbridge.PyLite.Syntax
         private static readonly Dictionary<string, string> ForbiddenTable = new Dictionary<string, string>(System.StringComparer.Ordinal)
         {
             { "yield", "generators are not supported in this dialect; use a generator expression" },
-            { "with",  "'with' statements are not supported in this dialect; use try/finally" },
             { "async", "async is not supported in this dialect" },
             { "await", "await is not supported in this dialect" },
             { "import-star", "from ... import * is not supported in this dialect; import names explicitly" },

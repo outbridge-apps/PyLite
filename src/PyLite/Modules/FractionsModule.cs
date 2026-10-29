@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
@@ -23,8 +24,8 @@ namespace Outbridge.PyLite.Modules
         {
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["from_float"] = BuiltinFunctionValue.Make("from_float", (self, args, kw, c) => FromFloat(c, args)),
-                ["from_decimal"] = BuiltinFunctionValue.Make("from_decimal", (self, args, kw, c) => FromDecimal(c, args)),
+                ["from_float"] = BuiltinFunctionValue.Make("from_float", Args.Positional("from_float", 1, 1, (self, args, kw, c) => FromFloat(c, args))),
+                ["from_decimal"] = BuiltinFunctionValue.Make("from_decimal", Args.Positional("from_decimal", 1, 1, (self, args, kw, c) => FromDecimal(c, args))),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => FractionValue.Construct(c, args, kw);
             return ctx.Values.Type("fractions.Fraction", ctor, null, slots);

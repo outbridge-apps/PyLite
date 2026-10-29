@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules
     // operator: the operators as functions, over the same PyOps entry points the evaluator uses, plus
     // itemgetter / attrgetter / methodcaller. The in-place i* forms, matmul, length_hint and call are
     // not here.
-    public static class OperatorModule
+    internal static class OperatorModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -39,32 +39,32 @@ namespace Outbridge.PyLite.Modules
             Cmp(m, "ne", PyCmpOp.Ne);
             Cmp(m, "ge", PyCmpOp.Ge);
             Cmp(m, "gt", PyCmpOp.Gt);
-            m["abs"] = BuiltinFunctionValue.Make("abs", (s, a, k, c) => Builtins.AbsBuiltin(c, Exactly(c, a, 1, "abs")));
-            m["not_"] = BuiltinFunctionValue.Make("not_", (s, a, k, c) => c.Values.Bool(!PyOps.Truth(Exactly(c, a, 1, "not_")[0], c)));
-            m["truth"] = BuiltinFunctionValue.Make("truth", (s, a, k, c) => c.Values.Bool(PyOps.Truth(Exactly(c, a, 1, "truth")[0], c)));
-            m["is_"] = BuiltinFunctionValue.Make("is_", (s, a, k, c) => c.Values.Bool(ReferenceEquals(Exactly(c, a, 2, "is_")[0], a[1])));
-            m["is_not"] = BuiltinFunctionValue.Make("is_not", (s, a, k, c) => c.Values.Bool(!ReferenceEquals(Exactly(c, a, 2, "is_not")[0], a[1])));
-            m["contains"] = BuiltinFunctionValue.Make("contains", (s, a, k, c) => c.Values.Bool(PyOps.Contains(Exactly(c, a, 2, "contains")[1], a[0], c)));
-            m["countOf"] = BuiltinFunctionValue.Make("countOf", (s, a, k, c) => CountOf(c, Exactly(c, a, 2, "countOf")));
-            m["indexOf"] = BuiltinFunctionValue.Make("indexOf", (s, a, k, c) => IndexOf(c, Exactly(c, a, 2, "indexOf")));
-            m["getitem"] = BuiltinFunctionValue.Make("getitem", (s, a, k, c) => PyOps.GetItem(Exactly(c, a, 2, "getitem")[0], a[1], c));
-            m["setitem"] = BuiltinFunctionValue.Make("setitem", (s, a, k, c) =>
+            m["abs"] = BuiltinFunctionValue.Make("abs", Args.Positional("abs", 1, 1, (s, a, k, c) => Builtins.AbsBuiltin(c, Exactly(c, a, 1, "abs"))));
+            m["not_"] = BuiltinFunctionValue.Make("not_", Args.Positional("not_", 1, 1, (s, a, k, c) => c.Values.Bool(!PyOps.Truth(Exactly(c, a, 1, "not_")[0], c))));
+            m["truth"] = BuiltinFunctionValue.Make("truth", Args.Positional("truth", 1, 1, (s, a, k, c) => c.Values.Bool(PyOps.Truth(Exactly(c, a, 1, "truth")[0], c))));
+            m["is_"] = BuiltinFunctionValue.Make("is_", Args.Positional("is_", 2, 2, (s, a, k, c) => c.Values.Bool(ReferenceEquals(Exactly(c, a, 2, "is_")[0], a[1]))));
+            m["is_not"] = BuiltinFunctionValue.Make("is_not", Args.Positional("is_not", 2, 2, (s, a, k, c) => c.Values.Bool(!ReferenceEquals(Exactly(c, a, 2, "is_not")[0], a[1]))));
+            m["contains"] = BuiltinFunctionValue.Make("contains", Args.Positional("contains", 2, 2, (s, a, k, c) => c.Values.Bool(PyOps.Contains(Exactly(c, a, 2, "contains")[1], a[0], c))));
+            m["countOf"] = BuiltinFunctionValue.Make("countOf", Args.Positional("countOf", 2, 2, (s, a, k, c) => CountOf(c, Exactly(c, a, 2, "countOf"))));
+            m["indexOf"] = BuiltinFunctionValue.Make("indexOf", Args.Positional("indexOf", 2, 2, (s, a, k, c) => IndexOf(c, Exactly(c, a, 2, "indexOf"))));
+            m["getitem"] = BuiltinFunctionValue.Make("getitem", Args.Positional("getitem", 2, 2, (s, a, k, c) => PyOps.GetItem(Exactly(c, a, 2, "getitem")[0], a[1], c)));
+            m["setitem"] = BuiltinFunctionValue.Make("setitem", Args.Positional("setitem", 3, 3, (s, a, k, c) =>
             {
                 PyOps.SetItem(Exactly(c, a, 3, "setitem")[0], a[1], a[2], c);
                 return c.Values.None;
-            });
-            m["delitem"] = BuiltinFunctionValue.Make("delitem", (s, a, k, c) =>
+            }));
+            m["delitem"] = BuiltinFunctionValue.Make("delitem", Args.Positional("delitem", 2, 2, (s, a, k, c) =>
             {
                 PyOps.DelItem(Exactly(c, a, 2, "delitem")[0], a[1], c);
                 return c.Values.None;
-            });
-            m["index"] = BuiltinFunctionValue.Make("index", (s, a, k, c) =>
+            }));
+            m["index"] = BuiltinFunctionValue.Make("index", Args.Positional("index", 1, 1, (s, a, k, c) =>
             {
                 ScriptValue v = Exactly(c, a, 1, "index")[0];
                 if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
                     throw Raise.TypeError(c, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
                 return v;
-            });
+            }));
             m["itemgetter"] = BuiltinFunctionValue.Make("itemgetter", ItemGetter);
             m["attrgetter"] = BuiltinFunctionValue.Make("attrgetter", AttrGetter);
             m["methodcaller"] = BuiltinFunctionValue.Make("methodcaller", MethodCaller);
@@ -127,7 +127,7 @@ namespace Outbridge.PyLite.Modules
             if (items.Length == 0)
                 throw Raise.TypeError(ctx, "itemgetter expected 1 argument, got 0");
             ScriptValue[] keys = (ScriptValue[])items.Clone();
-            return BuiltinFunctionValue.Make("itemgetter", (s, a, k, c) =>
+            return BuiltinFunctionValue.Make("itemgetter", Args.Positional("itemgetter", 1, int.MaxValue, (s, a, k, c) =>
             {
                 ScriptValue obj = Exactly(c, a, 1, "itemgetter")[0];
                 if (keys.Length == 1)
@@ -136,7 +136,7 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 0; i < keys.Length; i++)
                     got[i] = PyOps.GetItem(obj, keys[i], c);
                 return c.Values.Tuple(got);
-            });
+            }));
         }
 
         // attrgetter(name, ...): dotted names walk; one name -> the attribute, several -> the tuple.
@@ -152,7 +152,7 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.TypeError(ctx, "attribute name must be a string");
                 paths[i] = s.Value.Split('.');
             }
-            return BuiltinFunctionValue.Make("attrgetter", (s, a, k, c) =>
+            return BuiltinFunctionValue.Make("attrgetter", Args.Positional("attrgetter", 1, int.MaxValue, (s, a, k, c) =>
             {
                 ScriptValue obj = Exactly(c, a, 1, "attrgetter")[0];
                 if (paths.Length == 1)
@@ -161,7 +161,7 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 0; i < paths.Length; i++)
                     got[i] = Walk(c, obj, paths[i]);
                 return c.Values.Tuple(got);
-            });
+            }));
         }
 
         private static ScriptValue Walk(EvalContext ctx, ScriptValue obj, string[] path)
@@ -181,11 +181,11 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(ctx, "method name must be a string");
             var rest = new ScriptValue[a.Length - 1];
             Array.Copy(a, 1, rest, 0, rest.Length);
-            return BuiltinFunctionValue.Make("methodcaller", (s, args, k, c) =>
+            return BuiltinFunctionValue.Make("methodcaller", Args.Positional("methodcaller", 1, 1, (s, args, k, c) =>
             {
                 ScriptValue obj = Exactly(c, args, 1, "methodcaller")[0];
                 return c.CallHook(PyOps.GetAttr(obj, name.Value, c), rest, kw);
-            });
+            }));
         }
     }
 }

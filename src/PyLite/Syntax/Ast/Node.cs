@@ -20,7 +20,7 @@ namespace Outbridge.PyLite.Syntax.Ast
     {
         Other = 0,
         // expressions
-        Literal, ConstFolded, Name, BinOp, UnaryOp, BoolOp, CompareChain, IfExp, Index, Attribute,
+        Literal, Name, BinOp, UnaryOp, BoolOp, CompareChain, IfExp, Index, Attribute,
         List, Tuple, Set, Dict, Slice, Call, NamedExpr, Lambda, Comprehension, FString, Starred,
         // statements
         ExprStmt, Assign, AugAssign, Del, Pass, If, While, For, FuncDef, Return, Break, Continue,

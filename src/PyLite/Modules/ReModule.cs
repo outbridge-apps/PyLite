@@ -12,26 +12,27 @@ namespace Outbridge.PyLite.Modules
 {
     // The re module. HYBRID over .NET Regex: RegexTranslator maps the Python pattern
     // RegexCache compiles (per-EvalContext), every operation is fenced by MatchTimeout + ChargeRegexTime +
-    // CheckDeadlineNow. Phase 1: compile/search/match/fullmatch + Pattern/Match API. (findall/finditer/sub/
-    // subn/split land next.)
+    // CheckDeadlineNow: compile, search/match/fullmatch, findall/finditer, sub/subn, split, escape and the
+    // Pattern/Match API.
     internal static class ReModule
     {
+        // the keyword names of the functions, built once (a params array would be built on every call)
+        private static readonly string[] CompileNames = { "pattern", "flags" };
+        private static readonly string[] SubjectNames = { "pattern", "string", "flags" };
+        private static readonly string[] SubNames = { "pattern", "repl", "string", "count", "flags" };
+        private static readonly string[] SplitNames = { "pattern", "string", "maxsplit", "flags" };
+
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["compile"] = BuiltinFunctionValue.Make("compile", (s, a, kw, c) => ReCompile(c, Kw(c, a, kw, "compile", "pattern", "flags"))),
-                ["search"] = BuiltinFunctionValue.Make("search", (s, a, kw, c) => ReSearch(c, Kw(c, a, kw, "search", "pattern", "string", "flags"))),
-                ["match"] = BuiltinFunctionValue.Make("match", (s, a, kw, c) => ReMatch(c, Kw(c, a, kw, "match", "pattern", "string", "flags"))),
-                ["fullmatch"] = BuiltinFunctionValue.Make("fullmatch", (s, a, kw, c) => ReFullMatch(c, Kw(c, a, kw, "fullmatch", "pattern", "string", "flags"))),
-                ["findall"] = BuiltinFunctionValue.Make("findall", (s, a, kw, c) => ReFindall(c, Kw(c, a, kw, "findall", "pattern", "string", "flags"))),
-                ["finditer"] = BuiltinFunctionValue.Make("finditer", (s, a, kw, c) => ReFinditer(c, Kw(c, a, kw, "finditer", "pattern", "string", "flags"))),
-                ["sub"] = BuiltinFunctionValue.Make("sub", (s, a, kw, c) => ReSub(c, Kw(c, a, kw, "sub", "pattern", "repl", "string", "count", "flags"))),
-                ["subn"] = BuiltinFunctionValue.Make("subn", (s, a, kw, c) => ReSubn(c, Kw(c, a, kw, "subn", "pattern", "repl", "string", "count", "flags"))),
-                ["split"] = BuiltinFunctionValue.Make("split", (s, a, kw, c) => ReSplit(c, Kw(c, a, kw, "split", "pattern", "string", "maxsplit", "flags"))),
-                ["escape"] = BuiltinFunctionValue.Make("escape", (s, a, kw, c) => ReEscape(c, a)),
-                ["purge"] = BuiltinFunctionValue.Make("purge", (s, a, kw, c) => Purge(c)),
-                ["error"] = ErrorType(),
+                ["compile"] = BuiltinFunctionValue.Make("compile", (s, a, kw, c) => ReCompile(c, Kw(c, a, kw, "compile", CompileNames))),
+                                ["sub"] = BuiltinFunctionValue.Make("sub", (s, a, kw, c) => ReSub(c, Kw(c, a, kw, "sub", SubNames), false)),
+                ["subn"] = BuiltinFunctionValue.Make("subn", (s, a, kw, c) => ReSub(c, Kw(c, a, kw, "subn", SubNames), true)),
+                ["split"] = BuiltinFunctionValue.Make("split", (s, a, kw, c) => ReSplit(c, Kw(c, a, kw, "split", SplitNames))),
+                ["escape"] = BuiltinFunctionValue.Make("escape", Args.Positional("escape", 1, 1, (s, a, kw, c) => ReEscape(c, a))),
+                ["purge"] = BuiltinFunctionValue.Make("purge", Args.Positional("purge", 0, 0, (s, a, kw, c) => Purge(c))),
+                ["error"] = ModuleKit.ExceptionClass(PyExceptionTypes.ReError),
                 ["I"] = ctx.Values.Int(ReFlags.I), ["IGNORECASE"] = ctx.Values.Int(ReFlags.I),
                 ["M"] = ctx.Values.Int(ReFlags.M), ["MULTILINE"] = ctx.Values.Int(ReFlags.M),
                 ["S"] = ctx.Values.Int(ReFlags.S), ["DOTALL"] = ctx.Values.Int(ReFlags.S),
@@ -40,13 +41,13 @@ namespace Outbridge.PyLite.Modules
                 ["A"] = ctx.Values.Int(ReFlags.A), ["ASCII"] = ctx.Values.Int(ReFlags.A),
                 ["L"] = ctx.Values.Int(ReFlags.L), ["LOCALE"] = ctx.Values.Int(ReFlags.L),
             };
+            foreach (KeyValuePair<string, ReOp> op in SubjectOps)
+            {
+                KeyValuePair<string, ReOp> o = op;
+                m[o.Key] = BuiltinFunctionValue.Make(o.Key, (s, a, kw, c) => ModuleOp(c, o.Value, o.Key, Kw(c, a, kw, o.Key, SubjectNames)));
+            }
             return ctx.Values.Module("re", m);
-        }
 
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.ReError, args);
-            return TypeValue.Make("error", ctor, null, null, PyExceptionTypes.ReError);
         }
 
         // ---- cache (per-EvalContext, in ModuleState) ----
@@ -76,6 +77,68 @@ namespace Outbridge.PyLite.Modules
             return Cache(ctx).GetOrCompile(ctx, s.Value, flags);
         }
 
+        // ---- the subject operations, shared by the module functions and the Pattern methods ----
+
+        internal enum ReOp { Search, Match, FullMatch, Findall, Finditer }
+
+        private static readonly KeyValuePair<string, ReOp>[] SubjectOps =
+        {
+            new KeyValuePair<string, ReOp>("search", ReOp.Search),
+            new KeyValuePair<string, ReOp>("match", ReOp.Match),
+            new KeyValuePair<string, ReOp>("fullmatch", ReOp.FullMatch),
+            new KeyValuePair<string, ReOp>("findall", ReOp.Findall),
+            new KeyValuePair<string, ReOp>("finditer", ReOp.Finditer),
+        };
+
+        private static ScriptValue Run(EvalContext c, ReOp op, PatternValue pat, StrValue subj, int pos, int endpos)
+        {
+            switch (op)
+            {
+                case ReOp.Search: return Search(c, pat, subj, pos, endpos);
+                case ReOp.Match: return MatchAt(c, pat, subj, pos, endpos);
+                case ReOp.FullMatch: return FullMatch(c, pat, subj, pos, endpos);
+                case ReOp.Findall: return Findall(c, pat, subj, pos, endpos);
+                default: return c.Values.Iterator(new ReFindIterator(pat, subj, pos, endpos), "callable_iterator");
+            }
+        }
+
+        // re.<op>(pattern, string, flags=0)
+        private static ScriptValue ModuleOp(EvalContext c, ReOp op, string fname, ScriptValue[] a)
+        {
+            PatternValue pat = Compile(c, ArgAt(c, a, 0, fname), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
+            StrValue subj = AsSubject(c, a, 1);
+            return Run(c, op, pat, subj, 0, subj.Value.Length);
+        }
+
+        // Pattern.<op>(string, pos=0, endpos=len(string))
+        internal static ScriptValue PatternOp(EvalContext c, ReOp op, PatternValue pat, ScriptValue[] a)
+        {
+            StrValue subj = AsSubject(c, a, 0);
+            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
+            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
+            return Run(c, op, pat, subj, pos, endpos);
+        }
+
+        // Keyword spelling for the module functions and the Pattern methods; a numeric slot skipped on the
+        // way to a later keyword takes its 0 default (re.sub(..., flags=re.I) leaves count unset), a
+        // trailing endpos is absent.
+        internal static ScriptValue[] Kw(EvalContext c, ScriptValue[] a, KwArgs kw, string fname, params string[] names)
+        {
+            Args.AtMost(c, a, fname, names.Length);   // re.match(p, s, 0, 1) dropped the extra argument
+            ScriptValue[] r = StrMethods.WithKw(c, a, kw, fname, names);
+            if (kw.Count == 0)
+                return r;
+            for (int i = a.Length; i < r.Length; i++)
+            {
+                string nm = names[i];
+                if (r[i].Kind == ValueKind.None && (nm == "pos" || nm == "count" || nm == "maxsplit" || nm == "flags"))
+                    r[i] = c.Values.Int(0);
+            }
+            if (r.Length > 0 && r[r.Length - 1].Kind == ValueKind.None && names[r.Length - 1] == "endpos")
+                Array.Resize(ref r, r.Length - 1);
+            return r;
+        }
+
         // ---- module-level functions ----
 
         private static ScriptValue ReCompile(EvalContext c, ScriptValue[] a)
@@ -85,56 +148,11 @@ namespace Outbridge.PyLite.Modules
             return Compile(c, a[0], a.Length >= 2 ? FlagsArg(c, a[1]) : 0);
         }
 
-        private static ScriptValue ReSearch(EvalContext c, ScriptValue[] a)
-        {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "search"), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            return Search(c, pat, subj, 0, subj.Value.Length);
-        }
 
-        private static ScriptValue ReMatch(EvalContext c, ScriptValue[] a)
-        {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "match"), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            return MatchAt(c, pat, subj, 0, subj.Value.Length);
-        }
 
-        // Keyword spelling for the module-level functions; a numeric slot skipped on the way to a later
-        // keyword (sub(..., flags=re.I) leaves count unset) takes its 0 default.
-        private static ScriptValue[] Kw(EvalContext c, ScriptValue[] a, KwArgs kw, string fname, params string[] names)
-        {
-            ScriptValue[] r = StrMethods.WithKw(c, a, kw, fname, names);
-            if (kw.Count == 0)
-                return r;
-            for (int i = a.Length; i < r.Length; i++)
-            {
-                string nm = names[i];
-                if (r[i].Kind == ValueKind.None && (nm == "count" || nm == "maxsplit" || nm == "flags"))
-                    r[i] = c.Values.Int(0);
-            }
-            return r;
-        }
 
-        private static ScriptValue ReFullMatch(EvalContext c, ScriptValue[] a)
-        {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "fullmatch"), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            return FullMatch(c, pat, subj, 0, subj.Value.Length);
-        }
 
-        private static ScriptValue ReFindall(EvalContext c, ScriptValue[] a)
-        {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "findall"), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            return Findall(c, pat, subj, 0, subj.Value.Length);
-        }
 
-        private static ScriptValue ReFinditer(EvalContext c, ScriptValue[] a)
-        {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "finditer"), a.Length >= 3 ? FlagsArg(c, a[2]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            return c.Values.Iterator(new ReFindIterator(pat, subj, 0, subj.Value.Length), "callable_iterator");
-        }
 
         // re.escape — modern (3.7+) rules: escape only the regex-special characters.
         private static ScriptValue ReEscape(EvalContext c, ScriptValue[] a)
@@ -164,65 +182,51 @@ namespace Outbridge.PyLite.Modules
         // ---- module-level sub / subn / split ----
         // Signatures: re.sub(pattern, repl, string, count=0, flags=0); re.split(pattern, string, maxsplit=0, flags=0).
 
-        private static ScriptValue ReSub(EvalContext c, ScriptValue[] a)
+        private static ScriptValue ReSub(EvalContext c, ScriptValue[] a, bool subn)
         {
             if (a.Length < 3)
-                throw Raise.TypeError(c, "sub() missing required arguments");
-            PatternValue pat = Compile(c, a[0], a.Length >= 5 ? FlagsArg(c, a[4]) : 0);
-            StrValue subj = AsSubject(c, a, 2);
-            int count = a.Length >= 4 ? IntArg(c, a[3]) : 0;
-            int n;
-            string outStr = SubCore(c, pat, a[1], subj, count, out n);
-            return c.Values.Str(outStr);
-        }
-
-        private static ScriptValue ReSubn(EvalContext c, ScriptValue[] a)
-        {
-            if (a.Length < 3)
-                throw Raise.TypeError(c, "subn() missing required arguments");
-            PatternValue pat = Compile(c, a[0], a.Length >= 5 ? FlagsArg(c, a[4]) : 0);
-            StrValue subj = AsSubject(c, a, 2);
-            int count = a.Length >= 4 ? IntArg(c, a[3]) : 0;
-            int n;
-            string outStr = SubCore(c, pat, a[1], subj, count, out n);
-            return c.Values.Tuple(new ScriptValue[] { c.Values.Str(outStr), c.Values.Int(n) });
+                throw Raise.TypeError(c, (subn ? "subn" : "sub") + "() missing required arguments");
+            return SubImpl(c, Compile(c, a[0], a.Length >= 5 ? FlagsArg(c, a[4]) : 0), a, 1, subn);
         }
 
         private static ScriptValue ReSplit(EvalContext c, ScriptValue[] a)
         {
-            PatternValue pat = Compile(c, ArgAt(c, a, 0, "split"), a.Length >= 4 ? FlagsArg(c, a[3]) : 0);
-            StrValue subj = AsSubject(c, a, 1);
-            int maxsplit = a.Length >= 3 ? IntArg(c, a[2]) : 0;
-            return Split(c, pat, subj, maxsplit);
+            return SplitImpl(c, Compile(c, ArgAt(c, a, 0, "split"), a.Length >= 4 ? FlagsArg(c, a[3]) : 0), a, 1);
         }
 
-        public static ScriptValue PatSub(PatternValue pat, ScriptValue[] a, EvalContext c)
+        internal static ScriptValue PatSub(PatternValue pat, ScriptValue[] a, EvalContext c, bool subn)
         {
             if (a.Length < 2)
-                throw Raise.TypeError(c, "sub() missing required arguments");
-            StrValue subj = AsSubject(c, a, 1);
-            int count = a.Length >= 3 ? IntArg(c, a[2]) : 0;
-            int n;
-            return c.Values.Str(SubCore(c, pat, a[0], subj, count, out n));
+                throw Raise.TypeError(c, (subn ? "subn" : "sub") + "() missing required arguments");
+            return SubImpl(c, pat, a, 0, subn);
         }
 
-        public static ScriptValue PatSubn(PatternValue pat, ScriptValue[] a, EvalContext c)
+        internal static ScriptValue PatSplit(PatternValue pat, ScriptValue[] a, EvalContext c)
         {
-            if (a.Length < 2)
-                throw Raise.TypeError(c, "subn() missing required arguments");
-            StrValue subj = AsSubject(c, a, 1);
-            int count = a.Length >= 3 ? IntArg(c, a[2]) : 0;
-            int n;
-            string outStr = SubCore(c, pat, a[0], subj, count, out n);
-            return c.Values.Tuple(new ScriptValue[] { c.Values.Str(outStr), c.Values.Int(n) });
+            return SplitImpl(c, pat, a, 0);
         }
 
-        public static ScriptValue PatSplit(PatternValue pat, ScriptValue[] a, EvalContext c)
+        // sub/subn once the pattern is known: repl at a[r], string after it, then count.
+        private static ScriptValue SubImpl(EvalContext c, PatternValue pat, ScriptValue[] a, int r, bool subn)
         {
-            StrValue subj = AsSubject(c, a, 0);
-            int maxsplit = a.Length >= 2 ? IntArg(c, a[1]) : 0;
-            return Split(c, pat, subj, maxsplit);
+            StrValue subj = AsSubject(c, a, r + 1);
+            int count = a.Length > r + 2 ? IntArg(c, a[r + 2]) : 0;
+            int n;
+            string outStr = SubCore(c, pat, a[r], subj, count, out n);
+            return subn ? (ScriptValue)c.Values.Tuple(new ScriptValue[] { c.Values.Str(outStr), c.Values.Int(n) }) : c.Values.Str(outStr);
         }
+
+        // split once the pattern is known: string at a[i], then maxsplit.
+        private static ScriptValue SplitImpl(EvalContext c, PatternValue pat, ScriptValue[] a, int i)
+        {
+            StrValue subj = AsSubject(c, a, i);
+            return Split(c, pat, subj, a.Length > i + 1 ? IntArg(c, a[i + 1]) : 0);
+        }
+
+
+
+
+
 
         // Modern (3.7+) sub scan: every match counts; empty match advances by 1. repl is a template
         // string OR a callable taking the Match. count<=0 => unlimited (count<0 => 0 replacements).
@@ -261,9 +265,9 @@ namespace Outbridge.PyLite.Modules
                 if (last < b)
                     sb.Append(input, last, b - last);
                 if (template != null)
-                    sb.Append(ApplyTemplate(c, template, m));
+                    ApplyTemplate(c, template, m, pat.Groups, sb);
                 else
-                    sb.Append(CallRepl(c, repl, MakeMatch(c, m, pat, subj, 0, end)));   // Match wrapper only for a callable repl
+                    AppendCapped(c, sb, CallRepl(c, repl, MakeMatch(c, m, pat, subj, 0, end)));   // Match wrapper only for a callable repl
                 last = e;
                 n++;
                 p = m.Length == 0 ? e + 1 : e;
@@ -301,7 +305,7 @@ namespace Outbridge.PyLite.Modules
                 result.Add(c.Values.Str(input.Substring(last, b - last)), c);
                 for (int i = 1; i <= pat.Groups.Count; i++)
                 {
-                    Group g = m.Groups[GroupMap.Net(i)];
+                    Group g = pat.Groups.Of(m, i);
                     result.Add(g.Success ? (ScriptValue)c.Values.Str(g.Value) : c.Values.None, c);
                 }
                 last = e;
@@ -423,7 +427,9 @@ namespace Outbridge.PyLite.Modules
             if (repl == null)
                 throw Raise.TypeError(c, "expected str instance, " + a[0].PyTypeName + " found");
             List<object> template = ParseTemplate(c, repl.Value, mv.Pattern);
-            return c.Values.Str(ApplyTemplate(c, template, mv.Net));
+            var sb = new System.Text.StringBuilder();
+            ApplyTemplate(c, template, mv.Net, mv.Groups, sb);
+            return c.Values.Str(sb.ToString());
         }
 
         // lastindex/lastgroup: the group that closed LAST, which is the successful group ending furthest
@@ -436,7 +442,7 @@ namespace Outbridge.PyLite.Modules
             int best = -1, bestEnd = -1;
             for (int gi = 1; gi <= mv.Groups.Count; gi++)
             {
-                Group g = mv.Net.Groups[GroupMap.Net(gi)];
+                Group g = mv.Groups.Of(mv.Net, gi);
                 if (!g.Success)
                     continue;
                 int end = g.Index + g.Length;
@@ -450,12 +456,11 @@ namespace Outbridge.PyLite.Modules
             return best;
         }
 
-        // One expansion of one match. A template repeating a group (br'\1' * 100000) multiplies the
-        // subject by the template length, so the result is checked as it grows: without that the
+        // One expansion of one match, appended to sb. A template repeating a group (br'\1' * 100000)
+        // multiplies the subject by the template length, so the result is checked as it grows: without that the
         // StringBuilder raises OutOfMemory and the run ends as an engine fault instead of a budget stop.
-        private static string ApplyTemplate(EvalContext c, List<object> segs, Match m)
+        private static void ApplyTemplate(EvalContext c, List<object> segs, Match m, GroupMap groups, System.Text.StringBuilder sb)
         {
-            var sb = new System.Text.StringBuilder();
             for (int k = 0; k < segs.Count; k++)
             {
                 object seg = segs[k];
@@ -469,14 +474,23 @@ namespace Outbridge.PyLite.Modules
                     }
                     else
                     {
-                        Group g = m.Groups[GroupMap.Net(gi)];
+                        Group g = groups.Of(m, gi);
                         s = g.Success ? g.Value : "";   // a non-participating group -> "" (modern parity)
                     }
                 }
-                c.Values.EnsureStrLen((long)sb.Length + s.Length);
-                sb.Append(s);
+                AppendCapped(c, sb, s);
             }
-            return sb.ToString();
+        }
+
+        // The whole result so far is capped, only the piece is charged (a template or a callable may repeat
+        // a large group or return the same large string many times).
+        private static void AppendCapped(EvalContext c, System.Text.StringBuilder sb, string s)
+        {
+            long total = (long)sb.Length + s.Length;
+            if (total > c.Limits.MaxStrChars)
+                c.Values.EnsureStrLen(total);
+            c.Budget.ChargeAllocation(2L * s.Length);
+            sb.Append(s);
         }
 
         // ---- findall / finditer core ----
@@ -484,10 +498,11 @@ namespace Outbridge.PyLite.Modules
         internal static ScriptValue Findall(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
             ListValue result = c.Values.List(8);
+            string input = Truncated(subj.Value, endpos);
             int p = pos;
             while (p <= endpos)
             {
-                Match m = RunMatch(c, pat.Net, subj.Value, p, endpos - p);
+                Match m = RunMatch(c, pat.Net, input, p, endpos - p);
                 if (!m.Success)
                     break;
                 result.Add(FindallElement(c, pat, m), c);
@@ -506,59 +521,24 @@ namespace Outbridge.PyLite.Modules
                 return c.Values.Str(m.Value);
             if (n == 1)
             {
-                Group g = m.Groups[GroupMap.Net(1)];
+                Group g = pat.Groups.Of(m, 1);
                 return c.Values.Str(g.Success ? g.Value : "");
             }
             var items = new ScriptValue[n];
             for (int i = 1; i <= n; i++)
             {
-                Group g = m.Groups[GroupMap.Net(i)];
+                Group g = pat.Groups.Of(m, i);
                 items[i - 1] = c.Values.Str(g.Success ? g.Value : "");
             }
             return c.Values.Tuple(items);
         }
 
-        // ---- Pattern methods (called by PatternValue slots) ----
+        // ---- Pattern.groupindex ----
 
-        public static ScriptValue PatSearch(PatternValue pat, ScriptValue[] a, EvalContext c)
-        {
-            StrValue subj = AsSubject(c, a, 0);
-            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
-            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
-            return Search(c, pat, subj, pos, endpos);
-        }
 
-        public static ScriptValue PatMatch(PatternValue pat, ScriptValue[] a, EvalContext c)
-        {
-            StrValue subj = AsSubject(c, a, 0);
-            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
-            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
-            return MatchAt(c, pat, subj, pos, endpos);
-        }
 
-        public static ScriptValue PatFullMatch(PatternValue pat, ScriptValue[] a, EvalContext c)
-        {
-            StrValue subj = AsSubject(c, a, 0);
-            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
-            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
-            return FullMatch(c, pat, subj, pos, endpos);
-        }
 
-        public static ScriptValue PatFindall(PatternValue pat, ScriptValue[] a, EvalContext c)
-        {
-            StrValue subj = AsSubject(c, a, 0);
-            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
-            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
-            return Findall(c, pat, subj, pos, endpos);
-        }
 
-        public static ScriptValue PatFinditer(PatternValue pat, ScriptValue[] a, EvalContext c)
-        {
-            StrValue subj = AsSubject(c, a, 0);
-            int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
-            int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
-            return c.Values.Iterator(new ReFindIterator(pat, subj, pos, endpos), "callable_iterator");
-        }
 
         public static ScriptValue GroupIndexDict(PatternValue pat, EvalContext c)
         {
@@ -578,7 +558,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue MatchAt(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
-            Match m = RunMatch(c, pat.Net, subj.Value, pos, endpos - pos);
+            Match m = RunMatch(c, pat.AnchoredRegex, subj.Value, pos, endpos - pos);   // CPython's match is anchored at pos
             return m.Success && m.Index == pos ? (ScriptValue)MakeMatch(c, m, pat, subj, pos, endpos) : c.Values.None;
         }
 
@@ -594,6 +574,12 @@ namespace Outbridge.PyLite.Modules
         // Stopwatch timestamp ticks -> TimeSpan (100 ns) ticks, so we can measure a match without allocating
         // a Stopwatch object on every call (this runs once per match, and N times per sub/findall).
         private static readonly double SwToTimeSpanTicks = TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency;
+
+        // The subject cut at endpos once per operation (P13): RunMatch then scans it whole, no copy per match.
+        internal static string Truncated(string input, int endpos)
+        {
+            return endpos == input.Length ? input : input.Substring(0, endpos);
+        }
 
         internal static Match RunMatch(EvalContext ctx, Regex re, string input, int beginning, int length)
         {
@@ -612,7 +598,7 @@ namespace Outbridge.PyLite.Modules
             catch (RegexMatchTimeoutException)
             {
                 throw ctx.Budget.CreateAbort(EngineAbortKind.RegexTimeout, "RegexPerOpTimeout",
-                    RegexCache.PerOpTimeoutMs, RegexCache.PerOpTimeoutMs);
+                    ctx.Limits.RegexPerOpTimeoutMs, ctx.Limits.RegexPerOpTimeoutMs);
             }
             catch (OutOfMemoryException)
             {
@@ -654,7 +640,7 @@ namespace Outbridge.PyLite.Modules
             var items = new ScriptValue[m.Groups.Count];
             for (int i = 1; i <= m.Groups.Count; i++)
             {
-                Group g = m.Net.Groups[GroupMap.Net(i)];
+                Group g = m.Groups.Of(m.Net, i);
                 items[i - 1] = g.Success ? (ScriptValue)c.Values.Str(g.Value) : dflt;
             }
             return c.Values.Tuple(items);
@@ -666,7 +652,7 @@ namespace Outbridge.PyLite.Modules
             DictValue d = c.Values.Dict(m.Groups.NameIndex.Count);
             foreach (KeyValuePair<string, int> kv in ByIndex(m.Groups.NameIndex))
             {
-                Group g = m.Net.Groups[GroupMap.Net(kv.Value)];
+                Group g = m.Groups.Of(m.Net, kv.Value);
                 d.SetItem(c.Values.Str(kv.Key), g.Success ? (ScriptValue)c.Values.Str(g.Value) : dflt, c);
             }
             return d;
@@ -697,7 +683,7 @@ namespace Outbridge.PyLite.Modules
         {
             if (index == 0)
                 return c.Values.Str(m.Net.Value);
-            Group g = m.Net.Groups[GroupMap.Net(index)];
+            Group g = m.Groups.Of(m.Net, index);
             return g.Success ? (ScriptValue)c.Values.Str(g.Value) : c.Values.None;
         }
 
@@ -709,7 +695,7 @@ namespace Outbridge.PyLite.Modules
                 end = m.Net.Index + m.Net.Length;
                 return;
             }
-            Group g = m.Net.Groups[GroupMap.Net(index)];
+            Group g = m.Groups.Of(m.Net, index);
             if (g.Success)
             {
                 start = g.Index;

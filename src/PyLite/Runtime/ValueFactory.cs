@@ -117,6 +117,26 @@ namespace Outbridge.PyLite.Runtime
 
         public static readonly TupleValue EmptyTuple = new TupleValue(Array.Empty<ScriptValue>());
 
+        // The capacity for a container about to receive `count` items from a source of known size: all of
+        // it when that fits in an eighth of the remaining allocation budget (so a loop that raises early
+        // cannot turn into a memory abort the growing container would not have hit), else a small start.
+        internal int PresizeHint(long count, long bytesPerItem)
+        {
+            if (count <= 4096)
+                return (int)Math.Max(count, 4);
+            if (count > _limits.MaxCollectionItems || count * bytesPerItem > _budget.AllocRemaining / 8)
+                return 4096;
+            return (int)count;
+        }
+
+        // A list about to receive `count` items through Add, which charges each slot: only the header is
+        // charged here, so the run pays what a list grown from empty pays.
+        internal ListValue ListForCount(long count)
+        {
+            _budget.ChargeAllocation(56);
+            return new ListValue(new List<ScriptValue>(PresizeHint(count, 8)));
+        }
+
         public ListValue List(int capacityHint)
         {
             int cap = capacityHint < 0 ? 0 : capacityHint;
@@ -162,9 +182,39 @@ namespace Outbridge.PyLite.Runtime
             return new CounterValue(new OrderedTable(OwnerCtx, capacityHint));
         }
 
+        // A copy of a dict or one of its collections subtypes: the same type, order and default factory. The
+        // table is cloned structurally (no rehash); a subtype's header is charged as its constructor charges it.
+        internal DictValue CopyDict(DictValue src)
+        {
+            OrderedTable t = src.Table.CloneShallow(OwnerCtx);
+            if (src is CounterValue)
+            {
+                _budget.ChargeAllocation(16);
+                return new CounterValue(t);
+            }
+            DefaultDictValue dd = src as DefaultDictValue;
+            if (dd != null)
+            {
+                _budget.ChargeAllocation(24);
+                return new DefaultDictValue(t, dd.DefaultFactory);
+            }
+            if (src is OrderedDictValue)
+            {
+                _budget.ChargeAllocation(16);
+                return new OrderedDictValue(t);
+            }
+            return new DictValue(t);
+        }
+
         public SetValue Set(int capacityHint)
         {
             return new SetValue(new OrderedTable(OwnerCtx, capacityHint));
+        }
+
+        internal SetValue Set(OrderedTable adopt)
+        {
+            _budget.ChargeAllocation(32);
+            return new SetValue(adopt);
         }
 
         internal FrozenSetValue FrozenSet(OrderedTable adopt)
@@ -222,12 +272,19 @@ namespace Outbridge.PyLite.Runtime
         // str result of resultChars: cap MaxStrChars, then charge the byte estimate (24 + 2*len).
         public void EnsureStrLen(long resultChars)
         {
+            CheckStrLen(resultChars);
+            _budget.PreCharge(24 + 2L * resultChars);
+        }
+
+        // The cap alone, for a builder whose final str or bytes is charged when it is made: checked as
+        // the builder grows, so a shared large piece repeated many times stops before it is built.
+        public void CheckStrLen(long resultChars)
+        {
             if (resultChars < 0 || resultChars > _limits.MaxStrChars)
             {
                 throw _budget.CreateAbort(EngineAbortKind.Memory, "MaxStrChars", _limits.MaxStrChars,
                     resultChars < 0 ? long.MaxValue : resultChars);
             }
-            _budget.PreCharge(24 + 2L * resultChars);
         }
 
         // int result of resultBits: cap MaxIntBits, then charge 40 + 8*ceil(bits/64).

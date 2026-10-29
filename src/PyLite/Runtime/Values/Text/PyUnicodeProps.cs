@@ -60,7 +60,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 int j = sp + 1;
                 for (; j < end; j++)
                 {
-                    int d = HexDigit(DecompText[j]);
+                    int d = Modules.Support.Hex.Nibble(DecompText[j]);
                     if (d < 0)
                         break;
                     second = second * 16 + d;
@@ -69,17 +69,6 @@ namespace Outbridge.PyLite.Runtime.Values
                     seconds.Add(second);            // j < end means a third field: not a pair
             }
             return seconds;
-        }
-
-        private static int HexDigit(char c)
-        {
-            if (c >= '0' && c <= '9')
-                return c - '0';
-            if (c >= 'A' && c <= 'F')
-                return c - 'A' + 10;
-            if (c >= 'a' && c <= 'f')
-                return c - 'a' + 10;
-            return -1;
         }
 
         // The bidi class code, "" for an unassigned code point (CPython answers the same).

@@ -4,7 +4,7 @@ namespace Outbridge.PyLite.Syntax
 {
     internal static class DialectConstants
     {
-        // Bumped on any breaking grammar/semantics change so the host SHA-256 cache invalidates.
+        // Bumped on any breaking grammar/semantics change; recorded on every CompiledScript (DialectVersion).
         public const int Version = 1;
     }
 

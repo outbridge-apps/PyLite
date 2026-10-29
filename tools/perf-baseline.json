@@ -1,0 +1,21 @@
+{
+  "_scale": 1,
+  "_warmup": 3,
+  "_measured": 15,
+  "_generated": "2026-09-08 15:11Z",
+  "_machine": "Windows Server 2022, 8 logical CPUs",
+  "_commit": "1c81e20",
+  "engine_spinup": 0.909,
+  "micro_arith_loop": 828.602,
+  "micro_func_calls": 549.388,
+  "micro_dict_ops": 464.951,
+  "micro_str_join": 275.29,
+  "micro_list_comp": 150.322,
+  "micro_sorted_key": 297.876,
+  "micro_decimal_money": 39.0,
+  "macro_json_orders": 288.362,
+  "macro_text_report": 124.98,
+  "macro_regex_log": 58.676,
+  "macro_datetime_calc": 93.891,
+  "macro_csv_roundtrip": 174.074
+}

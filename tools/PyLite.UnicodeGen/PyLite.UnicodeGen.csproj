@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>   <!-- a tool: never a NuGet package -->
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <RootNamespace>Outbridge.PyLite.UnicodeGen</RootNamespace>
+    <AssemblyName>Outbridge.PyLite.UnicodeGen</AssemblyName>
+  </PropertyGroup>
+
+</Project>

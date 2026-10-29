@@ -146,7 +146,21 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
+        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        private long _hash;
+        private bool _hashed;
+
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            if (!_hashed)
+            {
+                _hash = ComputeHash(ctx, depth);
+                _hashed = true;
+            }
+            return _hash;
+        }
+
+        private long ComputeHash(EvalContext ctx, int depth)
         {
             var t = ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Int(TypeTag), ctx.Values.Int(Year), ctx.Values.Int(Month), ctx.Values.Int(Day) });
             return PyOps.Hash(t, ctx, depth);
@@ -154,36 +168,11 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // ---- formatting ----
 
-        internal string IsoFormat()
-        {
-            return Year.ToString("0000", CultureInfo.InvariantCulture) + "-"
-                + ((int)Month).ToString("00", CultureInfo.InvariantCulture) + "-"
-                + ((int)Day).ToString("00", CultureInfo.InvariantCulture);
-        }
-
-        internal string CtimeString(int hour, int minute, int second)
-        {
-            int wd = CalendarMath.Weekday(ToOrdinalInt());
-            return DtNames.AbbrDays[wd] + " " + DtNames.AbbrMonths[Month - 1] + " "
-                + ((int)Day).ToString(CultureInfo.InvariantCulture).PadLeft(2, ' ') + " "
-                + hour.ToString("00", CultureInfo.InvariantCulture) + ":"
-                + minute.ToString("00", CultureInfo.InvariantCulture) + ":"
-                + second.ToString("00", CultureInfo.InvariantCulture) + " "
-                + Year.ToString(CultureInfo.InvariantCulture);
-        }
+        internal string IsoFormat() { return CalendarFormat.IsoDate(Year, Month, Day); }
 
         internal string Strftime(EvalContext ctx, string fmt)
         {
-            int ord = ToOrdinalInt();
-            var t = new BrokenTime
-            {
-                Year = Year, Month = Month, Day = Day,
-                Hour = 0, Minute = 0, Second = 0, Microsecond = 0,
-                WeekdayMon0 = CalendarMath.Weekday(ord),
-                DayOfYear = CalendarMath.DayOfYear(Year, Month, Day),
-                OffsetUs = null, TzName = null, HasMicroseconds = true,
-            };
-            return StrftimeFormatter.Format(ctx, fmt, t);
+            return StrftimeFormatter.Format(ctx, fmt, CalendarFormat.Broken(Year, Month, Day, 0, 0, 0, 0, null, null));
         }
 
         protected internal override ScriptValue FormatSpecCore(string spec, EvalContext ctx)
@@ -195,9 +184,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            sb.Append("datetime.date(" + Year.ToString(CultureInfo.InvariantCulture) + ", "
-                + ((int)Month).ToString(CultureInfo.InvariantCulture) + ", "
-                + ((int)Day).ToString(CultureInfo.InvariantCulture) + ")");
+            sb.Append("datetime.date(" + CalendarFormat.Num(Year) + ", " + CalendarFormat.Num(Month) + ", "
+                + CalendarFormat.Num(Day) + ")");
         }
 
         // ---- instance slots ----
@@ -216,19 +204,6 @@ namespace Outbridge.PyLite.Runtime.Values
             return Construct(ctx, y, m, d);
         }
 
-        private ScriptValue TimeTuple(EvalContext ctx)
-        {
-            int ord = ToOrdinalInt();
-            return StructTimeValue.Create(ctx, Year, Month, Day, 0, 0, 0,
-                CalendarMath.Weekday(ord), CalendarMath.DayOfYear(Year, Month, Day), -1);
-        }
-
-        private ScriptValue IsoCalendarTuple(EvalContext ctx)
-        {
-            int iy, iw, id;
-            CalendarMath.IsoCalendar(Year, Month, Day, out iy, out iw, out id);
-            return ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Int(iy), ctx.Values.Int(iw), ctx.Values.Int(id) });
-        }
 
         private static ScriptTypeInfo BuildType()
         {
@@ -238,15 +213,20 @@ namespace Outbridge.PyLite.Runtime.Values
                 ["month"] = SlotDescriptor.MakeProperty("month", (self, c) => c.Values.Int(((DateValue)self).Month)),
                 ["day"] = SlotDescriptor.MakeProperty("day", (self, c) => c.Values.Int(((DateValue)self).Day)),
                 ["replace"] = SlotDescriptor.MakeMethod("replace", (self, a, kw, c) => ((DateValue)self).Replace(c, a, kw)),
-                ["timetuple"] = SlotDescriptor.MakeMethod("timetuple", (self, a, kw, c) => ((DateValue)self).TimeTuple(c)),
-                ["toordinal"] = SlotDescriptor.MakeMethod("toordinal", (self, a, kw, c) => c.Values.Int(((DateValue)self).ToOrdinalInt())),
-                ["weekday"] = SlotDescriptor.MakeMethod("weekday", (self, a, kw, c) => c.Values.Int(CalendarMath.Weekday(((DateValue)self).ToOrdinalInt()))),
-                ["isoweekday"] = SlotDescriptor.MakeMethod("isoweekday", (self, a, kw, c) => c.Values.Int(CalendarMath.Weekday(((DateValue)self).ToOrdinalInt()) + 1)),
-                ["isocalendar"] = SlotDescriptor.MakeMethod("isocalendar", (self, a, kw, c) => ((DateValue)self).IsoCalendarTuple(c)),
-                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", (self, a, kw, c) => c.Values.Str(((DateValue)self).IsoFormat())),
-                ["ctime"] = SlotDescriptor.MakeMethod("ctime", (self, a, kw, c) => c.Values.Str(((DateValue)self).CtimeString(0, 0, 0))),
-                ["strftime"] = SlotDescriptor.MakeMethod("strftime", (self, a, kw, c) => c.Values.Str(((DateValue)self).Strftime(c, DtArgs.StrftimeArg(c, a)))),
+                ["timetuple"] = SlotDescriptor.MakeMethod("timetuple", Args.Positional("timetuple", 0, 0, (self, a, kw, c) =>
+                {
+                    DateValue v = (DateValue)self;
+                    return CalendarFormat.TimeTuple(c, v.Year, v.Month, v.Day, 0, 0, 0, -1);
+                })),
+                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", Args.Positional("isoformat", 0, 0, (self, a, kw, c) => c.Values.Str(((DateValue)self).IsoFormat()))),
+                ["ctime"] = SlotDescriptor.MakeMethod("ctime", Args.Positional("ctime", 0, 0, (self, a, kw, c) =>
+                {
+                    DateValue v = (DateValue)self;
+                    return c.Values.Str(CalendarFormat.Ctime(v.Year, v.Month, v.Day, 0, 0, 0));
+                })),
+                ["strftime"] = SlotDescriptor.MakeMethod("strftime", Args.Positional("strftime", 1, 1, (self, a, kw, c) => c.Values.Str(((DateValue)self).Strftime(c, DtArgs.StrftimeArg(c, a))))),
             };
+            CalendarFormat.AddDaySlots(d, self => ((DateValue)self).ToOrdinalInt());
             return new ScriptTypeInfo("datetime.date", d);
         }
     }

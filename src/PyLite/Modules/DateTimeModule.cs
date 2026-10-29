@@ -40,9 +40,9 @@ namespace Outbridge.PyLite.Modules
         {
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["today"] = BuiltinFunctionValue.Make("today", (self, args, kw, c) => DateTimeValue.Now(c, null)),
+                ["today"] = BuiltinFunctionValue.Make("today", Args.Positional("today", 0, 0, (self, args, kw, c) => DateTimeValue.Now(c, null))),
                 ["now"] = BuiltinFunctionValue.Make("now", (self, args, kw, c) => DateTimeValue.Now(c, NowTz(c, args, kw))),
-                ["utcnow"] = BuiltinFunctionValue.Make("utcnow", (self, args, kw, c) => DateTimeValue.UtcNow(c)),
+                ["utcnow"] = BuiltinFunctionValue.Make("utcnow", Args.Positional("utcnow", 0, 0, (self, args, kw, c) => DateTimeValue.UtcNow(c))),
                 ["fromtimestamp"] = BuiltinFunctionValue.Make("fromtimestamp",
                     (self, args, kw, c) => DateTimeValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "fromtimestamp")), TsTz(c, args, kw))),
                 ["utcfromtimestamp"] = BuiltinFunctionValue.Make("utcfromtimestamp",
@@ -127,7 +127,7 @@ namespace Outbridge.PyLite.Modules
         {
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["today"] = BuiltinFunctionValue.Make("today", (self, args, kw, c) => DateValue.Today(c)),
+                ["today"] = BuiltinFunctionValue.Make("today", Args.Positional("today", 0, 0, (self, args, kw, c) => DateValue.Today(c))),
                 ["fromtimestamp"] = BuiltinFunctionValue.Make("fromtimestamp",
                     (self, args, kw, c) => DateValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "fromtimestamp")))),
                 ["fromordinal"] = BuiltinFunctionValue.Make("fromordinal",
@@ -151,14 +151,7 @@ namespace Outbridge.PyLite.Modules
 
         private static System.Numerics.BigInteger OrdinalArg(EvalContext c, ScriptValue[] args)
         {
-            ScriptValue v = Arg1(c, args, "fromordinal");
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return iv.Value;
-            BoolValue bv = v as BoolValue;
-            if (bv != null)
-                return bv.Value ? 1 : 0;
-            throw Runtime.Errors.Raise.TypeError(c, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
+            return Coerce.ToIndex(c, Arg1(c, args, "fromordinal"), "fromordinal");
         }
 
         private static TypeValue TimezoneType(EvalContext ctx)

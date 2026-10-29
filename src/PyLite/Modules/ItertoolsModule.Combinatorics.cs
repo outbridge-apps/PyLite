@@ -11,19 +11,11 @@ namespace Outbridge.PyLite.Modules
 {
     // itertools combinatorics: permutations, combinations, combinations_with_replacement.
     // Exact ports of the CPython indices/cycles algorithms (no recursion); pools materialized+charged.
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         internal static ScriptValue[] MaterializePool(EvalContext ctx, ScriptValue iterable)
         {
-            IScriptIterator it = IterArg(ctx, iterable);
-            var pool = new List<ScriptValue>();
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-            {
-                ctx.Values.PreCharge(16);
-                pool.Add(v);
-            }
-            return pool.ToArray();
+            return Iter.ToArray(ctx, iterable);   // charged and capped at MaxCollectionItems
         }
 
         private static ScriptValue Permutations(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -82,204 +74,142 @@ namespace Outbridge.PyLite.Modules
         }
     }
 
-    // permutations: port of itertoolsmodule.c::permutations_next (positional uniqueness, not by value).
-    internal sealed class PermutationsIterator : ScriptIteratorBase
+    // The shape permutations, combinations and combinations_with_replacement share: a pool, r and an index
+    // vector. The first row is the initial indices; each later row is Advance(), false when exhausted.
+    internal abstract class IndexTupleIterator : ScriptIteratorBase
     {
-        private readonly ScriptValue[] _pool;
-        private readonly int _n;
-        private readonly int _r;
-        private readonly int[] _indices;
-        private readonly int[] _cycles;
+        protected readonly ScriptValue[] Pool;
+        protected readonly int N;
+        protected readonly int R;
+        protected int[] Indices;
+        protected bool Exhausted;
         private bool _started;
-        private bool _exhausted;
 
-        internal PermutationsIterator(ScriptValue[] pool, int r)
+        protected IndexTupleIterator(ScriptValue[] pool, int r)
         {
-            _pool = pool;
-            _n = pool.Length;
-            _r = r;
-            if (r > _n)
-            {
-                _exhausted = true;
-                _indices = Array.Empty<int>();
-                _cycles = Array.Empty<int>();
-                return;
-            }
-            _indices = new int[_n];
-            for (int i = 0; i < _n; i++)
-                _indices[i] = i;
-            _cycles = new int[_r];
-            for (int i = 0; i < _r; i++)
-                _cycles[i] = _n - i;
+            Pool = pool;
+            N = pool.Length;
+            R = r;
         }
+
+        protected abstract bool Advance();
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
-            if (_exhausted)
-            {
-                value = null;
-                return false;
-            }
-            if (!_started)
+            if (!Exhausted && (!_started || Advance()))
             {
                 _started = true;
-                value = BuildTuple(ctx);
+                var row = new ScriptValue[R];
+                for (int i = 0; i < R; i++)
+                    row[i] = Pool[Indices[i]];
+                value = ctx.Values.Tuple(row);
                 return true;
             }
-            for (int i = _r - 1; i >= 0; i--)
+            Exhausted = true;
+            value = null;
+            return false;
+        }
+    }
+
+    // permutations: port of itertoolsmodule.c::permutations_next (positional uniqueness, not by value).
+    internal sealed class PermutationsIterator : IndexTupleIterator
+    {
+        private readonly int[] _cycles;
+
+        internal PermutationsIterator(ScriptValue[] pool, int r) : base(pool, r)
+        {
+            if (r > N)
+            {
+                Exhausted = true;
+                Indices = Array.Empty<int>();
+                _cycles = Array.Empty<int>();
+                return;
+            }
+            Indices = new int[N];
+            for (int i = 0; i < N; i++)
+                Indices[i] = i;
+            _cycles = new int[R];
+            for (int i = 0; i < R; i++)
+                _cycles[i] = N - i;
+        }
+
+        protected override bool Advance()
+        {
+            for (int i = R - 1; i >= 0; i--)
             {
                 _cycles[i]--;
                 if (_cycles[i] == 0)
                 {
-                    int tmp = _indices[i];
-                    for (int k = i; k < _n - 1; k++)
-                        _indices[k] = _indices[k + 1];
-                    _indices[_n - 1] = tmp;
-                    _cycles[i] = _n - i;
+                    int tmp = Indices[i];
+                    for (int k = i; k < N - 1; k++)
+                        Indices[k] = Indices[k + 1];
+                    Indices[N - 1] = tmp;
+                    _cycles[i] = N - i;
                 }
                 else
                 {
-                    int j = _n - _cycles[i];
-                    int t = _indices[i];
-                    _indices[i] = _indices[j];
-                    _indices[j] = t;
-                    value = BuildTuple(ctx);
+                    int j = N - _cycles[i];
+                    int t = Indices[i];
+                    Indices[i] = Indices[j];
+                    Indices[j] = t;
                     return true;
                 }
             }
-            _exhausted = true;
-            value = null;
             return false;
-        }
-
-        private ScriptValue BuildTuple(EvalContext ctx)
-        {
-            var row = new ScriptValue[_r];
-            for (int i = 0; i < _r; i++)
-                row[i] = _pool[_indices[i]];
-            return ctx.Values.Tuple(row);
         }
     }
 
     // combinations: port of combinations_next (strictly increasing indices).
-    internal sealed class CombinationsIterator : ScriptIteratorBase
+    internal sealed class CombinationsIterator : IndexTupleIterator
     {
-        private readonly ScriptValue[] _pool;
-        private readonly int _n;
-        private readonly int _r;
-        private readonly int[] _indices;
-        private bool _started;
-        private bool _exhausted;
-
-        internal CombinationsIterator(ScriptValue[] pool, int r)
+        internal CombinationsIterator(ScriptValue[] pool, int r) : base(pool, r)
         {
-            _pool = pool;
-            _n = pool.Length;
-            _r = r;
-            if (r > _n)
+            if (r > N)
             {
-                _exhausted = true;
-                _indices = Array.Empty<int>();
+                Exhausted = true;
+                Indices = Array.Empty<int>();
                 return;
             }
-            _indices = new int[r];
+            Indices = new int[r];
             for (int i = 0; i < r; i++)
-                _indices[i] = i;
+                Indices[i] = i;
         }
 
-        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+        protected override bool Advance()
         {
-            if (_exhausted)
-            {
-                value = null;
-                return false;
-            }
-            if (!_started)
-            {
-                _started = true;
-                value = BuildTuple(ctx);
-                return true;
-            }
-            int i = _r - 1;
-            while (i >= 0 && _indices[i] == i + _n - _r)
+            int i = R - 1;
+            while (i >= 0 && Indices[i] == i + N - R)
                 i--;
             if (i < 0)
-            {
-                _exhausted = true;
-                value = null;
                 return false;
-            }
-            _indices[i]++;
-            for (int j = i + 1; j < _r; j++)
-                _indices[j] = _indices[j - 1] + 1;
-            value = BuildTuple(ctx);
+            Indices[i]++;
+            for (int j = i + 1; j < R; j++)
+                Indices[j] = Indices[j - 1] + 1;
             return true;
-        }
-
-        private ScriptValue BuildTuple(EvalContext ctx)
-        {
-            var row = new ScriptValue[_r];
-            for (int i = 0; i < _r; i++)
-                row[i] = _pool[_indices[i]];
-            return ctx.Values.Tuple(row);
         }
     }
 
     // combinations_with_replacement: port of cwr_next (non-decreasing indices).
-    internal sealed class CwrIterator : ScriptIteratorBase
+    internal sealed class CwrIterator : IndexTupleIterator
     {
-        private readonly ScriptValue[] _pool;
-        private readonly int _n;
-        private readonly int _r;
-        private readonly int[] _indices;
-        private bool _started;
-        private bool _exhausted;
-
-        internal CwrIterator(ScriptValue[] pool, int r)
+        internal CwrIterator(ScriptValue[] pool, int r) : base(pool, r)
         {
-            _pool = pool;
-            _n = pool.Length;
-            _r = r;
-            _indices = new int[r];   // all zeros
-            if (_n == 0 && _r > 0)
-                _exhausted = true;
+            Indices = new int[r];   // all zeros
+            if (N == 0 && R > 0)
+                Exhausted = true;
         }
 
-        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+        protected override bool Advance()
         {
-            if (_exhausted)
-            {
-                value = null;
-                return false;
-            }
-            if (!_started)
-            {
-                _started = true;
-                value = BuildTuple(ctx);
-                return true;
-            }
-            int i = _r - 1;
-            while (i >= 0 && _indices[i] == _n - 1)
+            int i = R - 1;
+            while (i >= 0 && Indices[i] == N - 1)
                 i--;
             if (i < 0)
-            {
-                _exhausted = true;
-                value = null;
                 return false;
-            }
-            int newval = _indices[i] + 1;
-            for (int j = i; j < _r; j++)
-                _indices[j] = newval;
-            value = BuildTuple(ctx);
+            int newval = Indices[i] + 1;
+            for (int j = i; j < R; j++)
+                Indices[j] = newval;
             return true;
-        }
-
-        private ScriptValue BuildTuple(EvalContext ctx)
-        {
-            var row = new ScriptValue[_r];
-            for (int i = 0; i < _r; i++)
-                row[i] = _pool[_indices[i]];
-            return ctx.Values.Tuple(row);
         }
     }
 }

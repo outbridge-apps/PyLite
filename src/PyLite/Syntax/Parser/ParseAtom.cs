@@ -6,7 +6,25 @@ namespace Outbridge.PyLite.Syntax
 {
     internal sealed partial class Parser
     {
-        private ExprNode TryParseLambda() { return _cur.Kind == TokenKind.KwLambda ? ParseLambda() : null; }
+        private ExprNode TryParseLambda() { return _pendingAtom == null && _cur.Kind == TokenKind.KwLambda ? ParseLambda() : null; }
+
+        // super() in a method is super(<the defining class>, <first parameter>), CPython's __class__ cell: the
+        // class reaches its methods through a hidden variable the class statement binds.
+        private string ClassCell()
+        {
+            if (_superCell == null)
+                _superCell = "$class" + (++_classConstSeq);
+            return _superCell;
+        }
+
+        private IReadOnlyList<Arg> SuperArgs(SourceInfo s)
+        {
+            return AstList.Freeze(new List<Arg>
+            {
+                new Arg(s, ArgKind.Positional, null, new NameNode(s, ClassCell())),
+                new Arg(s, ArgKind.Positional, null, new NameNode(s, _superSelf)),
+            });
+        }
 
         // atom { trailer }
         private ExprNode ParseAtomExpr()
@@ -23,6 +41,8 @@ namespace Outbridge.PyLite.Syntax
                             Take();
                             IReadOnlyList<Arg> args = ParseArgList();
                             Expect(TokenKind.RightParen, "')'");
+                            if (args.Count == 0 && _superSelf != null && atom is NameNode sn && sn.Id == "super")
+                                args = SuperArgs(sn.Src);
                             atom = GuardDepth(new CallNode(atom.Src, atom, args));
                         }
                         finally
@@ -59,10 +79,25 @@ namespace Outbridge.PyLite.Syntax
 
         private ExprNode ParseAtom()
         {
+            if (_pendingAtom != null)
+            {
+                ExprNode pending = _pendingAtom;   // a `with (...)` group the expression continues from
+                _pendingAtom = null;
+                return pending;
+            }
             Token t = _cur;
             switch (t.Kind)
             {
-                case TokenKind.Name: Take(); return new NameNode(Src(t), t.Text);
+                case TokenKind.Name:
+                {
+                    Take();
+                    string hiddenName;
+                    if (_classRenames != null && _classSuspend == 0 && _classRenames.TryGetValue(t.Text, out hiddenName))
+                        return new NameNode(Src(t), hiddenName);   // an earlier constant of the class being parsed
+                    if (_inMethod && t.Text == "__class__")
+                        return new NameNode(Src(t), ClassCell());   // the class whose method this is
+                    return new NameNode(Src(t), t.Text);
+                }
                 case TokenKind.IntLiteral: Take(); return new LiteralNode(Src(t), t.Value, LiteralKind.Int);
                 case TokenKind.FloatLiteral: Take(); return new LiteralNode(Src(t), t.Value, LiteralKind.Float);
                 case TokenKind.StringLiteral:

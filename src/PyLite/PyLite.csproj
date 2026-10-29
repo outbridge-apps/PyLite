@@ -5,7 +5,7 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>Outbridge.PyLite</AssemblyName>
     <RootNamespace>Outbridge.PyLite</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>PyLite</Product>
     <Company>Outbridge</Company>
     <Authors>Outbridge</Authors>
@@ -30,6 +30,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- standard-library parts written in the dialect itself, compiled once per process -->
+    <EmbeddedResource Include="Modules/Python/string_template.py" LogicalName="Outbridge.PyLite.string_template.py" />
+    <EmbeddedResource Include="Modules/Python/email_utils.py" LogicalName="Outbridge.PyLite.email_utils.py" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The tokenizer/writer behind the json module and the hosting JSON marshalling. Pinned to 13.0.3:
          every 13.x shares AssemblyVersion 13.0.0.0, so a host that already loads one satisfies this
          reference without a binding redirect. -->
@@ -46,9 +52,10 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- The package carries the repository README, and only the public tree has the public one. -->
+  <!-- The package carries the repository README, and only the public tree has the public one. The internal
+       tree is told apart by a marker file that is never carried. -->
   <Target Name="RefusePackFromInternalTree" BeforeTargets="Pack"
-          Condition="Exists('$(MSBuildThisFileDirectory)..\..\tests')">
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\.internal-tree')">
     <Error Text="Pack from the public tree: this one has the internal README." />
   </Target>
 

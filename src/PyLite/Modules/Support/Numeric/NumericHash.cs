@@ -6,7 +6,7 @@ namespace Outbridge.PyLite.Modules.Support
     // Numeric/string/tuple/frozenset hash primitives. Ports of CPython
     // Objects/longobject.c::long_hash and Python/pyhash.c::_Py_HashDouble. All wrap-around
     // arithmetic is intentional and kept in `unchecked`.
-    public static class NumericHash
+    internal static class NumericHash
     {
         public const long P = 2305843009213693951L;   // 2^61 - 1 (Mersenne modulus)
         private const ulong PU = 2305843009213693951UL;

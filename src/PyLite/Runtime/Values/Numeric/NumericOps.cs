@@ -4,8 +4,8 @@ using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
-    // Numeric-tower helpers. Arithmetic proper is added alongside the number hooks
-    // this file also holds the shared bit-length and int->str charging primitives.
+    // Numeric-tower helpers (arithmetic is in NumericOps.Arith); this file holds the shared bit-length and
+    // int->str charging primitives.
     internal static partial class NumericOps
     {
         internal static bool IsNumber(ScriptValue v)
@@ -22,12 +22,15 @@ namespace Outbridge.PyLite.Runtime.Values
             return ((IntValue)v).Value;
         }
 
+        private static readonly BigInteger LongMinBig = long.MinValue;
+        private static readonly BigInteger LongMaxBig = long.MaxValue;
+
         // Exact bit length of |v|; BitLength(0) == 0. Byte-based: one O(n/8) copy instead of
         // BigInteger.Log plus shift-allocating correction loops (net472 has no GetBitLength).
         internal static long BitLength(BigInteger v)
         {
-            if (v.IsZero)
-                return 0;
+            if (v >= LongMinBig && v <= LongMaxBig)
+                return BitLengthLong((long)v);   // a machine-size int needs no ToByteArray copy
             byte[] bytes = BigInteger.Abs(v).ToByteArray();   // little-endian magnitude, top byte may be a 0 sign byte
             int top = bytes.Length - 1;
             if (bytes[top] == 0)
@@ -73,8 +76,7 @@ namespace Outbridge.PyLite.Runtime.Values
             long digits = (long)(bits / 3.321928094887362) + 1;
             long cost = digits + digits * digits / 256;
             ctx.Budget.Step((int)Math.Min(int.MaxValue, cost));
-            ctx.Budget.PreCharge(2 * digits);
-            ctx.Budget.CheckDeadlineNow();
+            ctx.Budget.PreCharge(2 * digits);   // a large one's Step crosses the deadline-check interval (P7)
         }
     }
 }

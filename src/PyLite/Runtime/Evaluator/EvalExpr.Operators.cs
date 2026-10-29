@@ -7,31 +7,35 @@ namespace Outbridge.PyLite.Runtime.Evaluator
     // and/or/if-exp short-circuit; comparison chains evaluate each operand exactly once.
     internal sealed partial class Evaluator
     {
-        private ScriptValue EvalBinOp(BinOpNode n, Environment env, EvalContext ctx)
+        // The operator semantics every tier shares; a tier only changes how the operands are produced.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal static ScriptValue ApplyBinary(PyBinOp op, ScriptValue a, ScriptValue b, EvalContext ctx)
         {
-            ScriptValue a = EvalExpr(n.Left, env, ctx);
-            ScriptValue b = EvalExpr(n.Right, env, ctx);
-            PyBinOp op = MapBin(n.Op);
             // Small-int shortcut: same IntOpSmall the full path lands in, minus the dispatch layers.
-            ScriptValue fast = PyOps.TrySmallIntBinOp(op, a, b, ctx);
-            if (fast != null)
-            {
-                return fast;
-            }
-            return PyOps.BinaryOp(op, a, b, ctx);
+            return PyOps.TrySmallIntBinOp(op, a, b, ctx) ?? PyOps.BinaryOp(op, a, b, ctx);
         }
 
-        private ScriptValue EvalUnaryOp(UnaryOpNode n, Environment env, EvalContext ctx)
+        internal static ScriptValue ApplyUnary(UnaryOp op, ScriptValue a, EvalContext ctx)
         {
-            ScriptValue a = EvalExpr(n.Operand, env, ctx);
-            switch (n.Op)
+            switch (op)
             {
                 case UnaryOp.Not: return ctx.Values.Bool(!PyOps.Truth(a, ctx));
                 case UnaryOp.USub: return PyOps.UnaryOp(PyUnaryOp.Neg, a, ctx);
                 case UnaryOp.UAdd: return PyOps.UnaryOp(PyUnaryOp.Pos, a, ctx);
                 case UnaryOp.Invert: return PyOps.UnaryOp(PyUnaryOp.Invert, a, ctx);
-                default: throw new System.InvalidOperationException("unhandled unary op " + n.Op);   // parser can't produce this
+                default: throw new System.InvalidOperationException("unhandled unary op " + op);   // parser can't produce this
             }
+        }
+
+        private ScriptValue EvalBinOp(BinOpNode n, Environment env, EvalContext ctx)
+        {
+            ScriptValue a = EvalExpr(n.Left, env, ctx);
+            return ApplyBinary(MapBin(n.Op), a, EvalExpr(n.Right, env, ctx), ctx);
+        }
+
+        private ScriptValue EvalUnaryOp(UnaryOpNode n, Environment env, EvalContext ctx)
+        {
+            return ApplyUnary(n.Op, EvalExpr(n.Operand, env, ctx), ctx);
         }
 
         private ScriptValue EvalBoolOp(BoolOpNode n, Environment env, EvalContext ctx)
@@ -41,15 +45,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             for (int i = 0; i < n.Values.Count; i++)
             {
                 v = EvalExpr(n.Values[i], env, ctx);
-                bool t = PyOps.Truth(v, ctx);
-                if (isAnd && !t)
-                {
-                    return v;   // and: first falsy short-circuits
-                }
-                if (!isAnd && t)
-                {
-                    return v;   // or: first truthy short-circuits
-                }
+                if (PyOps.Truth(v, ctx) != isAnd)
+                    return v;   // and: the first falsy; or: the first truthy
             }
             return v;   // the last operand
         }
@@ -82,22 +79,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             // Small-int shortcut for the ordering/equality ops (identity and membership keep their own
             // semantics below). RichCompare on Int x Int reduces to exactly these long comparisons.
-            if (a.Kind == ValueKind.Int && b.Kind == ValueKind.Int)
+            if (a.Kind == ValueKind.Int && b.Kind == ValueKind.Int && op <= CompareOp.Ne)
             {
                 IntValue ia = (IntValue)a, ib = (IntValue)b;
                 if (ia.IsSmall && ib.IsSmall)
-                {
-                    long x = ia.Small, y = ib.Small;
-                    switch (op)
-                    {
-                        case CompareOp.Eq: return x == y;
-                        case CompareOp.Ne: return x != y;
-                        case CompareOp.Lt: return x < y;
-                        case CompareOp.Le: return x <= y;
-                        case CompareOp.Gt: return x > y;
-                        case CompareOp.Ge: return x >= y;
-                    }
-                }
+                    return LongCompare(op, ia.Small, ib.Small);
             }
             switch (op)
             {

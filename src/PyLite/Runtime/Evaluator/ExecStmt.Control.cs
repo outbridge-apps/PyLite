@@ -58,7 +58,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             ScriptValue iterable = EvalExpr(n.Iter, env, ctx);
             // P5: `for <name> in range(...)` with long-fitting bounds walks a long counter directly —
             // no iterator allocation, no virtual MoveNext per step. Quarter-range keeps += overflow-free.
-            if (iterable.Kind == ValueKind.Range && n.Target.NodeKind == NodeKind.Name)
+            if (iterable.Kind == ValueKind.Range && n.Target.NodeKind == NodeKind.Name && !ctx.InterpretOnly)
             {
                 RangeValue r = (RangeValue)iterable;
                 const long Lo = long.MinValue / 4, Hi = long.MaxValue / 4;

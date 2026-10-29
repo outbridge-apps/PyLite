@@ -166,10 +166,10 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal)
             {
-                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", (self, a, kw, c) => ((TimezoneValue)self).UtcOffsetTd(c)),
-                ["tzname"] = SlotDescriptor.MakeMethod("tzname", (self, a, kw, c) => c.Values.Str(((TimezoneValue)self).TzName())),
-                ["dst"] = SlotDescriptor.MakeMethod("dst", (self, a, kw, c) => c.Values.None),
-                ["fromutc"] = SlotDescriptor.MakeMethod("fromutc", (self, a, kw, c) => ((TimezoneValue)self).FromUtc(c, a)),
+                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 1, 1, (self, a, kw, c) => ((TimezoneValue)self).UtcOffsetTd(c))),
+                ["tzname"] = SlotDescriptor.MakeMethod("tzname", Args.Positional("tzname", 1, 1, (self, a, kw, c) => c.Values.Str(((TimezoneValue)self).TzName()))),
+                ["dst"] = SlotDescriptor.MakeMethod("dst", Args.Positional("dst", 1, 1, (self, a, kw, c) => c.Values.None)),
+                ["fromutc"] = SlotDescriptor.MakeMethod("fromutc", Args.Positional("fromutc", 1, 1, (self, a, kw, c) => ((TimezoneValue)self).FromUtc(c, a))),
             };
             return new ScriptTypeInfo("datetime.timezone", d);
         }

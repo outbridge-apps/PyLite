@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Modules
 {
     // bisect: the four searches and two insertions of Lib/bisect.py, with the lo / hi / key keywords of
     // CPython 3.10+. Searches take a list or a tuple; insertions take a list, the only thing with insert.
-    public static class BisectModule
+    internal static class BisectModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -49,7 +49,7 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(ctx, name + "() argument 1 must be a list, not " + c.Seq.PyTypeName);
             ScriptValue item = c.X;
             if (c.Key != null)
-                c.X = ctx.CallHook(c.Key, new[] { item }, KwArgs.Empty);
+                c.X = ctx.CallHook1(c.Key, item);
             int at = Locate(ctx, c, right);
             if (list.Items.Count >= ctx.Limits.MaxCollectionItems)
                 SequenceOps.CheckCap((long)list.Items.Count + 1, ctx);
@@ -69,7 +69,7 @@ namespace Outbridge.PyLite.Modules
                 int mid = lo + ((hi - lo) >> 1);
                 ScriptValue item = ItemAt(ctx, c.Seq, mid);
                 if (c.Key != null)
-                    item = ctx.CallHook(c.Key, new[] { item }, KwArgs.Empty);
+                    item = ctx.CallHook1(c.Key, item);
                 bool goRight = right
                     ? !PyOps.Truth(PyOps.RichCompare(PyCmpOp.Lt, c.X, item, ctx), ctx)
                     : PyOps.Truth(PyOps.RichCompare(PyCmpOp.Lt, item, c.X, ctx), ctx);
@@ -122,16 +122,6 @@ namespace Outbridge.PyLite.Modules
             return l != null ? l.Items[i] : ((TupleValue)seq).Items[i];
         }
 
-        private static int Index(EvalContext ctx, ScriptValue v, string what)
-        {
-            if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
-                throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-            System.Numerics.BigInteger n = NumericOps.AsBigInteger(v);
-            if (n > int.MaxValue)
-                return int.MaxValue;
-            if (n < int.MinValue)
-                return int.MinValue;
-            return (int)n;
-        }
+        private static int Index(EvalContext ctx, ScriptValue v, string what) { return Coerce.ToInt32(ctx, v, what); }
     }
 }

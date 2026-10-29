@@ -92,10 +92,10 @@ namespace Outbridge.PyLite.Hosting
                 (int)Math.Min(Math.Min((long)DeadlineMs, serverCeiling.DeadlineMs), EngineHardLimits.MaxDeadlineMs),
                 Math.Min(Math.Min(MaxAllocBytes, serverCeiling.MaxAllocBytes), EngineHardLimits.MaxAllocBytes),
                 (int)Math.Min(Math.Min((long)MaxCallDepth, serverCeiling.MaxCallDepth), EngineHardLimits.MaxCallDepth),
-                Math.Min(MaxDataDepth, serverCeiling.MaxDataDepth),
+                Math.Min(Math.Min(MaxDataDepth, serverCeiling.MaxDataDepth), EngineHardLimits.MaxDataDepth),
                 Math.Min(MaxStrChars, serverCeiling.MaxStrChars),
                 Math.Min(MaxCollectionItems, serverCeiling.MaxCollectionItems),
-                Math.Min(MaxIntBits, serverCeiling.MaxIntBits),
+                Math.Min(Math.Min(MaxIntBits, serverCeiling.MaxIntBits), EngineHardLimits.MaxIntBits),
                 Math.Min(MaxOutputBytes, serverCeiling.MaxOutputBytes),
                 Math.Min(RegexPerOpTimeoutMs, serverCeiling.RegexPerOpTimeoutMs),
                 Math.Min(SleepTotalMs, serverCeiling.SleepTotalMs),
@@ -110,6 +110,10 @@ namespace Outbridge.PyLite.Hosting
         public const long MaxSteps = 2_000_000_000;
         public const long MaxAllocBytes = 1_073_741_824;
         public const int MaxCallDepth = 512;
+        public const int MaxDataDepth = 10_000;   // leaf re-entry is a C# frame per level: far inside the 32 MB stack
+        // One big-int op is quadratic and, past the deadline, finishes on an abandoned helper (BigOps): at 4M
+        // bits that is about 16x the 1-2 s of the default 1M.
+        public const int MaxIntBits = 4_000_000;
         public const int MaxConcurrentRuns = 32;
         public const long TerminatingMemoryReserve = 1_048_576;
         public const int MaxErrorMessageChars = 2_048;

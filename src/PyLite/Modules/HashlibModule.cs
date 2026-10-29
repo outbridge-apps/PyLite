@@ -9,22 +9,14 @@ using Outbridge.PyLite.Modules.Support;
 
 namespace Outbridge.PyLite.Modules
 {
-    // hashlib: md5/sha1/sha224/sha256/sha384/sha512 + new(name). Hash objects buffer their
-    // input (bounded by the run budget) so update/digest/hexdigest/copy are trivial and copy is exact.
+    // hashlib: md5/sha1/sha224/sha256/sha384/sha512 + new(name) + pbkdf2_hmac (BufferedDigestValue objects).
     // Note: md5 uses the framework MD5 here; a pure-managed MD5 port (FIPS) is a documented follow-up.
-    public static partial class HashlibModule
+    internal static partial class HashlibModule
     {
-        internal static readonly string[] Algorithms = { "md5", "sha1", "sha224", "sha256", "sha384", "sha512" };
-
-        internal static bool IsSupported(string name)
-        {
-            return Array.IndexOf(Algorithms, name) >= 0;
-        }
-
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            foreach (string algo in Algorithms)
+            foreach (string algo in HashAlgos.Names)
             {
                 string a = algo;
                 m[a] = BuiltinFunctionValue.Make(a, (s, args, kw, c) => New(c, a, StrMethods.WithKw(c, args, kw, a, "data")));
@@ -49,110 +41,45 @@ namespace Outbridge.PyLite.Modules
             if (name == null)
                 throw Raise.TypeError(ctx, "new() argument 1 must be str");
             string algo = name.Value.ToLowerInvariant();
-            if (!IsSupported(algo))
+            if (!HashAlgos.IsSupported(algo))
                 throw Raise.Make(ctx, PyExceptionTypes.ValueError, "unsupported hash type " + name.Value);
-            var h = new HashObjectValue(algo);
-            if (args.Length >= 2)
-                h.Update(ctx, args[1]);
-            return h;
+            return New(ctx, algo, args.Length >= 2 ? new[] { args[1] } : Array.Empty<ScriptValue>());
         }
-
-        internal static HashAlgorithm CreateAlgo(string name)
-        {
-            switch (name)
-            {
-                case "md5": return MD5.Create();
-                case "sha1": return SHA1.Create();
-                case "sha224": return new Support.Sha224Managed();   // no SHA-224 in the framework
-                case "sha384": return SHA384.Create();
-                case "sha512": return SHA512.Create();
-                default: return SHA256.Create();
-            }
-        }
-
-        internal static int DigestSize(string name)
-        {
-            switch (name)
-            {
-                case "md5": return 16;
-                case "sha1": return 20;
-                case "sha224": return 28;
-                case "sha384": return 48;
-                case "sha512": return 64;
-                default: return 32;
-            }
-        }
-
-        // The SHA-512 family (sha384 included) works on 1024-bit blocks; everything else on 512-bit ones.
-        internal static int BlockSize(string name) { return name == "sha512" || name == "sha384" ? 128 : 64; }
     }
 
-    // A hashlib hash object (opaque). Buffers fed bytes; computes on digest/hexdigest.
-    internal sealed class HashObjectValue : ScriptValue
+    // A hashlib hash object.
+    internal sealed class HashObjectValue : BufferedDigestValue
     {
         private static readonly ScriptTypeInfo Type = BuildType();
 
-        internal readonly string AlgoName;
-        internal readonly List<byte> Buffer;
-        internal HashObjectValue(string algo) { AlgoName = algo; Buffer = new List<byte>(); }
-        private HashObjectValue(string algo, List<byte> buf) { AlgoName = algo; Buffer = buf; }
+        internal HashObjectValue(string algo) : base(algo, new List<byte>()) { }
+        private HashObjectValue(string algo, List<byte> buffer) : base(algo, buffer) { }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
-        internal override ValueKind Kind { get { return ValueKind.Opaque; } }
 
-        internal void Update(EvalContext ctx, ScriptValue data)
+        protected override string BytesRequiredText(ScriptValue data)
         {
-            BytesValue b = data as BytesValue;
-            if (b == null)
-                throw Raise.TypeError(ctx, "object supporting the buffer API required, not '" + data.PyTypeName + "'");
-            ctx.Values.PreCharge(b.Data.Length);
-            ctx.Budget.ChargeLinear(2L * b.Data.Length);   // the copy now and the hash at digest time
-            Buffer.AddRange(b.Data);
+            return "object supporting the buffer API required, not '" + data.PyTypeName + "'";
         }
 
-        internal byte[] Compute()
+        protected override byte[] Hash(byte[] message)
         {
-            using (HashAlgorithm h = HashlibModule.CreateAlgo(AlgoName))
-                return h.ComputeHash(Buffer.ToArray());
+            using (HashAlgorithm h = HashAlgos.Create(Algo))
+                return h.ComputeHash(message);
         }
+
+        protected override BufferedDigestValue CloneWith(List<byte> buffer) { return new HashObjectValue(Algo, buffer); }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            sb.Append("<" + AlgoName + " hash object>");
+            sb.Append("<" + Algo + " hash object>");
         }
 
         private static ScriptTypeInfo BuildType()
         {
-            var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-            d["update"] = SlotDescriptor.MakeMethod("update", (self, a, kw, c) =>
-            {
-                Args.AtLeast(c, a, "update", 1);
-                ((HashObjectValue)self).Update(c, a[0]);
-                return c.Values.None;
-            });
-            d["digest"] = SlotDescriptor.MakeMethod("digest", (self, a, kw, c) => c.Values.Bytes(((HashObjectValue)self).Compute()));
-            d["hexdigest"] = SlotDescriptor.MakeMethod("hexdigest", (self, a, kw, c) => c.Values.Str(Hex(((HashObjectValue)self).Compute())));
-            d["copy"] = SlotDescriptor.MakeMethod("copy", (self, a, kw, c) =>
-            {
-                HashObjectValue o = (HashObjectValue)self;
-                return new HashObjectValue(o.AlgoName, new List<byte>(o.Buffer));
-            });
-            d["name"] = SlotDescriptor.MakeProperty("name", (self, c) => c.Values.Str(((HashObjectValue)self).AlgoName));
-            d["digest_size"] = SlotDescriptor.MakeProperty("digest_size", (self, c) => c.Values.Int(HashlibModule.DigestSize(((HashObjectValue)self).AlgoName)));
-            d["block_size"] = SlotDescriptor.MakeProperty("block_size", (self, c) => c.Values.Int(HashlibModule.BlockSize(((HashObjectValue)self).AlgoName)));
+            Dictionary<string, SlotDescriptor> d = CommonSlots();
+            d["name"] = SlotDescriptor.MakeProperty("name", (self, c) => c.Values.Str(((HashObjectValue)self).Algo));
             return new ScriptTypeInfo("HASH", d);
-        }
-
-        internal static string Hex(byte[] data)
-        {
-            const string H = "0123456789abcdef";
-            var sb = new StringBuilder(data.Length * 2);
-            for (int i = 0; i < data.Length; i++)
-            {
-                sb.Append(H[data[i] >> 4]);
-                sb.Append(H[data[i] & 0xF]);
-            }
-            return sb.ToString();
         }
     }
 }

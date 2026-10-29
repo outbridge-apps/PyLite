@@ -10,23 +10,14 @@ namespace Outbridge.PyLite.Hosting
         TimeSpan Quantum { get; }   // wait quantum, 25..50 ms
     }
 
-    // Clamp = min(requested, MaxTotal - sleptSoFar, floored at zero). MaxTotal 5 s, Quantum 25 ms.
+    // Real waits as requested; the run's ResourceLimits.SleepTotalMs bounds the total. Quantum 25 ms.
     public sealed class DefaultSleepPolicy : ISleepPolicy
     {
-        private static readonly TimeSpan MaxTotal = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan Q = TimeSpan.FromMilliseconds(25);
 
         public TimeSpan Quantum { get { return Q; } }
 
-        public TimeSpan Clamp(TimeSpan requested, TimeSpan sleptSoFar)
-        {
-            TimeSpan avail = MaxTotal - sleptSoFar;
-            if (avail < TimeSpan.Zero)
-            {
-                avail = TimeSpan.Zero;
-            }
-            return requested < avail ? requested : avail;
-        }
+        public TimeSpan Clamp(TimeSpan requested, TimeSpan sleptSoFar) { return requested; }
     }
 
     // A production host may install this: every sleep returns instantly (but is still charged a Step).

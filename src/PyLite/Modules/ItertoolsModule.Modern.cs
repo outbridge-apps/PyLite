@@ -9,7 +9,7 @@ using Outbridge.PyLite.Modules.Support;
 namespace Outbridge.PyLite.Modules
 {
     // itertools members from CPython 3.10-3.13: pairwise, batched(strict=).
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         private static ScriptValue Pairwise(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
@@ -85,7 +85,7 @@ namespace Outbridge.PyLite.Modules
                 value = null;
                 return false;
             }
-            var batch = new List<ScriptValue>(_n);
+            var batch = new List<ScriptValue>(System.Math.Min(_n, 16));   // grows with the items, not with n
             ScriptValue v;
             while (batch.Count < _n && _src.MoveNext(ctx, out v))
                 batch.Add(v);

@@ -22,17 +22,17 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["struct_time"] = StructTimeType(ctx),
-                ["time"] = BuiltinFunctionValue.Make("time", (s, a, kw, c) => c.Values.Float(CalendarMath.UtcNowToEpoch(c.Clock.UtcNow))),
-                ["monotonic"] = BuiltinFunctionValue.Make("monotonic", (s, a, kw, c) => c.Values.Float(c.MonotonicClock.Elapsed.TotalSeconds)),
-                ["perf_counter"] = BuiltinFunctionValue.Make("perf_counter", (s, a, kw, c) => c.Values.Float(c.MonotonicClock.Elapsed.TotalSeconds)),
-                ["gmtime"] = BuiltinFunctionValue.Make("gmtime", (s, a, kw, c) => BrokenDownTime(c, a, 0)),
-                ["localtime"] = BuiltinFunctionValue.Make("localtime", (s, a, kw, c) => BrokenDownTime(c, a, (long)c.Clock.LocalOffset.TotalSeconds)),
-                ["mktime"] = BuiltinFunctionValue.Make("mktime", (s, a, kw, c) => Mktime(c, a)),
-                ["asctime"] = BuiltinFunctionValue.Make("asctime", (s, a, kw, c) => c.Values.Str(Asctime(c, a))),
-                ["ctime"] = BuiltinFunctionValue.Make("ctime", (s, a, kw, c) => c.Values.Str(Ctime(c, a))),
-                ["sleep"] = BuiltinFunctionValue.Make("sleep", (s, a, kw, c) => Sleep(c, a)),
-                ["strftime"] = BuiltinFunctionValue.Make("strftime", (s, a, kw, c) => c.Values.Str(Strftime(c, a))),
-                ["strptime"] = BuiltinFunctionValue.Make("strptime", (s, a, kw, c) => Strptime(c, a)),
+                ["time"] = BuiltinFunctionValue.Make("time", Args.Positional("time", 0, 0, (s, a, kw, c) => c.Values.Float(CalendarMath.UtcNowToEpoch(c.Clock.UtcNow)))),
+                ["monotonic"] = BuiltinFunctionValue.Make("monotonic", Args.Positional("monotonic", 0, 0, (s, a, kw, c) => c.Values.Float(c.MonotonicClock.Elapsed.TotalSeconds))),
+                ["perf_counter"] = BuiltinFunctionValue.Make("perf_counter", Args.Positional("perf_counter", 0, 0, (s, a, kw, c) => c.Values.Float(c.MonotonicClock.Elapsed.TotalSeconds))),
+                ["gmtime"] = BuiltinFunctionValue.Make("gmtime", Args.Positional("gmtime", 0, 1, (s, a, kw, c) => BrokenDownTime(c, a, 0))),
+                ["localtime"] = BuiltinFunctionValue.Make("localtime", Args.Positional("localtime", 0, 1, (s, a, kw, c) => BrokenDownTime(c, a, (long)c.Clock.LocalOffset.TotalSeconds))),
+                ["mktime"] = BuiltinFunctionValue.Make("mktime", Args.Positional("mktime", 1, 1, (s, a, kw, c) => Mktime(c, a))),
+                ["asctime"] = BuiltinFunctionValue.Make("asctime", Args.Positional("asctime", 0, 1, (s, a, kw, c) => c.Values.Str(Asctime(c, a)))),
+                ["ctime"] = BuiltinFunctionValue.Make("ctime", Args.Positional("ctime", 0, 1, (s, a, kw, c) => c.Values.Str(Ctime(c, a)))),
+                ["sleep"] = BuiltinFunctionValue.Make("sleep", Args.Positional("sleep", 1, 1, (s, a, kw, c) => Sleep(c, a))),
+                ["strftime"] = BuiltinFunctionValue.Make("strftime", Args.Positional("strftime", 1, 2, (s, a, kw, c) => c.Values.Str(Strftime(c, a)))),
+                ["strptime"] = BuiltinFunctionValue.Make("strptime", Args.Positional("strptime", 1, 2, (s, a, kw, c) => Strptime(c, a))),
                 // tz attributes: seconds WEST of UTC (UTC+2 => -7200).
                 ["timezone"] = ctx.Values.Int(-localOffsetSeconds),
                 ["altzone"] = ctx.Values.Int(-localOffsetSeconds),
@@ -144,6 +144,13 @@ namespace Outbridge.PyLite.Modules
             double capped = secs > 1e9 ? 1e9 : secs;   // guard FromSeconds against 2**63 / +Inf overflow
             TimeSpan requested = TimeSpan.FromSeconds(capped);
             TimeSpan eff = ctx.SleepPolicy.Clamp(requested, ctx.SleptTotal);
+            if (eff > TimeSpan.Zero)
+            {
+                // Charged before the wait: a sleep past SleepTotalMs fails the run now, not after it.
+                double ms = Math.Ceiling(eff.TotalMilliseconds);
+                ctx.Budget.ChargeSleep(ms > int.MaxValue ? int.MaxValue : (int)ms);
+                ctx.SleptTotal += eff;
+            }
             TimeSpan rem = ctx.Budget.TimeRemaining;
             if (eff > rem)
                 eff = rem;
@@ -155,20 +162,19 @@ namespace Outbridge.PyLite.Modules
                 return ctx.Values.None;
             }
 
+            // Measured, not summed: a wait overshoots its quantum by up to a timer tick.
             TimeSpan quantum = ctx.SleepPolicy.Quantum;
-            TimeSpan waited = TimeSpan.Zero;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             using (var mre = new System.Threading.ManualResetEventSlim(false))
             {
-                while (waited < eff)
+                while (true)
                 {
                     ctx.Budget.CheckDeadlineNow();
-                    TimeSpan left = eff - waited;
-                    TimeSpan q = quantum < left ? quantum : left;
-                    mre.Wait(q);           // never signaled; cancellation is caught by CheckDeadlineNow
-                    waited += q;
-                    ctx.SleptTotal += q;
+                    TimeSpan left = eff - clock.Elapsed;
+                    if (left <= TimeSpan.Zero)
+                        break;
+                    mre.Wait(quantum < left ? quantum : left);   // never signaled; cancellation is caught by CheckDeadlineNow
                     ctx.Budget.Step();
-                    ctx.Budget.CheckDeadlineNow();
                 }
             }
             return ctx.Values.None;
@@ -176,15 +182,9 @@ namespace Outbridge.PyLite.Modules
 
         private static double ToSeconds(EvalContext ctx, ScriptValue v)
         {
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return (double)iv.Value;
-            BoolValue bv = v as BoolValue;
-            if (bv != null)
-                return bv.Value ? 1.0 : 0.0;
-            FloatValue fv = v as FloatValue;
-            if (fv != null)
-                return fv.Value;
+            double d;
+            if (Coerce.TryToReal(ctx, v, false, out d))
+                return d;
             throw Raise.TypeError(ctx, "must be real number, not " + v.PyTypeName);
         }
 

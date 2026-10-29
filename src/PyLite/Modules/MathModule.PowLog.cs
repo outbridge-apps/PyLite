@@ -15,8 +15,8 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Pow(EvalContext ctx, ScriptValue[] a)
         {
-            double fx = AsDouble(ctx, Arg(ctx, a, 0), "pow");
-            double fy = AsDouble(ctx, Arg(ctx, a, 1), "pow");
+            double fx = AsDouble(ctx, Arg(ctx, a, 0));
+            double fy = AsDouble(ctx, Arg(ctx, a, 1));
 
             if (fy == 0.0)
                 return ctx.Values.Float(1.0);        // pow(x, 0) == 1, even nan/inf base
@@ -97,14 +97,14 @@ namespace Outbridge.PyLite.Modules
                 BigInteger n = iv != null ? iv.Value : (bv.Value ? BigInteger.One : BigInteger.Zero);
                 if (n.Sign <= 0)
                     throw Raise.ValueError(ctx, "math domain error");
-                int e = BigIntMath.BitLength(n) - 1;
+                int e = (int)NumericOps.BitLength(n) - 1;
                 if (e < 1000)
                     return func((double)n);
                 int shift = e - 900;
                 double m = (double)(n >> shift);
                 return func(m) + shift * func(2.0);
             }
-            double x = AsDouble(ctx, arg, "log");   // float, or Fraction/Decimal via their __float__
+            double x = AsDouble(ctx, arg);   // float, or Fraction/Decimal via their __float__
             if (x <= 0.0)
                 throw Raise.ValueError(ctx, "math domain error");
             return func(x);
@@ -123,7 +123,7 @@ namespace Outbridge.PyLite.Modules
                 if (n.Sign <= 0)
                     throw Raise.ValueError(ctx, "math domain error");
                 if (BigIntMath.IsPowerOfTwo(n))
-                    return ctx.Values.Float(BigIntMath.BitLength(n) - 1);
+                    return ctx.Values.Float(NumericOps.BitLength(n) - 1);
                 return ctx.Values.Float(LogHelperDouble(ctx, arg, M_Log2));
             }
             FloatValue fv = arg as FloatValue;
@@ -146,8 +146,8 @@ namespace Outbridge.PyLite.Modules
 
         private static void AddSummationAndFactorial(EvalContext ctx, Dictionary<string, ScriptValue> m)
         {
-            m["fsum"] = Fn("fsum", (c, a) => Fsum(c, a));
-            m["factorial"] = Fn("factorial", (c, a) => Factorial(c, a));
+            m["fsum"] = Fn("fsum", 1, 1, (c, a) => Fsum(c, a));
+            m["factorial"] = Fn("factorial", 1, 1, (c, a) => Factorial(c, a));
         }
 
         private static ScriptValue Fsum(EvalContext ctx, ScriptValue[] a)
@@ -160,7 +160,7 @@ namespace Outbridge.PyLite.Modules
         {
             ScriptValue v;
             while (it.MoveNext(ctx, out v))
-                yield return AsDouble(ctx, v, "fsum");
+                yield return AsDouble(ctx, v);
         }
 
         private static ScriptValue Factorial(EvalContext ctx, ScriptValue[] a)

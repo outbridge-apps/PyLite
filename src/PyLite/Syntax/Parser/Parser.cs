@@ -15,6 +15,12 @@ namespace Outbridge.PyLite.Syntax
         private Token _peeked;
         private bool _hasPeeked;
         private int _exprDepth, _stmtDepth;
+        private Dictionary<string, string> _classRenames;   // class-body constants -> their hidden variables
+        private int _classSuspend;                         // > 0 inside a method body, which cannot see them
+        private int _classConstSeq;
+        private string _superSelf;   // first parameter of the method being parsed (null outside a method body)
+        private string _superCell;   // the enclosing class's hidden variable, allocated by its first super()
+        private bool _inMethod;      // inside a method body, nested functions included: __class__ is the class
 
         private Parser(Lexer lexer, SyntaxLimits limits)
         {

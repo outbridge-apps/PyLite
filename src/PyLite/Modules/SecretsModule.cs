@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
 {
     // secrets: cryptographically strong tokens and choices over the OS RNG (RNGCryptoServiceProvider on
     // net472), unlike random's System.Random. SystemRandom (a class) is absent; compare_digest is hmac's.
-    public static class SecretsModule
+    internal static class SecretsModule
     {
         private const int DefaultEntropy = 32;
         private const int MaxTokenBytes = 1 << 20;   // a sandbox cap; tokens are tens of bytes
@@ -24,12 +24,12 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["token_bytes"] = BuiltinFunctionValue.Make("token_bytes", (s, a, kw, c) => c.Values.Bytes(Bytes(c, a, kw, "token_bytes"))),
-                ["token_hex"] = BuiltinFunctionValue.Make("token_hex", (s, a, kw, c) => c.Values.Str(Hex(Bytes(c, a, kw, "token_hex")))),
+                ["token_hex"] = BuiltinFunctionValue.Make("token_hex", (s, a, kw, c) => c.Values.Str(Support.Hex.Encode(Bytes(c, a, kw, "token_hex")))),
                 ["token_urlsafe"] = BuiltinFunctionValue.Make("token_urlsafe", (s, a, kw, c) => c.Values.Str(UrlSafe(Bytes(c, a, kw, "token_urlsafe")))),
                 ["randbelow"] = BuiltinFunctionValue.Make("randbelow", RandBelow),
                 ["randbits"] = BuiltinFunctionValue.Make("randbits", RandBits),
                 ["choice"] = BuiltinFunctionValue.Make("choice", Choice),
-                ["compare_digest"] = BuiltinFunctionValue.Make("compare_digest", (s, a, kw, c) => HmacModule.CompareDigest(c, a)),
+                ["compare_digest"] = BuiltinFunctionValue.Make("compare_digest", Args.Positional("compare_digest", 2, 2, (s, a, kw, c) => HmacModule.CompareDigest(c, a))),
                 ["DEFAULT_ENTROPY"] = ctx.Values.Int(DefaultEntropy),
             };
             return ctx.Values.Module("secrets", m);
@@ -58,14 +58,6 @@ namespace Outbridge.PyLite.Modules
             var buf = new byte[n];
             Rng.GetBytes(buf);
             return buf;
-        }
-
-        private static string Hex(byte[] data)
-        {
-            var sb = new StringBuilder(data.Length * 2);
-            foreach (byte b in data)
-                sb.Append(b.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
-            return sb.ToString();
         }
 
         // base64.urlsafe_b64encode without the '=' padding, as CPython's token_urlsafe

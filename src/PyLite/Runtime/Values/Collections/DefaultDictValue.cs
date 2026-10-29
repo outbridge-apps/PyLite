@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime.Errors;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
@@ -51,13 +52,10 @@ namespace Outbridge.PyLite.Runtime.Values
         private static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             IDictionary<string, SlotDescriptor> slots = DictMethods.BuildSlots();
-            slots["copy"] = SlotDescriptor.MakeMethod("copy", (self, a, kw, ctx) =>
+            slots["copy"] = SlotDescriptor.MakeMethod("copy", Args.Positional("copy", 0, 0, (self, a, kw, ctx) =>
             {
-                DefaultDictValue src = (DefaultDictValue)self;
-                DefaultDictValue r = ctx.Values.DefaultDict(src.DefaultFactory, src.Count);
-                DictMethods.Merge(ctx, r, src);
-                return r;
-            });
+                return ctx.Values.CopyDict((DefaultDictValue)self);
+            }));
             slots["default_factory"] = SlotDescriptor.MakeProperty("default_factory",
                 (self, ctx) =>
                 {

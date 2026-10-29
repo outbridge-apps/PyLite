@@ -163,29 +163,35 @@ namespace Outbridge.PyLite.Hosting
         internal static IReadOnlyDictionary<string, string> CollectScalarOutputs(DictValue globals,
             IReadOnlyList<string> names, EvalContext ctx)
         {
-            if (names == null || names.Count == 0)
-                return EmptyStringMap;
-
-            var result = new Dictionary<string, string>(StringComparer.Ordinal);
-            for (int i = 0; i < names.Count; i++)
+            return CollectOutputs(globals, names, ctx, (name, value, c) =>
             {
-                string name = names[i];
-                if (result.ContainsKey(name))
-                    continue;
-                ScriptValue value;
-                if (!globals.TryGet(ctx.Values.Str(name), ctx, out value))
-                    continue;
                 if (!IsScalarSerializable(value))
                     throw new HostMarshalFailure("output variable '" + name + "' is not serializable");
-                result[name] = value.Str(ctx);
-            }
-            return result;
+                return value.Str(c);
+            });
         }
 
         // Each declared JSON output is serialized by PyJson under the budget (compact, ensure_ascii=false,
         // allow_nan=false). A non-serializable value / NaN / cycle is a HostMarshalFailure.
         internal static IReadOnlyDictionary<string, string> CollectJsonOutputs(DictValue globals,
             IReadOnlyList<string> names, EvalContext ctx)
+        {
+            return CollectOutputs(globals, names, ctx, (name, value, c) =>
+            {
+                try
+                {
+                    return PyJson.Dump(c, value, JsonDumpOptions.MarshalDefault);
+                }
+                catch (ScriptException se)
+                {
+                    throw new HostMarshalFailure("output variable '" + name + "' is not serializable: "
+                        + se.Value.GetMessageText(c));
+                }
+            });
+        }
+
+        private static IReadOnlyDictionary<string, string> CollectOutputs(DictValue globals,
+            IReadOnlyList<string> names, EvalContext ctx, Func<string, ScriptValue, EvalContext, string> encode)
         {
             if (names == null || names.Count == 0)
                 return EmptyStringMap;
@@ -197,17 +203,8 @@ namespace Outbridge.PyLite.Hosting
                 if (result.ContainsKey(name))
                     continue;
                 ScriptValue value;
-                if (!globals.TryGet(ctx.Values.Str(name), ctx, out value))
-                    continue;
-                try
-                {
-                    result[name] = PyJson.Dump(ctx, value, JsonDumpOptions.MarshalDefault);
-                }
-                catch (ScriptException se)
-                {
-                    throw new HostMarshalFailure("output variable '" + name + "' is not serializable: "
-                        + se.Value.GetMessageText(ctx));
-                }
+                if (globals.TryGet(ctx.Values.Str(name), ctx, out value))
+                    result[name] = encode(name, value, ctx);
             }
             return result;
         }

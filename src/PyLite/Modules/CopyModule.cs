@@ -11,21 +11,15 @@ namespace Outbridge.PyLite.Modules
     // copy: copy.copy (shallow), copy.deepcopy (iterative), copy.Error.
     // A single switch over the concrete value type; immutables return themselves, mutable containers are
     // shallow-cloned into the correct subtype with metadata preserved (default_factory, maxlen, order).
-    public static partial class CopyModule
+    internal static partial class CopyModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["copy"] = BuiltinFunctionValue.Make("copy", CopyFn);
             m["deepcopy"] = BuiltinFunctionValue.Make("deepcopy", DeepCopyFn);
-            m["Error"] = ErrorType();
+            m["Error"] = ModuleKit.ExceptionClass(PyExceptionTypes.CopyError);
             return ctx.Values.Module("copy", m);
-        }
-
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.CopyError, args);
-            return TypeValue.Make("Error", ctor, null, null, PyExceptionTypes.CopyError);
         }
 
         private static ScriptValue CopyFn(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -61,20 +55,13 @@ namespace Outbridge.PyLite.Modules
 
         internal static ListValue CloneList(EvalContext ctx, ListValue src)
         {
-            ListValue dst = ctx.Values.List(src.Items.Count);
-            for (int i = 0; i < src.Items.Count; i++)
-                dst.Add(src.Items[i], ctx);
-            return dst;
+            return ListMethods.CopyList(ctx, src);
         }
 
+        // A set's table is cloned structurally, as set.copy does (no rehash).
         internal static SetValue CloneSet(EvalContext ctx, SetValue src)
         {
-            SetValue dst = ctx.Values.Set(src.Count);
-            IScriptIterator it = PyOps.GetIterator(src, ctx);
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-                dst.AddItem(v, ctx);
-            return dst;
+            return ctx.Values.Set(src.Table.CloneShallow(ctx));
         }
 
         // Empty clone of the same dict subtype, metadata preserved (factory by reference, order).
@@ -91,15 +78,7 @@ namespace Outbridge.PyLite.Modules
 
         internal static ScriptValue CloneDict(EvalContext ctx, DictValue src)
         {
-            DictValue dst = NewSameDict(ctx, src);
-            for (int p = 0; p < src.Table.EntriesUsed; p++)
-            {
-                long h;
-                ScriptValue k, v;
-                if (src.Table.TryGetEntryAt(p, out h, out k, out v))
-                    dst.SetItem(k, v, ctx);
-            }
-            return dst;
+            return ctx.Values.CopyDict(src);
         }
     }
 }

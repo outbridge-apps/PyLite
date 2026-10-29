@@ -44,6 +44,7 @@ namespace Outbridge.PyLite.Syntax
             char q = Cur;
             bool triple = At(_pos + 1) == q && At(_pos + 2) == q;
             _pos += triple ? 3 : 1;
+            int contentStart = _pos;
             var bytes = new System.Collections.Generic.List<byte>();
             while (true)
             {
@@ -57,7 +58,7 @@ namespace Outbridge.PyLite.Syntax
                 }
                 if (c == '\\' && !raw)
                 {
-                    CookByteEscape(bytes, triple, line0, col0);
+                    CookByteEscape(bytes, triple, line0, col0, contentStart);
                     continue;
                 }
                 if (c == '\n' || c == '\r')
@@ -74,9 +75,10 @@ namespace Outbridge.PyLite.Syntax
             return Emit(TokenKind.BytesLiteral, null, bytes.ToArray(), line0, col0);
         }
 
-        private void CookByteEscape(System.Collections.Generic.List<byte> bytes, bool triple, int line0, int col0)
+        private void CookByteEscape(System.Collections.Generic.List<byte> bytes, bool triple, int line0, int col0,
+            int contentStart)
         {
-            _pos++;   // '\'
+            int bs = _pos++;   // '\'
             char c = Cur;
             if (c == '\0')
                 throw Unterminated(triple, line0, col0);
@@ -85,44 +87,78 @@ namespace Outbridge.PyLite.Syntax
                 ConsumeNewline();
                 return;
             }
+            int simple = SimpleEscape(c);
+            if (simple >= 0)
+            {
+                _pos++;
+                AddByte(bytes, (byte)simple, line0, col0);
+                return;
+            }
+            if (c == 'x')
+            {
+                _pos++;
+                long v = ReadHex(2);
+                if (v < 0)   // the position counts from the literal's body, as CPython's escape_decode does
+                    throw PySyntaxErrorException.Syntax("(value error) invalid \\x escape at position "
+                        + (bs - contentStart), line0, col0);
+                AddByte(bytes, (byte)v, line0, col0);
+                return;
+            }
+            if (c >= '0' && c <= '7')
+            {
+                AddByte(bytes, (byte)(ReadOctal() & 0xFF), line0, col0);
+                return;
+            }
+            AddByte(bytes, (byte)'\\', line0, col0);   // unknown escape: keep backslash + char
+            AddByte(bytes, (byte)c, line0, col0);
+            _pos++;
+        }
+
+        // The one-character escapes str and bytes literals share; -1 for any other character.
+        private static int SimpleEscape(char c)
+        {
             switch (c)
             {
-                case '\\': _pos++; AddByte(bytes, (byte)'\\', line0, col0); return;
-                case '\'': _pos++; AddByte(bytes, (byte)'\'', line0, col0); return;
-                case '"': _pos++; AddByte(bytes, (byte)'"', line0, col0); return;
-                case 'a': _pos++; AddByte(bytes, 7, line0, col0); return;
-                case 'b': _pos++; AddByte(bytes, 8, line0, col0); return;
-                case 'f': _pos++; AddByte(bytes, 12, line0, col0); return;
-                case 'n': _pos++; AddByte(bytes, (byte)'\n', line0, col0); return;
-                case 'r': _pos++; AddByte(bytes, (byte)'\r', line0, col0); return;
-                case 't': _pos++; AddByte(bytes, (byte)'\t', line0, col0); return;
-                case 'v': _pos++; AddByte(bytes, 11, line0, col0); return;
-                case 'x':
-                    _pos++;
-                    int hi = HexVal(Cur), lo = HexVal(At(_pos + 1));
-                    if (hi < 0 || lo < 0)
-                        throw PySyntaxErrorException.Syntax("invalid \\x escape at position " + _pos, line0, col0);
-                    _pos += 2;
-                    AddByte(bytes, (byte)(hi * 16 + lo), line0, col0);
-                    return;
-                default:
-                    if (c >= '0' && c <= '7')
-                    {
-                        int v = 0, k = 0;
-                        while (k < 3 && Cur >= '0' && Cur <= '7')
-                        {
-                            v = v * 8 + (Cur - '0');
-                            _pos++;
-                            k++;
-                        }
-                        AddByte(bytes, (byte)(v & 0xFF), line0, col0);
-                        return;
-                    }
-                    AddByte(bytes, (byte)'\\', line0, col0);   // unknown escape: keep backslash + char
-                    AddByte(bytes, (byte)c, line0, col0);
-                    _pos++;
-                    return;
+                case '\\': return '\\';
+                case '\'': return '\'';
+                case '"': return '"';
+                case 'a': return 7;
+                case 'b': return 8;
+                case 'f': return 12;
+                case 'n': return '\n';
+                case 'r': return '\r';
+                case 't': return '\t';
+                case 'v': return 11;
+                default: return -1;
             }
+        }
+
+        // Up to three octal digits at the cursor.
+        private int ReadOctal()
+        {
+            int v = 0, k = 0;
+            while (k < 3 && Cur >= '0' && Cur <= '7')
+            {
+                v = v * 8 + (Cur - '0');
+                _pos++;
+                k++;
+            }
+            return v;
+        }
+
+        // Exactly `count` hex digits at the cursor, or -1 with the cursor on the first non-digit.
+        private long ReadHex(int count)
+        {
+            long v = 0;
+            for (int k = 0; k < count; k++)
+            {
+                int d = HexVal(Cur);
+                if (d < 0)
+                    return -1;
+                v = v * 16 + d;
+                _pos++;
+            }
+            return v;
         }
 
         private void AddByte(System.Collections.Generic.List<byte> bytes, byte b, int line0, int col0)
@@ -198,42 +234,28 @@ namespace Outbridge.PyLite.Syntax
                 ConsumeNewline();
                 return;
             }
+            int simple = SimpleEscape(c);
+            if (simple >= 0)
+            {
+                _pos++;
+                AppendChar((char)simple, line0, col0);
+                return;
+            }
             switch (c)
             {
-                case '\\': _pos++; AppendChar('\\', line0, col0); return;
-                case '\'': _pos++; AppendChar('\'', line0, col0); return;
-                case '"': _pos++; AppendChar('"', line0, col0); return;
-                case 'a': _pos++; AppendChar('\a', line0, col0); return;
-                case 'b': _pos++; AppendChar('\b', line0, col0); return;
-                case 'f': _pos++; AppendChar('\f', line0, col0); return;
-                case 'n': _pos++; AppendChar('\n', line0, col0); return;
-                case 'r': _pos++; AppendChar('\r', line0, col0); return;
-                case 't': _pos++; AppendChar('\t', line0, col0); return;
-                case 'v': _pos++; AppendChar('\v', line0, col0); return;
                 case 'x': _pos++; CookHex(2, "\\xXX", bs, contentStart, line0, col0); return;
                 case 'u': _pos++; CookHex(4, "\\uXXXX", bs, contentStart, line0, col0); return;
-                case 'U': _pos++; CookHexU(bs, contentStart, line0, col0); return;
+                case 'U': _pos++; CookHex(8, "\\UXXXXXXXX", bs, contentStart, line0, col0); return;
                 case 'N': _pos++; CookNamed(bs, contentStart, line0, col0); return;
-                default:
-                    if (c >= '0' && c <= '7')
-                    {
-                        CookOctal(line0, col0);
-                        return;
-                    }
-                    AppendChar('\\', line0, col0); AppendChar(c, line0, col0); _pos++; return;
             }
-        }
-
-        private void CookOctal(int line0, int col0)
-        {
-            int v = 0, k = 0;
-            while (k < 3 && Cur >= '0' && Cur <= '7')
+            if (c >= '0' && c <= '7')
             {
-                v = v * 8 + (Cur - '0');
-                _pos++;
-                k++;
+                AppendChar((char)ReadOctal(), line0, col0);
+                return;
             }
-            AppendChar((char)v, line0, col0);
+            AppendChar('\\', line0, col0);   // unknown escape: keep backslash + char
+            AppendChar(c, line0, col0);
+            _pos++;
         }
 
         // \N{NAME}: a named sequence resolves to more than one character, so the lookup answers with a
@@ -260,38 +282,21 @@ namespace Outbridge.PyLite.Syntax
                 AppendChar(ch, line0, col0);
         }
 
+        // \xXX, \uXXXX, \UXXXXXXXX: only the eight-digit form can leave the BMP or the code space.
         private void CookHex(int count, string kind, int bs, int contentStart, int line0, int col0)
         {
-            int v = 0;
-            for (int k = 0; k < count; k++)
-            {
-                int d = HexVal(Cur);
-                if (d < 0)
-                    throw UnicodeError("truncated " + kind + " escape", bs, contentStart, line0, col0);
-                v = v * 16 + d;
-                _pos++;
-            }
-            AppendChar((char)v, line0, col0);
-        }
-
-        private void CookHexU(int bs, int contentStart, int line0, int col0)
-        {
-            int v = 0;
-            for (int k = 0; k < 8; k++)
-            {
-                int d = HexVal(Cur);
-                if (d < 0)
-                    throw UnicodeError("truncated \\UXXXXXXXX escape", bs, contentStart, line0, col0);
-                v = v * 16 + d;
-                _pos++;
-            }
+            long v = ReadHex(count);
+            if (v < 0)
+                throw UnicodeError("truncated " + kind + " escape", bs, contentStart, line0, col0);
             if (v > 0x10FFFF)
                 throw UnicodeError("illegal Unicode character", bs, contentStart, line0, col0);
             if (v <= 0xFFFF)
+            {
                 AppendChar((char)v, line0, col0);
-            else
-                foreach (char ch in char.ConvertFromUtf32(v))
-                    AppendChar(ch, line0, col0);
+                return;
+            }
+            AppendChar((char)(0xD800 + ((v - 0x10000) >> 10)), line0, col0);
+            AppendChar((char)(0xDC00 + ((v - 0x10000) & 0x3FF)), line0, col0);
         }
 
         private PySyntaxErrorException UnicodeError(string tail, int bs, int contentStart, int line0, int col0)

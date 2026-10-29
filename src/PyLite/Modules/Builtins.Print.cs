@@ -49,17 +49,22 @@ namespace Outbridge.PyLite.Modules
                 sb.Append(args[i].Str(c));   // Str charges through the value model
             }
             sb.Append(end);
-            string text = sb.ToString();
+            Emit(c, sb.ToString());
+            return c.Values.None;
+        }
+
+        // Text to the run's print output, exactly as print() writes it (also used by zipfile.printdir).
+        internal static void Emit(EvalContext c, string text)
+        {
             if (c.Out != null)
             {
                 c.Out.Write(text);   // host sink / buffered mode + line splitting + output cap
-                return c.Values.None;
+                return;
             }
             c.Budget.ChargeOutput(2L * text.Length);
             if (c.PrintBuffer == null)
                 c.PrintBuffer = new StringBuilder();
             c.PrintBuffer.Append(text);
-            return c.Values.None;
         }
 
         private static string SepEnd(EvalContext c, ScriptValue val, string which, string dflt)

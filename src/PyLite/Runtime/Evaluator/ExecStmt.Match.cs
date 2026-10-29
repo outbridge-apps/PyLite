@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
     // PEP 634 structural pattern matching. The subject is evaluated once; cases are tried
     // top to bottom. A pattern binds its captures as it succeeds (CPython does not revert bindings on a
     // later failure). A guard runs only after its pattern matches; if it is false the next case is tried.
-    // No case matching is not an error (match falls through). Class patterns are rejected by the parser.
+    // No case matching is not an error (match falls through).
     internal sealed partial class Evaluator
     {
         private ExecSignal ExecMatch(MatchNode n, Environment env, EvalContext ctx)
@@ -68,6 +68,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             TypeValue tv = clsVal as TypeValue;
             if (tv != null)
                 return MatchBuiltinClass(cp, tv, subject, env, ctx);
+            EnumClassValue ec = clsVal as EnumClassValue;
+            if (ec != null)
+                return MatchEnumClass(cp, ec, subject, env, ctx);
             RecordClassValue rc = clsVal as RecordClassValue;
             if (rc == null)
                 throw Raise.TypeError(ctx, "called match pattern must be a class");
@@ -77,7 +80,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
             if (cp.Positional.Count > 0)
             {
-                string[] ma = rc.MatchArgs;
+                string[] ma = rc.EffectiveMatchArgs(ctx);
                 if (ma == null)
                     throw Raise.TypeError(ctx, rc.Name + "() accepts no positional sub-patterns");
                 if (cp.Positional.Count > ma.Length)
@@ -93,6 +96,31 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 ScriptValue attr;
                 if (!TryGetAttr(inst, cp.KwNames[i], ctx, out attr) || !TryMatch(cp.KwPatterns[i], attr, env, ctx))
+                    return false;
+            }
+            return true;
+        }
+
+        // case Color(): an isinstance check; keyword sub-patterns read .name/.value (no __match_args__).
+        private bool MatchEnumClass(ClassPattern cp, EnumClassValue ec, ScriptValue subject, Environment env, EvalContext ctx)
+        {
+            EnumMemberValue em = EnumClassValue.MemberOf(subject, ctx);
+            if (em == null || !em.Class.IsSubclassOf(ec))
+                return false;
+            if (cp.Positional.Count > 0)
+                throw Raise.TypeError(ctx, ec.Name + "() accepts 0 positional sub-patterns (" + cp.Positional.Count + " given)");
+            for (int i = 0; i < cp.KwNames.Count; i++)
+            {
+                ScriptValue attr;
+                try
+                {
+                    attr = em.GetAttribute(cp.KwNames[i], ctx);
+                }
+                catch (ScriptException ex) when (ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
+                {
+                    return false;   // a missing attribute fails the pattern, as in CPython
+                }
+                if (!TryMatch(cp.KwPatterns[i], attr, env, ctx))
                     return false;
             }
             return true;

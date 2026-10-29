@@ -153,12 +153,10 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             if (index.Kind == ValueKind.Int || index.Kind == ValueKind.Bool)
             {
-                BigInteger i = NumericOps.AsBigInteger(index);
-                if (i < 0)
-                    i += Data.Length;
-                if (i < 0 || i >= Data.Length)
+                int i;
+                if (!SequenceOps.TryNormIndex(index, Data.Length, out i))
                     throw Raise.IndexError(ctx, "index out of range");
-                return ctx.Values.Int(Data[(int)i]);
+                return ctx.Values.Int(Data[i]);
             }
             throw Raise.TypeError(ctx, "byte indices must be integers");
         }
@@ -190,8 +188,8 @@ namespace Outbridge.PyLite.Runtime.Values
                 else
                 {
                     sb.Append("\\x");
-                    sb.Append("0123456789abcdef"[b >> 4]);
-                    sb.Append("0123456789abcdef"[b & 0xF]);
+                    sb.Append(Modules.Support.Hex.Digit(b >> 4));
+                    sb.Append(Modules.Support.Hex.Digit(b & 0xF));
                 }
             }
             sb.Append(quote);
@@ -201,11 +199,28 @@ namespace Outbridge.PyLite.Runtime.Values
     internal sealed class BytesIterator : ScriptIteratorBase
     {
         private readonly BytesValue _b;
-        private int _pos;
-        internal BytesIterator(BytesValue b) { _b = b; }
+        private readonly bool _reverse;
+        private int _pos;   // forward: the next index; reverse: the count still to yield
+
+        internal BytesIterator(BytesValue b, bool reverse = false)
+        {
+            _b = b;
+            _reverse = reverse;
+            _pos = reverse ? b.Data.Length : 0;
+        }
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
+            if (_reverse)
+            {
+                if (_pos > 0)
+                {
+                    value = ctx.Values.Int(_b.Data[--_pos]);
+                    return true;
+                }
+                value = null;
+                return false;
+            }
             if (_pos < _b.Data.Length)
             {
                 value = ctx.Values.Int(_b.Data[_pos]);

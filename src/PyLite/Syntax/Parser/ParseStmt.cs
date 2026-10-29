@@ -45,13 +45,14 @@ namespace Outbridge.PyLite.Syntax
                         into.Add(ParseFuncDef());
                         return;
                     case TokenKind.At:
-                        into.Add(ParseDecorated());
+                        ParseDecorated(into);
                         return;
                     case TokenKind.KwClass:
-                        into.Add(ParseClassDef());
+                        ParseClassDef(into, AstList.Empty<ExprNode>());
                         return;
                     case TokenKind.KwWith:
-                        throw Forbidden("with");
+                        ParseWith(into);
+                        return;
                     case TokenKind.KwAsync:
                         throw Forbidden("async");
                     default:

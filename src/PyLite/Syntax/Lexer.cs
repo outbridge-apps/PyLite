@@ -394,12 +394,18 @@ namespace Outbridge.PyLite.Syntax
                 case '(': _parenDepth++; return Op(1, TokenKind.LeftParen, line0, col0);
                 case '[': _parenDepth++; return Op(1, TokenKind.LeftBracket, line0, col0);
                 case '{': _parenDepth++; return Op(1, TokenKind.LeftBrace, line0, col0);
-                case ')': if (_parenDepth > 0)
-                    _parenDepth--; return Op(1, TokenKind.RightParen, line0, col0);
-                case ']': if (_parenDepth > 0)
-                    _parenDepth--; return Op(1, TokenKind.RightBracket, line0, col0);
-                case '}': if (_parenDepth > 0)
-                    _parenDepth--; return Op(1, TokenKind.RightBrace, line0, col0);
+                case ')':
+                    if (_parenDepth > 0)
+                        _parenDepth--;
+                    return Op(1, TokenKind.RightParen, line0, col0);
+                case ']':
+                    if (_parenDepth > 0)
+                        _parenDepth--;
+                    return Op(1, TokenKind.RightBracket, line0, col0);
+                case '}':
+                    if (_parenDepth > 0)
+                        _parenDepth--;
+                    return Op(1, TokenKind.RightBrace, line0, col0);
                 case ',': return Op(1, TokenKind.Comma, line0, col0);
                 case ':': return c1 == '=' ? Op(2, TokenKind.ColonEqual, line0, col0) : Op(1, TokenKind.Colon, line0, col0);
                 case ';': return Op(1, TokenKind.Semicolon, line0, col0);

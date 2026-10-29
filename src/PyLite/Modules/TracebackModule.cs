@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // format_exception/format_exception_only take an exception object (3.10+ signature). print_* write
     // to the script's print sink. There is no traceback object, so the (type, value, tb) triple, the
     // limit argument and extract_tb/walk_tb are absent.
-    public static class TracebackModule
+    internal static class TracebackModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -117,16 +117,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Print(EvalContext ctx, string text)
         {
-            // the same two routes as print(): the host sink, or the buffer of an unhosted run
-            if (ctx.Out != null)
-                ctx.Out.Write(text);
-            else
-            {
-                ctx.Budget.ChargeOutput(2L * text.Length);
-                if (ctx.PrintBuffer == null)
-                    ctx.PrintBuffer = new System.Text.StringBuilder();
-                ctx.PrintBuffer.Append(text);
-            }
+            Builtins.Emit(ctx, text);   // print()'s route: the host sink, or the buffer of an unhosted run
             return ctx.Values.None;
         }
     }

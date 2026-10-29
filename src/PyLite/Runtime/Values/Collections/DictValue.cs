@@ -134,12 +134,8 @@ namespace Outbridge.PyLite.Runtime.Values
         private static SetValue FromIterable(ScriptValue src, EvalContext ctx)
         {
             var t = new OrderedTable(ctx, 8);
-            IScriptIterator it = PyOps.GetIterator(src, ctx);
-            ScriptValue cur;
-            while (it.MoveNext(ctx, out cur))
-                t.InsertOrUpdate(cur, PyOps.Hash(cur, ctx, 0), null, ctx, 0);
-            ctx.Budget.ChargeAllocation(32);
-            return new SetValue(t);
+            SetOps.AddAll(t, src, ctx);
+            return ctx.Values.Set(t);
         }
 
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth)

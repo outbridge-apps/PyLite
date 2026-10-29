@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime.Errors;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
     // xml.etree.ElementTree.ElementTree: a root holder. find/findall/findtext/iter/iterfind delegate to
-    // the root as in CPython; write() takes a text sink with .write() (io.StringIO) and encoding='unicode',
-    // since there are no files in this dialect.
+    // the root as in CPython; write() takes a sink with .write(): str for encoding='unicode' (io.StringIO),
+    // bytes otherwise (io.BytesIO), since there are no files in this dialect.
     internal sealed class ElementTreeValue : ScriptValue
     {
         internal static readonly ScriptTypeInfo TreeType = new ScriptTypeInfo("xml.etree.ElementTree.ElementTree", BuildSlots());
@@ -42,8 +43,6 @@ namespace Outbridge.PyLite.Runtime.Values
             bool shortEmpty = true;
             if (kw.TryGet("short_empty_elements", out v) && v.Kind != ValueKind.None)
                 shortEmpty = v.IsTruthy(ctx);
-            if (!string.Equals(enc, "unicode", StringComparison.Ordinal))
-                throw Raise.TypeError(ctx, "write() supports only encoding='unicode' into a text sink in this dialect");
             ScriptValue text = Modules.XmlModule.Serialize(ctx, RequireRoot(ctx, "write"), enc, declare,
                 Modules.XmlModule.Method(ctx, kw), shortEmpty);
             ScriptValue sink = PyOps.GetAttr(a[0], "write", ctx);
@@ -51,28 +50,22 @@ namespace Outbridge.PyLite.Runtime.Values
             return ctx.Values.None;
         }
 
-        private static string EncArg(EvalContext ctx, ScriptValue v)
-        {
-            StrValue s = v as StrValue;
-            if (s == null)
-                throw Raise.TypeError(ctx, "write() argument 'encoding' must be str, not " + v.PyTypeName);
-            return s.Value;
-        }
+        private static string EncArg(EvalContext ctx, ScriptValue v) { return Coerce.ToStr(ctx, v, "write() argument 'encoding'"); }
 
         private static Dictionary<string, SlotDescriptor> BuildSlots()
         {
             return new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal)
             {
-                ["getroot"] = SlotDescriptor.MakeMethod("getroot", (self, a, kw, c) =>
+                ["getroot"] = SlotDescriptor.MakeMethod("getroot", Args.Positional("getroot", 0, 0, (self, a, kw, c) =>
                 {
                     ElementValue r = ((ElementTreeValue)self).Root;
                     return r == null ? (ScriptValue)c.Values.None : r;
-                }),
-                ["_setroot"] = SlotDescriptor.MakeMethod("_setroot", (self, a, kw, c) =>
+                })),
+                ["_setroot"] = SlotDescriptor.MakeMethod("_setroot", Args.Positional("_setroot", 1, 1, (self, a, kw, c) =>
                 {
                     ((ElementTreeValue)self).Root = (ElementValue)ElementValue.RequireElement(c, a.Length > 0 ? a[0] : c.Values.None);
                     return c.Values.None;
-                }),
+                })),
                 ["find"] = SlotDescriptor.MakeMethod("find", (self, a, kw, c) => ElementXPath.TreeFind(((ElementTreeValue)self).RequireRoot(c, "find"), a, kw, c)),
                 ["findall"] = SlotDescriptor.MakeMethod("findall", (self, a, kw, c) => ElementXPath.TreeFindAll(((ElementTreeValue)self).RequireRoot(c, "findall"), a, kw, c)),
                 ["findtext"] = SlotDescriptor.MakeMethod("findtext", (self, a, kw, c) => ElementXPath.TreeFindText(((ElementTreeValue)self).RequireRoot(c, "findtext"), a, kw, c)),

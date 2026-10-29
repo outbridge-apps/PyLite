@@ -45,11 +45,23 @@ modules `Lib/bisect.py`, `Lib/calendar.py`, `Lib/copyreg.py`, `Lib/csv.py`, `Lib
 named character references), `Lib/statistics.py`, `Lib/_strptime.py`, `Lib/textwrap.py` and
 `Lib/urllib/parse.py`.
 
+Two modules are Python source taken nearly verbatim from CPython 3.12 and run by the engine:
+`src/PyLite/Modules/Python/string_template.py` (`string.Template`, from `Lib/string.py`) and
+`src/PyLite/Modules/Python/email_utils.py` (the date helpers of `email.utils`, from
+`Lib/email/utils.py` and `Lib/email/_parseaddr.py`).
+
+The conformance cases under `conformance/cases` are adapted from CPython's test suite
+(`Lib/test`).
+
 Summary of the changes made, as the license asks: the algorithms were rewritten in C# over
 PyLite's own value model and resource budget (every loop is charged against a step, time and
 memory limit), the C implementations were replaced by managed code with no native dependencies,
 and behaviour that depends on CPython internals (object identity, reference counting, the exact
-float repr algorithm) was replaced by documented equivalents.
+float repr algorithm) was replaced by documented equivalents. In the two Python modules,
+`Template` builds its pattern when a template is first used instead of in `__init_subclass__`,
+and `email.utils` keeps only the date functions, taking the time and the
+local zone from the engine clock instead of the machine. The conformance cases were cut to the
+dialect, with `unittest` classes turned into plain `assert` statements.
 
 ```
 Copyright (c) 2001 Python Software Foundation; All Rights Reserved

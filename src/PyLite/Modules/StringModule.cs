@@ -8,9 +8,10 @@ using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
 {
-    // string: the constants and capwords(). Template and Formatter are not here - the record-class
-    // dialect has no class to subclass them with, and str.format covers the formatting.
-    public static class StringModule
+    // string: the constants, capwords() and Template. Template is written in the dialect itself
+    // (Modules/Python/string_template.py, compiled once per process, run in each run that imports string),
+    // so a script subclasses it like any class. No Formatter: str.format covers the formatting.
+    internal static class StringModule
     {
         private const string Lower = "abcdefghijklmnopqrstuvwxyz";
         private const string Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -33,6 +34,8 @@ namespace Outbridge.PyLite.Modules
                 ["whitespace"] = ctx.Values.Str(Whitespace),
                 ["capwords"] = BuiltinFunctionValue.Make("capwords", Capwords),
             };
+            ModuleValue template = PythonSourceModules.Load(ctx, "Outbridge.PyLite.string_template.py", "string");
+            m["Template"] = template.Members["Template"];
             return ctx.Values.Module("string", m);
         }
 

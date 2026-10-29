@@ -48,8 +48,27 @@ namespace Outbridge.PyLite.Runtime.Values
         internal ScriptValue GetItem(ScriptValue index, EvalContext ctx)
         {
             if (index.Kind == ValueKind.Slice)
-                return ctx.Values.ListFrom(new List<ScriptValue>(SequenceOps.Slice(new ListSeq(Items), (SliceValue)index, ctx)));
+                return ctx.Values.ListFrom(SliceList((SliceValue)index, ctx));
             return Items[NormIndex(index, ctx)];
+        }
+
+        // One copy into the new list (P5): a contiguous slice is GetRange, a stepped one is filled in place.
+        private List<ScriptValue> SliceList(SliceValue sl, EvalContext ctx)
+        {
+            SliceIndices ind = sl.Indices(Items.Count, ctx);
+            int len = (int)ind.Length;
+            if (len == 0)
+                return new List<ScriptValue>(0);
+            int idx = (int)ind.Start, step = ind.StepInt;
+            if (step == 1)
+                return Items.GetRange(idx, len);
+            var r = new List<ScriptValue>(len);
+            for (int k = 0; k < len; k++)
+            {
+                r.Add(Items[idx]);
+                idx += step;
+            }
+            return r;
         }
 
         internal void SetItem(ScriptValue index, ScriptValue value, EvalContext ctx)
@@ -167,18 +186,24 @@ namespace Outbridge.PyLite.Runtime.Values
             int start = (int)ind.Start, step = ind.StepInt, len = (int)ind.Length;
             if (len == 0)
                 return;
+            ctx.Budget.ChargeLinear(Items.Count - System.Math.Min(start, start + (len - 1L) * step));
             if (step == 1)
             {
                 Items.RemoveRange(start, len);
                 return;
             }
-            // remove in descending index order
-            if (step > 0)
-                for (int k = len - 1; k >= 0; k--)
-                    Items.RemoveAt(start + k * step);
-            else
-                for (int k = 0; k < len; k++)
-                    Items.RemoveAt(start + k * step);
+            // One compaction pass from the lowest removed index (a RemoveAt per element was quadratic).
+            int lo = step > 0 ? start : start + (len - 1) * step;
+            int stride = step > 0 ? step : -step;
+            int hi = lo + (len - 1) * stride;
+            int w = lo;
+            for (int r = lo; r < Items.Count; r++)
+            {
+                if (r <= hi && (r - lo) % stride == 0)
+                    continue;
+                Items[w++] = Items[r];
+            }
+            Items.RemoveRange(w, Items.Count - w);
         }
 
         private static List<ScriptValue> Materialize(ScriptValue rhs, EvalContext ctx)

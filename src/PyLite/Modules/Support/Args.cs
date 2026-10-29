@@ -96,6 +96,59 @@ namespace Outbridge.PyLite.Modules.Support
                 throw Raise.TypeError(c, f + "() takes no keyword arguments");
         }
 
+        // Parameters a caller may pass positionally or by name (groups(default=...)): at most names.Length
+        // of them, an unknown or repeated keyword refused; returns them positionally.
+        public static ScriptValue[] Named(EvalContext c, ScriptValue[] a, KwArgs kw, string f, params string[] names)
+        {
+            ScriptValue[] r = StrMethods.WithKw(c, a, kw, f, names);
+            AtMost(c, r, f, names.Length);
+            return r;
+        }
+
+        // A builtin or method of min..max positional arguments and no keywords, registered outside Slots
+        // (BuiltinFunctionValue.Make, SlotDescriptor.MakeMethod): both are checked before the body, so
+        // neither a keyword nor an extra argument is dropped silently.
+        public static BuiltinDelegate Positional(string f, int min, int max, BuiltinDelegate fn)
+        {
+            return (self, a, kw, c) =>
+            {
+                if (kw.Count != 0 || a.Length < min || a.Length > max)
+                {
+                    NoKw(c, kw, f);
+                    CheckPositional(c, a, f, min, max);
+                }
+                return fn(self, a, kw, c);
+            };
+        }
+
+        // A positional-only C function's arity in the wording Argument Clinic gives it: no parameter is
+        // METH_NOARGS and one is METH_O ("f() takes no arguments / exactly one argument (N given)");
+        // any other range is _PyArg_CheckPositional's (Unpack below).
+        public static void CheckPositional(EvalContext c, ScriptValue[] a, string f, int min, int max)
+        {
+            if (max == 0)
+                None(c, a, f);
+            else if (min == 1 && max == 1)
+                Exactly(c, a, f, 1);
+            else
+                Unpack(c, a, f, min, max);
+        }
+
+        // CPython's _PyArg_CheckPositional wording, used by builtins that unpack their own arguments:
+        // "<f> expected [at least |at most ]N argument(s), got M", naming the bound actually crossed.
+        public static void Unpack(EvalContext c, ScriptValue[] a, string f, int min, int max)
+        {
+            if (a.Length < min)
+                throw UnpackError(c, f, min == max ? "" : "at least ", min, a.Length);
+            if (a.Length > max)
+                throw UnpackError(c, f, min == max ? "" : "at most ", max, a.Length);
+        }
+
+        public static ScriptException UnpackError(EvalContext c, string f, string bound, int n, int got)
+        {
+            return Raise.TypeError(c, f + " expected " + bound + n + " argument" + (n == 1 ? "" : "s") + ", got " + got);
+        }
+
         // The exceptions themselves, for a binder that finds the miss its own way (ArgSpec).
         public static ScriptException NoneError(EvalContext c, string f, int got)
         {

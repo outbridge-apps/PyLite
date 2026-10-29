@@ -26,12 +26,50 @@ namespace Outbridge.PyLite.Modules.Support
         // not overflow the (int) cast — both would otherwise leak a C# exception as an engine fault.
         internal static int ToInt32(EvalContext ctx, ScriptValue v, string context)
         {
-            BigInteger b = ToIndex(ctx, v, context);
-            if (b > int.MaxValue)
-                return int.MaxValue;
-            if (b < int.MinValue)
-                return int.MinValue;
-            return (int)b;
+            return Clamp32(ToIndex(ctx, v, context));
+        }
+
+        internal static int Clamp32(BigInteger b)
+        {
+            return b > int.MaxValue ? int.MaxValue : b < int.MinValue ? int.MinValue : (int)b;
+        }
+
+        // int|bool|float -> double with an unchecked cast (a huge int becomes inf; a caller that cares
+        // checks it). With `rationals`, a Fraction or Decimal converts too, as statistics answers them.
+        internal static bool TryToReal(EvalContext ctx, ScriptValue v, bool rationals, out double d)
+        {
+            switch (v)
+            {
+                case FloatValue fv: d = fv.Value; return true;
+                case IntValue iv: d = (double)iv.Value; return true;
+                case BoolValue bv: d = bv.Value ? 1.0 : 0.0; return true;
+            }
+            if (rationals)
+            {
+                FractionValue fr = v as FractionValue;
+                if (fr != null)
+                {
+                    d = fr.AsDouble(ctx);
+                    return true;
+                }
+                DecimalValue dv = v as DecimalValue;
+                if (dv != null)
+                {
+                    d = (double)dv.Value;
+                    return true;
+                }
+            }
+            d = 0;
+            return false;
+        }
+
+        // A str argument's text; anything else is "<what> must be str, not <type>".
+        internal static string ToStr(EvalContext ctx, ScriptValue v, string what)
+        {
+            StrValue s = v as StrValue;
+            if (s == null)
+                throw Raise.TypeError(ctx, what + " must be str, not " + v.PyTypeName);
+            return s.Value;
         }
 
         // int|bool -> int as CPython's C-level converters answer: a value past the range is an OverflowError

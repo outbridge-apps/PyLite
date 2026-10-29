@@ -39,12 +39,23 @@ namespace Outbridge.PyLite.Syntax
         public readonly Dictionary<string, int> FreeSlot = new Dictionary<string, int>(System.StringComparer.Ordinal);
         public readonly List<string> LocalNames = new List<string>();
 
-        public void Bind(string n) { if (Bound.Add(n))
-            BoundOrder.Add(n); }
-        public void AddCell(string n) { if (CellVars.Add(n))
-            CellOrder.Add(n); }
-        public void AddFree(string n) { if (FreeVars.Add(n))
-            FreeOrder.Add(n); }
+        public void Bind(string n)
+        {
+            if (Bound.Add(n))
+                BoundOrder.Add(n);
+        }
+
+        public void AddCell(string n)
+        {
+            if (CellVars.Add(n))
+                CellOrder.Add(n);
+        }
+
+        public void AddFree(string n)
+        {
+            if (FreeVars.Add(n))
+                FreeOrder.Add(n);
+        }
 
         public bool IsFunctionLike { get { return Kind != ScopeKind.Module; } }
     }

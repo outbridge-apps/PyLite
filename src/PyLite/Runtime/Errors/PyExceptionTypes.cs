@@ -76,6 +76,10 @@ namespace Outbridge.PyLite.Runtime.Errors
         // zlib.error / gzip.BadGzipFile (an OSError, as in CPython).
         public static readonly PyExceptionType ZlibError;
         public static readonly PyExceptionType BadGzipFile;
+        // zipfile.BadZipFile / zipfile.LargeZipFile, and the builtin EOFError a truncated member raises.
+        public static readonly PyExceptionType BadZipFile;
+        public static readonly PyExceptionType LargeZipFile;
+        public static readonly PyExceptionType EOFError;
 
         private static readonly PyExceptionType[] AllArr;
         private static readonly Dictionary<string, PyExceptionType> ByName;
@@ -122,6 +126,9 @@ namespace Outbridge.PyLite.Runtime.Errors
             CsvError = new PyExceptionType("Error", Exception_);           // csv.Error
             ZlibError = new PyExceptionType("error", Exception_);          // zlib.error
             BadGzipFile = new PyExceptionType("BadGzipFile", OSError);      // gzip.BadGzipFile
+            BadZipFile = new PyExceptionType("BadZipFile", Exception_);     // zipfile.BadZipFile
+            LargeZipFile = new PyExceptionType("LargeZipFile", Exception_); // zipfile.LargeZipFile
+            EOFError = new PyExceptionType("EOFError", Exception_);
             ZoneInfoNotFoundError = new PyExceptionType("ZoneInfoNotFoundError", KeyError);   // zoneinfo
             IllegalMonthError = new PyExceptionType("IllegalMonthError", ValueError);          // calendar
             IllegalWeekdayError = new PyExceptionType("IllegalWeekdayError", ValueError);      // calendar
@@ -132,7 +139,7 @@ namespace Outbridge.PyLite.Runtime.Errors
                 FloatingPointError, AssertionError, AttributeError, ImportError, OSError, LookupError,
                 IndexError, KeyError, NameError, UnboundLocalError, RuntimeError, RecursionError,
                 NotImplementedError, StopIteration, TypeError, ValueError, UnicodeError, UnicodeDecodeError,
-                UnicodeEncodeError, StatisticsError, JSONDecodeError, SyntaxError
+                UnicodeEncodeError, StatisticsError, JSONDecodeError, SyntaxError, EOFError
             };
             ByName = new Dictionary<string, PyExceptionType>(StringComparer.Ordinal);
             foreach (PyExceptionType t in AllArr)

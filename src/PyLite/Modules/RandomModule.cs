@@ -24,31 +24,35 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["seed"] = Fn("seed", Seed),
-                ["random"] = Fn("random", (c, a) => c.Values.Float(Rand(c).NextDouble())),
-                ["getrandbits"] = Fn("getrandbits", (c, a) => c.Values.Int(GetRandBits(c, a))),
-                ["randrange"] = Fn("randrange", (c, a) => c.Values.Int(RandRange(c, a))),
-                ["randint"] = Fn("randint", RandInt),
-                ["choice"] = Fn("choice", Choice),
-                ["shuffle"] = Fn("shuffle", Shuffle),
+                ["seed"] = Fn("seed", 0, 2, Seed),
+                ["random"] = Fn("random", 0, 0, (c, a) => c.Values.Float(Rand(c).NextDouble())),
+                ["getrandbits"] = Fn("getrandbits", 1, 1, (c, a) => c.Values.Int(GetRandBits(c, a))),
+                ["randrange"] = Fn("randrange", 1, 3, (c, a) => c.Values.Int(RandRange(c, a))),
+                ["randint"] = Fn("randint", 2, 2, RandInt),
+                ["choice"] = Fn("choice", 1, 1, Choice),
+                ["shuffle"] = Fn("shuffle", 1, 2, Shuffle),
                 ["sample"] = BuiltinFunctionValue.Make("sample", (self, a, kw, c) => Sample(c, a, kw)),
-                ["uniform"] = Fn("uniform", (c, a) => c.Values.Float(D(c, a, 0) + (D(c, a, 1) - D(c, a, 0)) * Rand(c).NextDouble())),
-                ["triangular"] = Fn("triangular", Triangular),
-                ["expovariate"] = Fn("expovariate", Expovariate),
-                ["normalvariate"] = Fn("normalvariate", NormalVariate),
-                ["gauss"] = Fn("gauss", Gauss),
-                ["gammavariate"] = Fn("gammavariate", (c, a) => c.Values.Float(GammaVariate(c, D(c, a, 0), D(c, a, 1)))),
-                ["betavariate"] = Fn("betavariate", BetaVariate),
+                ["uniform"] = Fn("uniform", 2, 2, (c, a) => c.Values.Float(D(c, a, 0) + (D(c, a, 1) - D(c, a, 0)) * Rand(c).NextDouble())),
+                ["triangular"] = Fn("triangular", 0, 3, Triangular),
+                ["expovariate"] = Fn("expovariate", 1, 1, Expovariate),
+                ["normalvariate"] = Fn("normalvariate", 0, 2, NormalVariate),
+                ["gauss"] = Fn("gauss", 0, 2, Gauss),
+                ["gammavariate"] = Fn("gammavariate", 2, 2, (c, a) => c.Values.Float(GammaVariate(c, D(c, a, 0), D(c, a, 1)))),
+                ["betavariate"] = Fn("betavariate", 2, 2, BetaVariate),
                 // 3.6/3.9 members
                 ["choices"] = BuiltinFunctionValue.Make("choices", Choices),
-                ["randbytes"] = Fn("randbytes", RandBytes),
+                ["randbytes"] = Fn("randbytes", 1, 1, RandBytes),
             };
             return ctx.Values.Module("random", m);
         }
 
-        private static BuiltinFunctionValue Fn(string name, Func<EvalContext, ScriptValue[], ScriptValue> f)
+        private static BuiltinFunctionValue Fn(string name, int min, int max, Func<EvalContext, ScriptValue[], ScriptValue> f)
         {
-            return BuiltinFunctionValue.Make(name, (self, args, kw, c) => f(c, args));
+            return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
+            {
+                Args.Between(c, args, name, min, max);
+                return f(c, args);
+            });
         }
 
         private static RandomState Rand(EvalContext ctx)
@@ -119,7 +123,12 @@ namespace Outbridge.PyLite.Modules
         {
             if (args.Length < 1 || !(args[0] is IntValue || args[0] is BoolValue))
                 throw Raise.TypeError(ctx, "getrandbits() takes exactly one int argument");
-            BigInteger k = args[0] is BoolValue ? (((BoolValue)args[0]).Value ? 1 : 0) : ((IntValue)args[0]).Value;
+            return RandBits(ctx, args[0] is BoolValue ? (((BoolValue)args[0]).Value ? 1 : 0) : ((IntValue)args[0]).Value);
+        }
+
+        // The typed core the module's own draws call directly (P17): no argument array, no boxed k.
+        private static BigInteger RandBits(EvalContext ctx, BigInteger k)
+        {
             if (k < 0)
                 throw Raise.ValueError(ctx, "number of bits must be non-negative");
             if (k.IsZero)
@@ -149,12 +158,12 @@ namespace Outbridge.PyLite.Modules
         {
             if (n <= 0)
                 return BigInteger.Zero;
-            int k = BigIntMath.BitLength(n);
-            BigInteger r = GetRandBits(ctx, new ScriptValue[] { ctx.Values.Int(k) });
+            int k = (int)NumericOps.BitLength(n);
+            BigInteger r = RandBits(ctx, k);
             int guard = 0;
             while (r >= n)
             {
-                r = GetRandBits(ctx, new ScriptValue[] { ctx.Values.Int(k) });
+                r = RandBits(ctx, k);
                 ctx.Budget.Step();
                 if (++guard > 100000)
                     return r % n;   // pathological safety net (never hit with correct k)
@@ -168,16 +177,21 @@ namespace Outbridge.PyLite.Modules
         {
             if (args.Length < 1)
                 throw Raise.TypeError(ctx, "randrange() missing required argument");
-            BigInteger istart = AsRangeInt(ctx, args[0], 1);
+            BigInteger istart = Coerce.ToIndex(ctx, args[0], "randrange");
             if (args.Length < 2 || args[1].Kind == ValueKind.None)
             {
                 if (istart > 0)
                     return RandBelow(ctx, istart);
                 throw Raise.ValueError(ctx, "empty range for randrange()");
             }
-            BigInteger istop = AsRangeInt(ctx, args[1], 2);
+            BigInteger istop = Coerce.ToIndex(ctx, args[1], "randrange");
+            BigInteger istep = args.Length >= 3 ? Coerce.ToIndex(ctx, args[2], "randrange") : BigInteger.One;
+            return RandRange(ctx, istart, istop, istep);
+        }
+
+        private static BigInteger RandRange(EvalContext ctx, BigInteger istart, BigInteger istop, BigInteger istep)
+        {
             BigInteger width = istop - istart;
-            BigInteger istep = args.Length >= 3 ? AsRangeInt(ctx, args[2], 3) : BigInteger.One;
             if (istep == 1)
             {
                 if (width > 0)
@@ -196,20 +210,9 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue RandInt(EvalContext ctx, ScriptValue[] args)
         {
-            BigInteger a = AsRangeInt(ctx, args[0], 1);
-            BigInteger b = AsRangeInt(ctx, args[1], 2);
-            return ctx.Values.Int(RandRange(ctx, new ScriptValue[] { ctx.Values.Int(a), ctx.Values.Int(b + 1) }));
-        }
-
-        private static BigInteger AsRangeInt(EvalContext ctx, ScriptValue v, int argNo)
-        {
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return iv.Value;
-            BoolValue bv = v as BoolValue;
-            if (bv != null)
-                return bv.Value ? 1 : 0;
-            throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
+            BigInteger a = Coerce.ToIndex(ctx, args[0], "randrange");
+            BigInteger b = Coerce.ToIndex(ctx, args[1], "randrange");
+            return ctx.Values.Int(RandRange(ctx, a, b + 1, BigInteger.One));
         }
 
         private static ScriptValue Choice(EvalContext ctx, ScriptValue[] args)
@@ -480,7 +483,7 @@ namespace Outbridge.PyLite.Modules
         {
             if (args.Length <= i)
                 throw Raise.TypeError(ctx, "missing required argument");
-            return MathModule.AsDouble(ctx, args[i], "random");
+            return MathModule.AsDouble(ctx, args[i]);
         }
 
         private static double CallFloat(EvalContext ctx, ScriptValue callable)
@@ -537,7 +540,7 @@ namespace Outbridge.PyLite.Modules
             int k = 1;
             if (kw.TryGet("k", out v))
             {
-                System.Numerics.BigInteger kb = AsIndexInt(ctx, v, "k");
+                System.Numerics.BigInteger kb = Coerce.ToIndex(ctx, v, "k");
                 if (kb > int.MaxValue)   // (int)10**100 would overflow; a k this large blows the step budget anyway
                     throw Raise.Make(ctx, PyExceptionTypes.OverflowError, "k too large to convert to C ssize_t");
                 k = (int)kb;
@@ -586,15 +589,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue[] Materialize(EvalContext ctx, ScriptValue seq)
         {
-            IScriptIterator it = PyOps.GetIterator(seq, ctx);
-            var list = new List<ScriptValue>();
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-            {
-                ctx.Values.PreCharge(16);
-                list.Add(v);
-            }
-            return list.ToArray();
+            return Iter.ToArray(ctx, seq);
         }
 
         private static double[] ReadWeights(EvalContext ctx, ScriptValue seq)
@@ -643,17 +638,10 @@ namespace Outbridge.PyLite.Modules
             return lo;
         }
 
-        private static BigInteger AsIndexInt(EvalContext ctx, ScriptValue v, string name)
-        {
-            if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
-                return NumericOps.AsBigInteger(v);
-            throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-        }
-
         private static ScriptValue RandBytes(EvalContext ctx, ScriptValue[] a)
         {
             Args.Exactly(ctx, a, "randbytes", 1);
-            BigInteger n = AsIndexInt(ctx, a[0], "randbytes");
+            BigInteger n = Coerce.ToIndex(ctx, a[0], "randbytes");
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "number of bytes must be non-negative");
             int count = Coerce.ToSsize(ctx, n);

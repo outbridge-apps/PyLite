@@ -25,6 +25,26 @@ namespace Outbridge.PyLite.Modules.Support
         {
             return "p" + index.ToString(CultureInfo.InvariantCulture);
         }
+
+        // .NET's number for each group (0 = the whole match), fixed once the pattern is compiled, so a group
+        // read is an array index and not a string build plus a name lookup per access. The anchored twins
+        // wrap the same pattern in (?:...), which adds no group, so the numbers hold for them too.
+        private int[] _netNumbers;
+
+        internal void Bind(Regex re)
+        {
+            var numbers = new int[Count + 1];
+            for (int i = 1; i <= Count; i++)
+                numbers[i] = re.GroupNumberFromName(Net(i));
+            _netNumbers = numbers;
+        }
+
+        internal Group Of(Match m, int index)
+        {
+            if (_netNumbers != null)
+                return m.Groups[_netNumbers[index]];
+            return index == 0 ? m.Groups[0] : m.Groups[Net(index)];
+        }
     }
 
     // Single-pass Python-pattern -> .NET-pattern translator. Handles group
@@ -300,7 +320,7 @@ namespace Outbridge.PyLite.Modules.Support
             if (j >= p.Length)
                 throw Err(ctx, "missing >, unterminated name");
             string name = p.Substring(start, j - start);
-            if (!IsGroupName(name))
+            if (!Runtime.Values.StrMethods.IsIdentifier(name))
                 throw Err(ctx, "bad character in group name '" + name + "'");
             if (nameIndex.ContainsKey(name))
                 throw Err(ctx, "redefinition of group name '" + name + "'");
@@ -591,22 +611,6 @@ namespace Outbridge.PyLite.Modules.Support
                 case 'L': return ReFlags.L;
                 default: return ReFlags.U;   // 'u'
             }
-        }
-
-        private static bool IsGroupName(string s)
-        {
-            if (s.Length == 0)
-                return false;
-            char c0 = s[0];
-            if (!(c0 == '_' || (c0 >= 'A' && c0 <= 'Z') || (c0 >= 'a' && c0 <= 'z')))
-                return false;
-            for (int k = 1; k < s.Length; k++)
-            {
-                char c = s[k];
-                if (!(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')))
-                    return false;
-            }
-            return true;
         }
 
         private static ScriptException Err(EvalContext ctx, string message)

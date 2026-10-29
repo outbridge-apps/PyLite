@@ -39,25 +39,43 @@ namespace Outbridge.PyLite.Modules.Support
             return true;
         }
 
-        // The run of ASCII digits at the cursor, possibly empty.
-        internal string Digits()
+        // The run of ASCII digits at the cursor, possibly empty. With underscores (PEP 515: Fraction's 3.11
+        // grammar) a single '_' between two digits is skipped; any other '_' ends the run.
+        internal string Digits(bool underscores = false)
         {
             int start = _i;
-            while (_i < _s.Length && IsDigit(_s[_i]))
+            System.Text.StringBuilder kept = null;
+            while (_i < _s.Length)
+            {
+                char c = _s[_i];
+                if (IsDigit(c))
+                {
+                    if (kept != null)
+                        kept.Append(c);
+                }
+                else if (underscores && c == '_' && _i > start && IsDigit(_s[_i - 1])
+                    && _i + 1 < _s.Length && IsDigit(_s[_i + 1]))
+                {
+                    if (kept == null)
+                        kept = new System.Text.StringBuilder(_s, start, _i - start, _s.Length - start);
+                }
+                else
+                    break;
                 _i++;
-            return _s.Substring(start, _i - start);
+            }
+            return kept != null ? kept.ToString() : _s.Substring(start, _i - start);
         }
 
         // [eE][+-]digits: Absent when there is no 'e' (the cursor stays), Malformed when the digits are
         // missing or do not fit an int.
-        internal Exp Exponent(out int exp)
+        internal Exp Exponent(out int exp, bool underscores = false)
         {
             exp = 0;
             if (AtEnd || (_s[_i] != 'e' && _s[_i] != 'E'))
                 return Exp.Absent;
             _i++;
             bool neg = Sign();
-            string digits = Digits();
+            string digits = Digits(underscores);
             int e;
             if (digits.Length == 0 || !int.TryParse(digits, out e))
                 return Exp.Malformed;

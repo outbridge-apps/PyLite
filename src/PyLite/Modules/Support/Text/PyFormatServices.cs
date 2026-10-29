@@ -34,5 +34,10 @@ namespace Outbridge.PyLite.Modules.Support
         {
             return PyFormat.PercentFormatBytes(ctx, format, rhs);
         }
+
+        public string AsciiEscape(string repr)
+        {
+            return PyFormat.AsciiEscape(repr);
+        }
     }
 }

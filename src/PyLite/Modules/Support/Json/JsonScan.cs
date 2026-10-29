@@ -113,11 +113,26 @@ namespace Outbridge.PyLite.Modules.Support
             // CPython's decoder takes NaN and the two infinities by default, so they are not a leniency.
             switch (c)
             {
-                case 'n': if (Is(s, i, "null")) return i + 4; break;
-                case 't': if (Is(s, i, "true")) return i + 4; break;
-                case 'f': if (Is(s, i, "false")) return i + 5; break;
-                case 'N': if (Is(s, i, "NaN")) return i + 3; break;
-                case 'I': if (Is(s, i, "Infinity")) return i + 8; break;
+                case 'n':
+                    if (Is(s, i, "null"))
+                        return i + 4;
+                    break;
+                case 't':
+                    if (Is(s, i, "true"))
+                        return i + 4;
+                    break;
+                case 'f':
+                    if (Is(s, i, "false"))
+                        return i + 5;
+                    break;
+                case 'N':
+                    if (Is(s, i, "NaN"))
+                        return i + 3;
+                    break;
+                case 'I':
+                    if (Is(s, i, "Infinity"))
+                        return i + 8;
+                    break;
             }
             throw Error(ctx, s, doc, "Expecting value", i);
         }

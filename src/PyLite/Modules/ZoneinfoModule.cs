@@ -10,21 +10,32 @@ namespace Outbridge.PyLite.Modules
 {
     // zoneinfo: ZoneInfo(key) over the Windows time zone database through the CLDR IANA map (see
     // ZoneInfoValue). No tzdata files, so from_file/TZPATH are absent; ZoneInfoNotFoundError is a KeyError.
-    public static class ZoneinfoModule
+    internal static class ZoneinfoModule
     {
+        // clear_cache(*, only_keys=None): the zone cache is shared by every run of the process, so a script may
+        // not clear it; the call checks its arguments as CPython does and leaves the cache alone.
+        private static ScriptValue ClearCache(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext c)
+        {
+            Args.None(c, a, "clear_cache");
+            var r = new KwReader(c, kw, "clear_cache");
+            r.GetOrNull("only_keys");
+            r.RejectInvalid();
+            return c.Values.None;
+        }
+
         public static ModuleValue Create(EvalContext ctx)
         {
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["no_cache"] = BuiltinFunctionValue.Make("no_cache", (s, a, kw, c) => ZoneInfoValue.Get(c, KeyArg(c, a, kw, "no_cache"), false)),
-                ["clear_cache"] = BuiltinFunctionValue.Make("clear_cache", (s, a, kw, c) => c.Values.None),
+                ["clear_cache"] = BuiltinFunctionValue.Make("clear_cache", ClearCache),
             };
             BuiltinDelegate ctor = (s, a, kw, c) => ZoneInfoValue.Get(c, KeyArg(c, a, kw, "ZoneInfo"), true);
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["ZoneInfo"] = ctx.Values.Type("zoneinfo.ZoneInfo", ctor, null, slots),
                 ["available_timezones"] = BuiltinFunctionValue.Make("available_timezones", AvailableTimezones),
-                ["ZoneInfoNotFoundError"] = ctx.Values.Type("ZoneInfoNotFoundError", null, null, null, PyExceptionTypes.ZoneInfoNotFoundError),
+                ["ZoneInfoNotFoundError"] = ModuleKit.ExceptionClass(PyExceptionTypes.ZoneInfoNotFoundError),
                 ["TZPATH"] = ctx.Values.Tuple(new ScriptValue[0]),
             };
             return ctx.Values.Module("zoneinfo", m);

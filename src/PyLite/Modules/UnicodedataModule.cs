@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Modules
     // unicodedata: normalize/is_normalized ride on the BCL's normalizer; name/lookup on the engine's own
     // Unicode 16.0 name table; category/numeric/decimal/digit on CharUnicodeInfo. A "character" is one
     // code point, so a surrogate pair is accepted as one.
-    public static class UnicodedataModule
+    internal static class UnicodedataModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {

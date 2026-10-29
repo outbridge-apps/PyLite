@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // record classes — the class-body annotation fields become the slots; @dataclass records how to
     // synthesize __init__ (auto __repr__/__eq__ already come from the record class) and the eq / order /
     // repr knobs. frozen => read-only after init; __post_init__ runs after the generated __init__.
-    public static class DataclassesModule
+    internal static class DataclassesModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -47,12 +47,12 @@ namespace Outbridge.PyLite.Modules
             r.RejectUnknown();
             if (order && !eq)
                 throw Raise.ValueError(ctx, "eq must be true if order is true");
-            return BuiltinFunctionValue.Make("dataclass", (s2, a2, k2, c2) =>
+            return BuiltinFunctionValue.Make("dataclass", Args.Positional("dataclass", 1, 1, (s2, a2, k2, c2) =>
             {
                 if (a2.Length != 1 || a2[0].Kind != ValueKind.RecordClass)
                     throw Raise.TypeError(c2, "dataclass() should be applied to a class defined in this dialect");
                 return Apply(c2, (RecordClassValue)a2[0], init, frozen, eq, order, repr, kwOnly);
-            });
+            }));
         }
 
         private static readonly string[] OrderDunders = { "__lt__", "__le__", "__gt__", "__ge__" };
@@ -284,7 +284,7 @@ namespace Outbridge.PyLite.Modules
             RecordInstanceValue inst = (RecordInstanceValue)args[0];
             if (inst.Class.Dataclass == null)
                 throw Raise.TypeError(ctx, "asdict() should be called on dataclass instances");
-            return AsDictValue(inst, ctx);
+            return FieldsOf(inst, ctx, true, 0);
         }
 
         // replace(obj, **changes) -> a NEW instance built through the class, so the generated __init__
@@ -341,24 +341,36 @@ namespace Outbridge.PyLite.Modules
             if (args.Length != 1 || args[0].Kind != ValueKind.RecordInstance
                 || ((RecordInstanceValue)args[0]).Class.Dataclass == null)
                 throw Raise.TypeError(ctx, "astuple() should be called on dataclass instances");
-            return AsTupleValue((RecordInstanceValue)args[0], ctx);
+            return FieldsOf((RecordInstanceValue)args[0], ctx, false, 0);
         }
 
-        private static ScriptValue AsTupleValue(RecordInstanceValue inst, EvalContext ctx)
+        // asdict / astuple: the fields in order, a nested dataclass converted the same way. A cycle (n.nxt = n)
+        // stops at the data-depth cap as a RecursionError the script can catch, never on the C# stack.
+        private static ScriptValue FieldsOf(RecordInstanceValue inst, EvalContext ctx, bool asDict, int depth)
         {
-            var items = new List<ScriptValue>(inst.Class.AllSlots.Count);
-            ctx.Values.PreCharge(8L * inst.Class.AllSlots.Count + 24);
-            for (int i = 0; i < inst.Class.AllSlots.Count; i++)
+            if (depth >= ctx.Limits.MaxDataDepth)
+                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded while converting a dataclass");
+            if (depth > 0)
+                StackGuard.ProbeData(ctx);
+            RecordClassValue cls = inst.Class;
+            DictValue d = asDict ? ctx.Values.Dict(cls.AllSlots.Count) : null;
+            List<ScriptValue> items = asDict ? null : new List<ScriptValue>(cls.AllSlots.Count);
+            if (!asDict)
+                ctx.Values.PreCharge(8L * cls.AllSlots.Count + 24);
+            for (int i = 0; i < cls.AllSlots.Count; i++)
             {
-                if (!IsField(inst.Class, i))
+                if (!IsField(cls, i))
                     continue;
                 ScriptValue v = inst.Slots[i];
                 RecordInstanceValue nested = v as RecordInstanceValue;
                 if (nested != null && nested.Class.Dataclass != null)
-                    v = AsTupleValue(nested, ctx);
-                items.Add(v ?? ctx.Values.None);
+                    v = FieldsOf(nested, ctx, asDict, depth + 1);
+                if (asDict)
+                    d.SetItem(ctx.Values.Str(cls.AllSlots[i]), v ?? ctx.Values.None, ctx);
+                else
+                    items.Add(v ?? ctx.Values.None);
             }
-            return ctx.Values.Tuple(items.ToArray());
+            return asDict ? (ScriptValue)d : ctx.Values.Tuple(items.ToArray());
         }
 
         // asdict / astuple carry the dataclass FIELDS: a ClassVar or InitVar slot is left out.
@@ -380,22 +392,6 @@ namespace Outbridge.PyLite.Modules
                 ? ((RecordClassValue)x).Dataclass != null
                 : x.Kind == ValueKind.RecordInstance && ((RecordInstanceValue)x).Class.Dataclass != null;
             return ctx.Values.Bool(yes);
-        }
-
-        private static ScriptValue AsDictValue(RecordInstanceValue inst, EvalContext ctx)
-        {
-            DictValue d = ctx.Values.Dict(inst.Class.AllSlots.Count);
-            for (int i = 0; i < inst.Class.AllSlots.Count; i++)
-            {
-                if (!IsField(inst.Class, i))
-                    continue;
-                ScriptValue v = inst.Slots[i];
-                RecordInstanceValue nested = v as RecordInstanceValue;
-                if (nested != null && nested.Class.Dataclass != null)
-                    v = AsDictValue(nested, ctx);
-                d.SetItem(ctx.Values.Str(inst.Class.AllSlots[i]), v ?? ctx.Values.None, ctx);
-            }
-            return d;
         }
 
         private static RecordClassValue ClassOf(EvalContext ctx, ScriptValue[] args)

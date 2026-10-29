@@ -18,8 +18,8 @@ namespace Outbridge.PyLite.Runtime.Values
             d["start"] = SlotDescriptor.MakeProperty("start", (self, ctx) => ctx.Values.Int(((RangeValue)self).Start));
             d["stop"] = SlotDescriptor.MakeProperty("stop", (self, ctx) => ctx.Values.Int(((RangeValue)self).Stop));
             d["step"] = SlotDescriptor.MakeProperty("step", (self, ctx) => ctx.Values.Int(((RangeValue)self).Step));
-            d["index"] = SlotDescriptor.MakeMethod("index", (self, a, kw, ctx) => ((RangeValue)self).Index(a, ctx));
-            d["count"] = SlotDescriptor.MakeMethod("count", (self, a, kw, ctx) => ((RangeValue)self).Count(a, ctx));
+            d["index"] = SlotDescriptor.MakeMethod("index", Args.Positional("index", 1, 1, (self, a, kw, ctx) => ((RangeValue)self).Index(a, ctx)));
+            d["count"] = SlotDescriptor.MakeMethod("count", Args.Positional("count", 1, 1, (self, a, kw, ctx) => ((RangeValue)self).Count(a, ctx)));
             return d;
         }
 

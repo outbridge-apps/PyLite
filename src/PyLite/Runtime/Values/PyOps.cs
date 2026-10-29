@@ -1,11 +1,10 @@
 using System;
-using System.Runtime.CompilerServices;
 using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
-    // Public protocol facades — the Evaluator's only entry points. Container traversal
-    // (Hash tuple engine, Equals/RichCompare over containers) is added by later T-VAL tasks.
+    // Public protocol facades — the Evaluator's only entry points. The container engines (tuple hash,
+    // Equals/RichCompare over containers) are in PyOps.Engines.
     public static partial class PyOps
     {
         // Layer-skipping shortcut for the dominant small-int case: the evaluator's binop/augassign
@@ -131,8 +130,6 @@ namespace Outbridge.PyLite.Runtime.Values
             return false;
         }
 
-        // Subscript obj[idx] (a contract for the Evaluator and for str.format field access). The builtin
-        // containers are dispatched by kind; everything else answers through GetItemCore.
         // obj[idx] = value and del obj[idx]: the same contract as GetItem, for the Evaluator and operator.
         public static void SetItem(ScriptValue obj, ScriptValue idx, ScriptValue value, EvalContext ctx)
         {
@@ -219,6 +216,12 @@ namespace Outbridge.PyLite.Runtime.Values
                 ScriptValue data;
                 if (ev.Data != null && ev.Data.TryGetValue(name, out data))
                     return data;
+                for (Errors.PyExceptionType t = ev.ExcType; t != null; t = t.Parent)
+                {
+                    // a constant of the exception's class body (class ApiError(Exception): CODE = 500)
+                    if (t.ClassValue != null && t.ClassValue.StaticSlots != null && t.ClassValue.StaticSlots.TryGetValue(name, out data))
+                        return data;
+                }
                 if (ev.Args.Length == 5 && ev.ExcType.IsUnicodeCodecError)
                 {
                     switch (name)
@@ -231,9 +234,13 @@ namespace Outbridge.PyLite.Runtime.Values
                     }
                 }
             }
-            else if (name == "__name__")
+            else if (name == "__name__" || (name == "__qualname__" && obj.Kind == ValueKind.Type))
             {
                 string nm = CallableName(obj);
+                // An engine class is named with its module (io.StringIO) for its repr; __name__ and
+                // __qualname__ are the class's own name, as in CPython.
+                if (nm != null && obj.Kind == ValueKind.Type)
+                    nm = nm.Substring(nm.LastIndexOf('.') + 1);
                 if (nm != null)
                     return ctx.Values.Str(nm);
             }
@@ -244,6 +251,12 @@ namespace Outbridge.PyLite.Runtime.Values
                 ScriptValue sv;
                 if (tv.StaticSlots != null && tv.StaticSlots.TryGetValue(name, out sv))
                     return sv;
+                for (Errors.PyExceptionType t = tv.ExcType != null ? tv.ExcType.Parent : null; t != null; t = t.Parent)
+                {
+                    // an exception class inherits its base classes' constants
+                    if (t.ClassValue != null && t.ClassValue.StaticSlots != null && t.ClassValue.StaticSlots.TryGetValue(name, out sv))
+                        return sv;
+                }
                 sv = tv.TryGetUnboundSlot(name);
                 if (sv != null)
                     return sv;
@@ -253,6 +266,15 @@ namespace Outbridge.PyLite.Runtime.Values
                 return ((RecordInstanceValue)obj).GetAttribute(name, ctx);
             if (obj.Kind == ValueKind.RecordClass)
                 return ((RecordClassValue)obj).GetStaticAttr(name, ctx);
+            SuperValue sup = obj as SuperValue;
+            if (sup != null)
+                return sup.GetAttribute(name, ctx);
+            EnumClassValue ec = obj as EnumClassValue;
+            if (ec != null)
+                return ec.GetAttribute(name, ctx);
+            EnumMemberValue em = EnumClassValue.MemberOf(obj, ctx);   // also an IntEnum/StrEnum member's int/str
+            if (em != null)
+                return em.GetAttribute(name, ctx);
             throw Raise.Attribute(ctx, obj.PyTypeName, name);
         }
 
@@ -340,18 +362,6 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyCmpOp.Le: return "<=";
                 case PyCmpOp.Gt: return ">";
                 default: return ">=";
-            }
-        }
-
-        private static void StackProbe(EvalContext ctx)
-        {
-            try
-            {
-                RuntimeHelpers.EnsureSufficientExecutionStack();
-            }
-            catch (InsufficientExecutionStackException)
-            {
-                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "StackDepth", 0, 0);
             }
         }
     }

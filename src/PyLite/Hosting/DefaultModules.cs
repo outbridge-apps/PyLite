@@ -3,9 +3,9 @@ using Outbridge.PyLite.Runtime;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // The canonical set of C#-implemented modules an engine exposes by default. This is the production
-    // counterpart of the test harness's ad-hoc registration (tests/Evaluator/Ev.cs): the ScriptEngine builds
-    // its shared, frozen ModuleRegistry from here plus host ExtraModules (C#) and PythonModules.
+    // The canonical set of C#-implemented modules an engine exposes by default. The ScriptEngine builds its
+    // shared, frozen ModuleRegistry from here plus host ExtraModules (C#) and PythonModules; the evaluator
+    // test harness (tests/Evaluator/Ev.cs) registers from here too, so the two cannot drift.
     internal static class DefaultModules
     {
         public static void RegisterBuiltins(ModuleRegistry registry)
@@ -38,6 +38,10 @@ namespace Outbridge.PyLite.Hosting
             registry.Register("hmac", HmacModule.Create);
             registry.Register("zlib", ZlibModule.Create);
             registry.Register("gzip", GzipModule.Create);
+            registry.Register("zipfile", ZipfileModule.Create);
+            registry.Register("enum", EnumModule.Create);
+            registry.Register("contextlib", ContextlibModule.Create);
+            registry.Register("email.utils", EmailUtilsModule.Create);
             registry.Register("bisect", BisectModule.Create);
             registry.Register("string", StringModule.Create);
             registry.Register("heapq", HeapqModule.Create);

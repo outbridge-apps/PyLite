@@ -13,28 +13,28 @@ namespace Outbridge.PyLite.Runtime.Values
     {
         private static void AddTextSlots(Slots s)
         {
-            s.Linear("partition", (self, a, kw, c) => Partition(c, B(self), a, false));
-            s.Linear("rpartition", (self, a, kw, c) => Partition(c, B(self), a, true));
+            s.Linear("partition", 1, 1, (self, a, kw, c) => Partition(c, B(self), a, false));
+            s.Linear("rpartition", 1, 1, (self, a, kw, c) => Partition(c, B(self), a, true));
             s.Linear("splitlines", (self, a, kw, c) => SplitLines(c, B(self), StrMethods.WithKw(c, a, kw, "splitlines", "keepends")));
-            s.Linear("center", (self, a, kw, c) => Pad(c, B(self), a, "center", 0));
-            s.Linear("ljust", (self, a, kw, c) => Pad(c, B(self), a, "ljust", 1));
-            s.Linear("rjust", (self, a, kw, c) => Pad(c, B(self), a, "rjust", 2));
-            s.Linear("zfill", (self, a, kw, c) => ZFill(c, B(self), a));
+            s.Linear("center", 1, 2, (self, a, kw, c) => Pad(c, B(self), a, "center", 0));
+            s.Linear("ljust", 1, 2, (self, a, kw, c) => Pad(c, B(self), a, "ljust", 1));
+            s.Linear("rjust", 1, 2, (self, a, kw, c) => Pad(c, B(self), a, "rjust", 2));
+            s.Linear("zfill", 1, 1, (self, a, kw, c) => ZFill(c, B(self), a));
             s.Linear("expandtabs", (self, a, kw, c) => ExpandTabs(c, B(self), StrMethods.WithKw(c, a, kw, "expandtabs", "tabsize")));
-            s.Linear("removeprefix", (self, a, kw, c) => RemoveFix(c, B(self), a, false));
-            s.Linear("removesuffix", (self, a, kw, c) => RemoveFix(c, B(self), a, true));
+            s.Linear("removeprefix", 1, 1, (self, a, kw, c) => RemoveFix(c, B(self), a, false));
+            s.Linear("removesuffix", 1, 1, (self, a, kw, c) => RemoveFix(c, B(self), a, true));
             s.Linear("translate", (self, a, kw, c) => Translate(c, B(self), a, kw));
-            s.Linear("capitalize", (self, a, kw, c) => Capitalize(c, B(self)));
-            s.Linear("title", (self, a, kw, c) => Title(c, B(self)));
-            s.Linear("swapcase", (self, a, kw, c) => SwapCase(c, B(self)));
-            s.Linear("isascii", (self, a, kw, c) => c.Values.Bool(IsAscii(B(self))));
-            s.Linear("isalpha", (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsAlphaB)));
-            s.Linear("isdigit", (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsDigitB)));
-            s.Linear("isalnum", (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsAlnumB)));
-            s.Linear("isspace", (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsSpace)));
-            s.Linear("islower", (self, a, kw, c) => c.Values.Bool(IsCased(B(self), false)));
-            s.Linear("isupper", (self, a, kw, c) => c.Values.Bool(IsCased(B(self), true)));
-            s.Linear("istitle", (self, a, kw, c) => c.Values.Bool(IsTitle(B(self))));
+            s.Linear("capitalize", 0, 0, (self, a, kw, c) => Capitalize(c, B(self)));
+            s.Linear("title", 0, 0, (self, a, kw, c) => Title(c, B(self)));
+            s.Linear("swapcase", 0, 0, (self, a, kw, c) => SwapCase(c, B(self)));
+            s.Linear("isascii", 0, 0, (self, a, kw, c) => c.Values.Bool(IsAscii(B(self))));
+            s.Linear("isalpha", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsAlphaB)));
+            s.Linear("isdigit", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsDigitB)));
+            s.Linear("isalnum", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsAlnumB)));
+            s.Linear("isspace", 0, 0, (self, a, kw, c) => c.Values.Bool(AllOf(B(self), IsSpace)));
+            s.Linear("islower", 0, 0, (self, a, kw, c) => c.Values.Bool(IsCased(B(self), false)));
+            s.Linear("isupper", 0, 0, (self, a, kw, c) => c.Values.Bool(IsCased(B(self), true)));
+            s.Linear("istitle", 0, 0, (self, a, kw, c) => c.Values.Bool(IsTitle(B(self))));
         }
 
         // ---- partition ----
@@ -146,26 +146,34 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue ExpandTabs(EvalContext c, byte[] data, ScriptValue[] a)
         {
             int size = a.Length >= 1 && a[0].Kind != ValueKind.None ? WidthArg(c, a[0], "expandtabs") : 8;
-            var outB = new List<byte>(data.Length + 8);
-            int column = 0;
+            // As str.expandtabs: the length first (capped once), then one exact array.
+            long len = 0, column = 0;
+            for (int i = 0; i < data.Length && len <= c.Limits.MaxStrChars; i++)
+            {
+                byte b = data[i];
+                long n = b != (byte)'\t' ? 1 : size > 0 ? size - column % size : 0;
+                len += n;
+                column = b == (byte)'\n' || b == (byte)'\r' ? 0 : column + n;
+            }
+            c.Values.CheckStrLen(len);
+            var outB = new byte[len];
+            int w = 0, col = 0;
             foreach (byte b in data)
             {
                 if (b == (byte)'\t')
                 {
-                    int width = size <= 0 ? 0 : size - column % size;
-                    c.Values.EnsureStrLen((long)outB.Count + width);   // a huge tabsize would otherwise OOM here
+                    int width = size <= 0 ? 0 : size - col % size;
                     for (int i = 0; i < width; i++)
-                        outB.Add((byte)' ');
-                    column += width;
+                        outB[w++] = (byte)' ';
+                    col += width;
                 }
                 else
                 {
-                    outB.Add(b);
-                    column = b == (byte)'\n' || b == (byte)'\r' ? 0 : column + 1;
+                    outB[w++] = b;
+                    col = b == (byte)'\n' || b == (byte)'\r' ? 0 : col + 1;
                 }
             }
-            c.Values.EnsureStrLen(outB.Count);
-            return c.Values.Bytes(outB.ToArray());
+            return c.Values.Bytes(outB);
         }
 
         private static ScriptValue RemoveFix(EvalContext c, byte[] data, ScriptValue[] a, bool suffix)

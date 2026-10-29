@@ -21,6 +21,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 TypeValue excBase = b as TypeValue;
                 if (excBase != null && excBase.ExcType != null)
                     return ExecExceptionClassDef(n, excBase, env, ctx);
+                EnumClassValue enumBase = b as EnumClassValue;
+                if (enumBase != null)
+                    return ExecEnumClassDef(n, enumBase, env, ctx);
+                if (n.Mixin != null)
+                    throw Raise.TypeError(ctx, "multiple inheritance is not supported in this dialect; only (str, Enum) and (int, Enum)");
                 baseCls = b as RecordClassValue;
                 if (baseCls == null)
                     throw Raise.TypeError(ctx, "base of class '" + n.Name + "' must be a class defined in this dialect");
@@ -44,13 +49,31 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
             List<string> allSlots;
             Dictionary<string, int> slotIndex;
-            ComputeSlots(n, baseCls, initNode, out allSlots, out slotIndex);
+            ComputeSlots(n, baseCls, initNode, ctx, out allSlots, out slotIndex);
             IReadOnlyDictionary<string, FieldDefault> annDefaults = BuildAnnotationDefaults(n, baseCls, env, ctx);
 
             var cls = new RecordClassValue(n.Name, baseCls, allSlots, slotIndex, methods, false, null,
-                annDefaults, null, SharedIdentitySource.Next());
+                annDefaults, null, SharedIdentitySource.Next(), EvalConstants(n, env, ctx));
+            if (n.CellName != null)
+                env.BindScopeName(n.CellName, cls);   // super() in the methods; bound before a decorator can call one
             env.BindScopeName(n.Name, ApplyClassDecorators(n, cls, env, ctx));
             return ExecSignal.Normal;
+        }
+
+        // The class body's NAME = value pairs, in order (the values were computed into hidden variables just
+        // before the class statement). __hash__ may only be None, which makes the instances unhashable.
+        private Dictionary<string, ScriptValue> EvalConstants(ClassDefNode n, Environment env, EvalContext ctx)
+        {
+            var constants = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
+            foreach (ClassConstant k in n.Constants)
+            {
+                ScriptValue v = EvalExpr(k.Value, env, ctx);
+                if (k.Name == "__hash__" && v.Kind != ValueKind.None)
+                    throw Raise.TypeError(ctx, "class '" + n.Name + "': __hash__ may only be set to None in a class body in this dialect; define __hash__(self) instead");
+                ctx.Values.PreCharge(48);
+                constants[k.Name] = v;
+            }
+            return constants;
         }
 
         // A class with a builtin-exception base becomes a NEW node of the exception name tree plus a
@@ -61,6 +84,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             if (n.Methods.Count > 0 || n.Fields.Count > 0)
                 throw Raise.TypeError(ctx, "exception class '" + n.Name + "' may not define methods or fields in this dialect");
+            Dictionary<string, ScriptValue> constants = EvalConstants(n, env, ctx);   // readable as Class.NAME
             int chain = 0;
             for (PyExceptionType p = baseTv.ExcType; p != null; p = p.Parent)
                 chain++;
@@ -69,7 +93,53 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             ctx.Values.PreCharge(64);
             var excType = new PyExceptionType(n.Name, baseTv.ExcType);
             BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(excType, args);
-            ScriptValue cls = TypeValue.Make(n.Name, ctor, null, null, excType);
+            TypeValue cls = TypeValue.Make(n.Name, ctor, null, constants.Count > 0 ? constants : null, excType);
+            excType.ClassValue = cls;
+            env.BindScopeName(n.Name, ApplyClassDecorators(n, cls, env, ctx));
+            return ExecSignal.Normal;
+        }
+
+        // A class with an enum base (enum.Enum/IntEnum/StrEnum or an enum without members) is an enumeration:
+        // its NAME = value lines are the members, in order; functions assigned in the body and dunders are
+        // class attributes; methods are the members' methods. CPython refuses to extend an enum with members.
+        private static readonly HashSet<string> EnumDunders = new HashSet<string>(StringComparer.Ordinal) { "__str__", "__repr__" };
+
+        private ExecSignal ExecEnumClassDef(ClassDefNode n, EnumClassValue baseEnum, Environment env, EvalContext ctx)
+        {
+            if (baseEnum.Members.Count > 0)
+                throw Raise.TypeError(ctx, "<enum '" + n.Name + "'> cannot extend <enum '" + baseEnum.Name + "'>");
+            if (n.Fields.Count > 0)
+                throw Raise.TypeError(ctx, "enum class '" + n.Name + "': write members as NAME = value (no annotations) in this dialect");
+            var methods = new Dictionary<string, FunctionValue>(StringComparer.Ordinal);
+            foreach (FuncDefNode meth in n.Methods)
+            {
+                if (meth.Name.StartsWith("__", StringComparison.Ordinal) && meth.Name.EndsWith("__", StringComparison.Ordinal)
+                    && !EnumDunders.Contains(meth.Name))
+                    throw Raise.TypeError(ctx, "enum class '" + n.Name + "' may not define " + meth.Name + " in this dialect");
+                FunctionInfo info = _program.GetFunctionInfo(meth);
+                methods[meth.Name] = BuildFunction(meth.Name, info, meth.Params, meth.Body, null, env, ctx, meth.ReturnAnnotationName);
+            }
+            EnumFlavor flavor = n.Mixin == "str" ? EnumFlavor.Str : n.Mixin == "int" ? EnumFlavor.Int : baseEnum.Flavor;
+            if (n.Mixin != null && baseEnum.Flavor != EnumFlavor.Plain && baseEnum.Flavor != flavor)
+                throw Raise.TypeError(ctx, "enum class '" + n.Name + "': " + n.Mixin + " cannot be mixed into " + baseEnum.Name);
+            var cls = new EnumClassValue(n.Name, flavor, baseEnum, methods, ctx,
+                n.Mixin != null && baseEnum.Flavor == EnumFlavor.Plain || baseEnum.MixedIn);
+            if (n.CellName != null)
+                env.BindScopeName(n.CellName, cls);
+            foreach (ClassConstant k in n.Constants)
+            {
+                ScriptValue v = EvalExpr(k.Value, env, ctx);
+                bool dunder = k.Name.Length > 4 && k.Name.StartsWith("__", StringComparison.Ordinal) && k.Name.EndsWith("__", StringComparison.Ordinal);
+                if (!dunder && k.Name.Length > 2 && k.Name[0] == '_' && k.Name[k.Name.Length - 1] == '_')
+                    throw Raise.ValueError(ctx, "_sunder_ names, such as '" + k.Name + "', are reserved for future Enum use");
+                if (dunder || v.Kind == ValueKind.Function || v.Kind == ValueKind.BuiltinFunction)
+                {
+                    ctx.Values.PreCharge(48);
+                    cls.Extras[k.Name] = v;   // a method or a class attribute, not a member
+                    continue;
+                }
+                cls.AddMember(k.Name, v, ctx);
+            }
             env.BindScopeName(n.Name, ApplyClassDecorators(n, cls, env, ctx));
             return ExecSignal.Normal;
         }
@@ -118,25 +188,19 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             ctx.Values.PreCharge(24 + 8L * cls.AllSlots.Count);
             var inst = new RecordInstanceValue(cls, new ScriptValue[cls.AllSlots.Count]);
-            FunctionValue init = cls.FindMethod("__init__");
+            FunctionValue init;
+            RecordClassValue generated;
+            cls.ResolveInit(out init, out generated);
             if (init != null)
             {
                 var full = new ScriptValue[args.Length + 1];
                 full[0] = inst;
                 Array.Copy(args, 0, full, 1, args.Length);
-                OwnerOf(init.Program).CallFunction(init, full, kw, ctx);
+                OwnerOf(init.Program, ctx).CallFunction(init, full, kw, ctx);
             }
-            else if (cls.Dataclass != null && cls.Dataclass.Init)
+            else if (generated != null)
             {
-                ScriptValue[] initVars = RunGeneratedInit(cls, inst, args, kw, ctx);
-                FunctionValue post = cls.FindMethod("__post_init__");   // called by the generated __init__ only
-                if (post != null)
-                {
-                    var postArgs = new ScriptValue[1 + initVars.Length];   // self, then the InitVars in declaration order
-                    postArgs[0] = inst;
-                    Array.Copy(initVars, 0, postArgs, 1, initVars.Length);
-                    OwnerOf(post.Program).CallFunction(post, postArgs, KwArgs.Empty, ctx);
-                }
+                RunDataclassInit(generated, inst, args, kw, ctx);
             }
             else if (args.Length > 0 || kw.Count > 0)
             {
@@ -144,6 +208,22 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
             FillClassVars(cls, inst);
             return inst;
+        }
+
+        // The __init__ @dataclass generated for cls, run on inst (an instance of cls or of a subclass, whose
+        // slots start with cls's), then the instance's own __post_init__, as the generated code calls it.
+        internal ScriptValue RunDataclassInit(RecordClassValue cls, RecordInstanceValue inst, ScriptValue[] args, KwArgs kw, EvalContext ctx)
+        {
+            ScriptValue[] initVars = RunGeneratedInit(cls, inst, args, kw, ctx);
+            FunctionValue post = inst.Class.FindMethod("__post_init__");   // called by the generated __init__ only
+            if (post != null)
+            {
+                var postArgs = new ScriptValue[1 + initVars.Length];   // self, then the InitVars in declaration order
+                postArgs[0] = inst;
+                Array.Copy(initVars, 0, postArgs, 1, initVars.Length);
+                OwnerOf(post.Program, ctx).CallFunction(post, postArgs, KwArgs.Empty, ctx);
+            }
+            return ctx.Values.None;
         }
 
         // x: ClassVar[int] = 5 reads through the instance as it does in CPython (there, through the class).
@@ -239,7 +319,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         // Slots: base slots, then class-body annotation fields (dataclass source), then every top-level
         // self.<name> = ... assignment in __init__, all first-appearance order.
-        private void ComputeSlots(ClassDefNode n, RecordClassValue baseCls, FuncDefNode initNode,
+        private void ComputeSlots(ClassDefNode n, RecordClassValue baseCls, FuncDefNode initNode, EvalContext ctx,
             out List<string> allSlots, out Dictionary<string, int> slotIndex)
         {
             var order = new List<string>();
@@ -254,7 +334,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (initNode != null)
             {
                 string self = initNode.Params.Positional.Count > 0 ? initNode.Params.Positional[0].Name : "self";
-                CollectSelfSlots(initNode.Body, self, order, seen);
+                new SelfSlotCollector(ctx, self, order, seen).Stmts(initNode.Body, null);
             }
             slotIndex = new Dictionary<string, int>(StringComparer.Ordinal);
             for (int i = 0; i < order.Count; i++)
@@ -262,46 +342,45 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             allSlots = order;
         }
 
-        private static void CollectSelfSlots(IReadOnlyList<StmtNode> body, string self, List<string> order, HashSet<string> seen)
+        // The self.<name> targets __init__ assigns, first appearance first. A nested def/class is another
+        // scope and del is not an assignment; a for target is one.
+        private sealed class SelfSlotCollector : AstWalker<object>
         {
-            for (int i = 0; i < body.Count; i++)
-            {
-                switch (body[i])
-                {
-                    case AssignNode a: foreach (var t in a.Targets)
-                        AddSelfSlot(t, self, order, seen); break;
-                    case AugAssignNode ag: AddSelfSlot(ag.Target, self, order, seen); break;
-                    case IfNode f: CollectSelfSlots(f.Body, self, order, seen); CollectSelfSlots(f.OrElse, self, order, seen); break;
-                    case WhileNode w: CollectSelfSlots(w.Body, self, order, seen); CollectSelfSlots(w.OrElse, self, order, seen); break;
-                    case ForNode fr: CollectSelfSlots(fr.Body, self, order, seen); CollectSelfSlots(fr.OrElse, self, order, seen); break;
-                    case TryNode t:
-                        CollectSelfSlots(t.Body, self, order, seen);
-                        foreach (var h in t.Handlers)
-                            CollectSelfSlots(h.Body, self, order, seen);
-                        CollectSelfSlots(t.OrElse, self, order, seen);
-                        CollectSelfSlots(t.Finally, self, order, seen);
-                        break;
-                    case MatchNode m: foreach (var cs in m.Cases)
-                        CollectSelfSlots(cs.Body, self, order, seen); break;
-                    default: break;   // never descend into a nested def/class
-                }
-            }
-        }
+            private readonly EvalContext _ctx;
+            private readonly string _self;
+            private readonly List<string> _order;
+            private readonly HashSet<string> _seen;
 
-        private static void AddSelfSlot(ExprNode target, string self, List<string> order, HashSet<string> seen)
-        {
-            switch (target)
+            internal SelfSlotCollector(EvalContext ctx, string self, List<string> order, HashSet<string> seen)
             {
-                case AttributeNode at:
-                    NameNode nm = at.Value as NameNode;
-                    if (nm != null && nm.Id == self && seen.Add(at.Attr))
-                        order.Add(at.Attr);
-                    break;
-                case TupleNode tup: foreach (var e in tup.Elts)
-                    AddSelfSlot(e, self, order, seen); break;
-                case ListNode l: foreach (var e in l.Elts)
-                    AddSelfSlot(e, self, order, seen); break;
-                case StarredNode s: AddSelfSlot(s.Value, self, order, seen); break;
+                _ctx = ctx;
+                _self = self;
+                _order = order;
+                _seen = seen;
+            }
+
+            protected override void Probe(SourceInfo at) { StackGuard.Probe(_ctx); }
+            protected override void Expr(ExprNode e, object c) { }
+            protected override void FuncDef(FuncDefNode fd, object c) { }
+            protected override void ClassDef(ClassDefNode cd, object c) { }
+
+            protected override void Stmt(StmtNode st, object c)
+            {
+                if (!(st is DelNode))
+                    base.Stmt(st, c);
+            }
+
+            protected override void Target(ExprNode e, object c)
+            {
+                AttributeNode at = e as AttributeNode;
+                if (at == null)
+                {
+                    base.Target(e, c);
+                    return;
+                }
+                NameNode nm = at.Value as NameNode;
+                if (nm != null && nm.Id == _self && _seen.Add(at.Attr))
+                    _order.Add(at.Attr);
             }
         }
     }

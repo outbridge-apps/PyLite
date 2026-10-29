@@ -24,6 +24,7 @@ namespace Outbridge.PyLite.Runtime
         public System.Diagnostics.Stopwatch MonotonicClock;   // per-run, started at ctx creation
         public System.TimeSpan SleptTotal;        // accumulated time.sleep across the run
         public DecimalContext DecimalCtx = new DecimalContext();   // per-run decimal rounding
+        internal ScriptValue DecimalView;   // the decimal.Context object for DecimalCtx, made on first getcontext()
         public CsvState Csv = new CsvState();               // per-run csv dialect registry + field limit
         public RandomState Random;                // per-run PRNG, lazily created on first random-module use
         internal System.Numerics.BigInteger UuidLastTimestamp = System.Numerics.BigInteger.MinusOne;  // uuid1 collision counter
@@ -32,7 +33,6 @@ namespace Outbridge.PyLite.Runtime
 
         // --- mutable per-run fields (RunnerThread only) ---
         public int CallDepth;              // ++/-- only in Evaluator.Call
-        public int ExprProbeCounter;       // EvalExpr nesting counter for the probe cadence
         public int IterProbeCounter;       // MoveNext counter: probe cadence for nested lazy iterators
         public int NodeCounter;            // AST-node counter for NodeBatch charging
         public int CurrentLine;            // updated in each stmt prologue (for ScriptError)
@@ -47,9 +47,22 @@ namespace Outbridge.PyLite.Runtime
         // other callee falls back to CallHook with a one-slot array. Same prologue and semantics.
         internal Func<ScriptValue, ScriptValue, ScriptValue> CallHook1;
 
+        // super().__init__(...) reaching the __init__ @dataclass generated: (class, instance, args, kw).
+        internal Func<RecordClassValue, RecordInstanceValue, ScriptValue[], KwArgs, ScriptValue> DataclassInitHook;
+
+        // IntEnum/StrEnum members: the int/str object a member is, by identity -> the member (null until an enum has one).
+        internal Dictionary<object, EnumMemberValue> EnumValues;
+
         // The format engine (str.format / format() / f-string specs / % operator). Installed by the host
         // (PyFormatServices) before the run; the Evaluator's f-string path calls through it.
         internal IFormatServices Format;
+
+        // Tests only: every fast tier (compiled closures, fused longs, flat comprehension drain, range
+        // loop) steps aside, so one corpus run per mode proves the tiers add speed, never semantics.
+        internal bool InterpretOnly;
+
+        // The run's evaluator per compiled unit (main script, Python modules, preludes): Evaluator.For.
+        internal Dictionary<Syntax.ResolvedProgram, Evaluator.Evaluator> Evaluators;
 
         // Per-run intern table for global-name keys (Environment.Key): one charged StrValue per distinct
         // name, its seeded hash cached inside — repeat global reads allocate nothing. Per-run because

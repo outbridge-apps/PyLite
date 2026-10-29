@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>   <!-- a tool: never a NuGet package -->
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <RootNamespace>Outbridge.PyLite.PerfBench</RootNamespace>
+    <AssemblyName>Outbridge.PyLite.PerfBench</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PyLite\PyLite.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The comparison baseline (T-TST-18); a dev dependency of this tool only, never of src/PyLite. -->
+    <PackageReference Include="IronPython" Version="3.4.2" />
+    <PackageReference Include="IronPython.StdLib" Version="3.4.2" />
+  </ItemGroup>
+
+</Project>

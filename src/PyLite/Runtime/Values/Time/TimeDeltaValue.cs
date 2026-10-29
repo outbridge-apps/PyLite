@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
+using static Outbridge.PyLite.Modules.Support.CalendarFormat;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 
@@ -405,7 +406,21 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
+        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        private long _hash;
+        private bool _hashed;
+
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            if (!_hashed)
+            {
+                _hash = ComputeHash(ctx, depth);
+                _hashed = true;
+            }
+            return _hash;
+        }
+
+        private long ComputeHash(EvalContext ctx, int depth)
         {
             var t = ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Int(Days), ctx.Values.Int(Seconds), ctx.Values.Int(Microseconds) });
             return PyOps.Hash(t, ctx, 0);
@@ -424,11 +439,11 @@ namespace Outbridge.PyLite.Runtime.Values
             int mmTotal = Seconds / 60;
             int mm = mmTotal % 60;
             int hh = mmTotal / 60;
-            string core = Fmt(hh) + ":" + Pad2(mm) + ":" + Pad2(ss);
+            string core = Num(hh) + ":" + Pad2(mm) + ":" + Pad2(ss);
             if (Days != 0)
             {
                 string plural = Math.Abs(Days) != 1 ? "s" : "";
-                core = Fmt(Days) + " day" + plural + ", " + core;
+                core = Num(Days) + " day" + plural + ", " + core;
             }
             if (Microseconds != 0)
                 core += "." + Microseconds.ToString("000000", CultureInfo.InvariantCulture);
@@ -440,16 +455,14 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             var parts = new System.Collections.Generic.List<string>(3);
             if (Days != 0)
-                parts.Add("days=" + Fmt(Days));
+                parts.Add("days=" + Num(Days));
             if (Seconds != 0)
-                parts.Add("seconds=" + Fmt(Seconds));
+                parts.Add("seconds=" + Num(Seconds));
             if (Microseconds != 0)
-                parts.Add("microseconds=" + Fmt(Microseconds));
+                parts.Add("microseconds=" + Num(Microseconds));
             sb.Append("datetime.timedelta(" + (parts.Count == 0 ? "0" : string.Join(", ", parts)) + ")");
         }
 
-        private static string Fmt(int n) { return n.ToString(CultureInfo.InvariantCulture); }
-        private static string Pad2(int n) { return n.ToString("00", CultureInfo.InvariantCulture); }
 
         // ---- slots ----
 
@@ -460,7 +473,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 ["days"] = SlotDescriptor.MakeProperty("days", (self, c) => c.Values.Int(((TimeDeltaValue)self).Days)),
                 ["seconds"] = SlotDescriptor.MakeProperty("seconds", (self, c) => c.Values.Int(((TimeDeltaValue)self).Seconds)),
                 ["microseconds"] = SlotDescriptor.MakeProperty("microseconds", (self, c) => c.Values.Int(((TimeDeltaValue)self).Microseconds)),
-                ["total_seconds"] = SlotDescriptor.MakeMethod("total_seconds", (self, a, kw, c) => ((TimeDeltaValue)self).TotalSeconds(c)),
+                ["total_seconds"] = SlotDescriptor.MakeMethod("total_seconds", Args.Positional("total_seconds", 0, 0, (self, a, kw, c) => ((TimeDeltaValue)self).TotalSeconds(c))),
             };
             return new ScriptTypeInfo("datetime.timedelta", d);
         }

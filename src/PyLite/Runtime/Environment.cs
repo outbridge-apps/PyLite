@@ -43,11 +43,17 @@ namespace Outbridge.PyLite.Runtime
             return e;
         }
 
+        // The charge for a function frame; a pooled frame is charged the same on reuse.
+        internal static long FrameCharge(int localCount, int cellCount, int freeCount)
+        {
+            return 64 + 8L * (localCount + cellCount + freeCount);
+        }
+
         // The frame skeleton is charged here (A8-#7); the arrays are not script values but must be counted.
         public static Environment CreateFunction(EvalContext ctx, int localCount, int cellCount,
             Cell[] freeCells, Environment moduleEnv, FunctionInfo scope = null)
         {
-            ctx.Budget.ChargeAllocation(64 + 8L * (localCount + cellCount + freeCells.Length));
+            ctx.Budget.ChargeAllocation(FrameCharge(localCount, cellCount, freeCells.Length));
             var locals = new ScriptValue[localCount];
             var cells = new Cell[cellCount];
             for (int i = 0; i < cellCount; i++)
@@ -129,6 +135,43 @@ namespace Outbridge.PyLite.Runtime
             return _cells[idx];
         }
 
+        // The closure cells a nested scope captures from this (the defining) frame. Where each free variable
+        // sits here depends only on the two scopes, so the positions are found once per nested scope and kept
+        // on its FunctionInfo (P16); a frame of another scope (never expected) is answered by name.
+        internal Cell[] CaptureClosure(FunctionInfo nested)
+        {
+            IReadOnlyList<string> free = nested.FreeVars;
+            if (free.Count == 0)
+                return System.Array.Empty<Cell>();
+            int[] map = nested.CaptureMap;
+            if (map == null || !ReferenceEquals(nested.CaptureScope, Scope))
+            {
+                map = new int[free.Count];
+                for (int i = 0; i < map.Length; i++)
+                {
+                    int ci = IndexOf(Scope.CellVars, free[i]);
+                    if (ci >= 0)
+                    {
+                        map[i] = ci;   // one of this frame's own cells
+                        continue;
+                    }
+                    int fi = IndexOf(Scope.FreeVars, free[i]);
+                    if (fi < 0)
+                        throw new System.InvalidOperationException("no closure cell for '" + free[i] + "'");
+                    map[i] = ~fi;      // one of the cells this frame captured itself
+                }
+                if (nested.CaptureMap == null)
+                {
+                    nested.CaptureScope = Scope;
+                    nested.CaptureMap = map;
+                }
+            }
+            var cells = new Cell[map.Length];
+            for (int i = 0; i < cells.Length; i++)
+                cells[i] = map[i] >= 0 ? _cells[map[i]] : _freeCells[~map[i]];
+            return cells;
+        }
+
         // Capture the Cell for a nested function's free variable `name` from THIS (the defining) frame:
         // the name is either one of this frame's own cells or one of its own captured free cells.
         public Cell GetClosureCell(string name)
@@ -146,48 +189,62 @@ namespace Outbridge.PyLite.Runtime
             throw new System.InvalidOperationException("no closure cell for '" + name + "'");
         }
 
-        // Bind a name defined in THIS scope (a def/class name): module scope -> globals; a captured local
-        // -> its cell; otherwise a plain local slot. Slot conventions match the Resolver (local slot =
-        // index in LocalNames, cell index = index in CellVars).
+        public void DelCell(int idx, string nameForError)
+        {
+            if (_cells[idx].Value == null)
+            {
+                throw Raise.UnboundLocal(_ctx, nameForError);
+            }
+            _cells[idx].Value = null;
+        }
+
+        public void DelFree(int idx, string nameForError)
+        {
+            if (_freeCells[idx].Value == null)
+            {
+                throw Raise.FreeVariable(_ctx, nameForError);
+            }
+            _freeCells[idx].Value = null;
+        }
+
+        private enum ScopeSlot { Global, Cell, Free, Local }
+
+        // Where a name bound by a def/class/import/except-as statement in THIS scope lives, mirroring the
+        // Resolver: a captured local -> its cell, a `nonlocal` name -> the enclosing cell, else a local slot;
+        // module scope and `global` names -> globals.
+        private ScopeSlot FindScopeSlot(string name, out int idx)
+        {
+            idx = -1;
+            if (Scope == null || Scope.Kind == ScopeKind.Module)
+                return ScopeSlot.Global;
+            if ((idx = IndexOf(Scope.CellVars, name)) >= 0)
+                return ScopeSlot.Cell;
+            if ((idx = IndexOf(Scope.FreeVars, name)) >= 0)
+                return ScopeSlot.Free;
+            if ((idx = IndexOf(Scope.LocalNames, name)) >= 0)
+                return ScopeSlot.Local;
+            return ScopeSlot.Global;
+        }
+
         public void BindScopeName(string name, ScriptValue value)
         {
-            if (Scope == null || Scope.Kind == ScopeKind.Module)
+            switch (FindScopeSlot(name, out int i))
             {
-                SetGlobal(name, value);
-                return;
+                case ScopeSlot.Cell: _cells[i].Value = value; return;
+                case ScopeSlot.Free: _freeCells[i].Value = value; return;
+                case ScopeSlot.Local: _locals[i] = value; return;
+                default: SetGlobal(name, value); return;
             }
-            int ci = IndexOf(Scope.CellVars, name);
-            if (ci >= 0)
-            {
-                SetCell(ci, value);
-                return;
-            }
-            int li = IndexOf(Scope.LocalNames, name);
-            if (li >= 0)
-            {
-                SetLocal(li, value);
-                return;
-            }
-            SetGlobal(name, value);
         }
 
         // Clear a name bound in THIS scope; an already-unbound name is fine (Py3 `del e` after except).
         public void SafeDelScopeName(string name)
         {
-            if (Scope != null && Scope.Kind != ScopeKind.Module)
+            switch (FindScopeSlot(name, out int i))
             {
-                int ci = IndexOf(Scope.CellVars, name);
-                if (ci >= 0)
-                {
-                    _cells[ci].Value = null;
-                    return;
-                }
-                int li = IndexOf(Scope.LocalNames, name);
-                if (li >= 0)
-                {
-                    _locals[li] = null;
-                    return;
-                }
+                case ScopeSlot.Cell: _cells[i].Value = null; return;
+                case ScopeSlot.Free: _freeCells[i].Value = null; return;
+                case ScopeSlot.Local: _locals[i] = null; return;
             }
             ScriptValue key = Key(name);
             ScriptValue tmp;
@@ -235,6 +292,10 @@ namespace Outbridge.PyLite.Runtime
             {
                 return v;
             }
+            if (Evaluator.WithProtocol.TryGetHelper(name, out v))
+            {
+                return v;
+            }
             string unsupported;
             if (HostFunctionTable.TryGetUnsupportedMessage(name, out unsupported))
             {
@@ -274,6 +335,11 @@ namespace Outbridge.PyLite.Runtime
                 return v;
             }
             if (_builtins.TryGet(name, out v))
+            {
+                cache[slot] = new GlobalCacheEntry { Stamp = stamp, Pos = -1, Fallback = v };
+                return v;
+            }
+            if (Evaluator.WithProtocol.TryGetHelper(name, out v))
             {
                 cache[slot] = new GlobalCacheEntry { Stamp = stamp, Pos = -1, Fallback = v };
                 return v;

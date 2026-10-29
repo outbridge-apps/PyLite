@@ -27,6 +27,7 @@ namespace Outbridge.PyLite.Hosting
         private readonly IScriptClock _clock;
         private readonly ISleepPolicy _sleepPolicy;
         private readonly uint _strHashSeed;   // fixed at build (EngineOptions contract: per ENGINE, not per run)
+        private readonly bool _interpretOnly;
         private readonly ModuleRegistry _modules;         // shared, frozen
         private readonly IReadOnlyList<string> _prelude;
 
@@ -45,10 +46,12 @@ namespace Outbridge.PyLite.Hosting
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
 
-            _defaultLimits = options.DefaultLimits ?? ResourceLimits.Default;
+            ResourceLimits ceiling = options.DefaultLimits ?? ResourceLimits.Default;
+            _defaultLimits = ceiling.ClampTo(ceiling);   // the ceiling itself obeys the engine hard caps
             _clock = options.Clock ?? new SystemClock(TimeSpan.Zero, "UTC");
             _sleepPolicy = options.SleepPolicy ?? new DefaultSleepPolicy();
             _strHashSeed = options.StrHashSeed ?? RandomSeed();
+            _interpretOnly = options.InterpretOnly;
             _prelude = options.PreludeModules ?? EmptyStrings;
             _cacheCap = options.CompiledScriptCacheEntries;
             _cache = _cacheCap > 0 ? new Dictionary<string, CompiledScript>(StringComparer.Ordinal) : null;
@@ -185,12 +188,12 @@ namespace Outbridge.PyLite.Hosting
 
         // A Python-source module runs its body under the CURRENT run's budget into a fresh per-run globals
         // dict; every top-level name becomes a module attribute (prelude injection later hides '_'-names).
-        private static ModuleValue LoadPythonModule(string name, CompiledScript compiled, EvalContext ctx)
+        internal static ModuleValue LoadPythonModule(string name, CompiledScript compiled, EvalContext ctx)
         {
             DictValue mglobals = ctx.Values.Dict(8);
             Outbridge.PyLite.Runtime.Environment menv = Outbridge.PyLite.Runtime.Environment.CreateModule(
                 ctx, mglobals, ctx.Builtins, compiled.Program.ModuleInfo);
-            new Outbridge.PyLite.Runtime.Evaluator.Evaluator(compiled.Program).RunModule(menv, ctx);
+            Outbridge.PyLite.Runtime.Evaluator.Evaluator.For(compiled.Program, ctx).RunModule(menv, ctx);
 
             var members = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             OrderedTable table = mglobals.Table;
@@ -202,7 +205,7 @@ namespace Outbridge.PyLite.Hosting
                 if (!table.TryGetEntryAt(pos, out h, out k, out v))
                     continue;
                 StrValue sk = k as StrValue;
-                if (sk != null)
+                if (sk != null && !(sk.Value.Length > 0 && sk.Value[0] == '$'))   // `with` lowering's hidden names
                     members[sk.Value] = v;
             }
             return ctx.Values.Module(name, members);
@@ -359,6 +362,7 @@ namespace Outbridge.PyLite.Hosting
             var ctx = new EvalContext(budget, limits, seed, _modules, builtins,
                 _clock, _sleepPolicy, stats);
             ctx.Format = PyFormatServices.Instance;
+            ctx.InterpretOnly = _interpretOnly;
             ctxHolder[0] = ctx;
             var sink = new OutputSink(request.PrintSink, ctx);
             ctx.Out = sink;
@@ -369,31 +373,34 @@ namespace Outbridge.PyLite.Hosting
                 globals.SetItem(ctx.Values.Str("__name__"), ctx.Values.Str("__main__"), ctx);   // the script is the main module
                 Outbridge.PyLite.Runtime.Environment moduleEnv = Outbridge.PyLite.Runtime.Environment.CreateModule(
                     ctx, globals, builtins, compiled.Program.ModuleInfo);
+                // Callbacks into script code bind to the main script's evaluator, preludes run after.
+                var main = Outbridge.PyLite.Runtime.Evaluator.Evaluator.For(compiled.Program, ctx);
+                main.InstallHooks(ctx);
 
                 InjectPreludes(moduleEnv, ctx);
                 RunIO.PopulateScalarInputs(moduleEnv, request, ctx);
                 RunIO.PopulateJsonInputs(moduleEnv, request, ctx);
 
-                new Outbridge.PyLite.Runtime.Evaluator.Evaluator(compiled.Program).RunModule(moduleEnv, ctx);
+                main.RunModule(moduleEnv, ctx);
                 sink.FlushFinal();   // finalize the last (newline-less) print line; may throw HostCallFailure
 
                 IReadOnlyDictionary<string, string> scalarsOut =
                     RunIO.CollectScalarOutputs(globals, request.ScalarOutputNames, ctx);
                 IReadOnlyDictionary<string, string> jsonOut =
                     RunIO.CollectJsonOutputs(globals, request.JsonOutputNames, ctx);
-                FillStats(stats, budget, ctx, stopwatch);
+                stats.Snapshot(ctx);
                 return RunResult.Success(scalarsOut, jsonOut, sink.GetBufferedOrNull(), stats);
             }
             catch (HostMarshalFailure hmf)
             {
                 TryFlushQuietly(sink);   // idempotent: a no-op after a successful FlushFinal
-                FillStats(stats, budget, ctx, stopwatch);
+                stats.Snapshot(ctx);
                 return RunResult.Failure(new ScriptError(ScriptErrorKind.HostError, null, hmf.Message, 0, 0, null, null),
                     sink.GetBufferedOrNull(), stats);
             }
             catch (HostCallFailure hcf)
             {
-                FillStats(stats, budget, ctx, stopwatch);
+                stats.Snapshot(ctx);
                 string msg = hcf.FunctionName == "print"
                     ? "host print callback failed: " + InnerText(hcf)
                     : "host function '" + hcf.FunctionName + "' failed: " + InnerText(hcf);
@@ -404,7 +411,7 @@ namespace Outbridge.PyLite.Hosting
             {
                 TryFlushQuietly(sink);   // preserve print output on a script/budget error
                 ScriptError err = ScriptErrorBuilder.Build(ex, ctx);
-                FillStats(stats, budget, ctx, stopwatch);
+                stats.Snapshot(ctx);
                 return RunResult.Failure(err, sink.GetBufferedOrNull(), stats);
             }
         }
@@ -452,17 +459,6 @@ namespace Outbridge.PyLite.Hosting
             return table;
         }
 
-        private static void FillStats(RunStatistics stats, Budget budget, EvalContext ctx, Stopwatch stopwatch)
-        {
-            stats.Steps = budget.StepsUsed;
-            stats.AllocatedBytes = budget.AllocBytesUsed;
-            stats.OutputBytes = budget.OutputBytesUsed;
-            stats.SleepMs = budget.SleepMsUsed;
-            stats.Elapsed = stopwatch.Elapsed;
-            stats.ModulesImported = ctx.ModuleInstances.Count;
-            stats.TerminatingEntered = budget.IsTerminating;
-        }
-
         private static uint RandomSeed()
         {
             var buf = new byte[4];
@@ -476,10 +472,7 @@ namespace Outbridge.PyLite.Hosting
             using (var sha = SHA256.Create())
             {
                 byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(source));
-                var sb = new StringBuilder(hash.Length * 2);
-                for (int i = 0; i < hash.Length; i++)
-                    sb.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
-                return sb.ToString();
+                return Modules.Support.Hex.Encode(hash);
             }
         }
     }

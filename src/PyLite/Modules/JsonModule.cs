@@ -10,8 +10,8 @@ using Outbridge.PyLite.Runtime.Values;
 namespace Outbridge.PyLite.Modules
 {
     // The json module. loads/dumps over PyJson (Newtonsoft reader + our writer): the formatting
-    // kwargs, dumps(default=), loads(parse_float=, parse_int=, strict=). cls, object_hook,
-    // object_pairs_hook and parse_constant are rejected when passed non-None.
+    // kwargs, dumps(default=), loads(parse_float=, parse_int=, parse_constant=, object_hook=, strict=).
+    // cls and object_pairs_hook are rejected when passed non-None.
     internal static class JsonModule
     {
         public static ModuleValue Create(EvalContext ctx)
@@ -22,27 +22,25 @@ namespace Outbridge.PyLite.Modules
                 ["dumps"] = BuiltinFunctionValue.Make("dumps", (s, a, kw, c) => Dumps(c, a, kw)),
                 ["load"] = BuiltinFunctionValue.Make("load", (s, a, kw, c) => Load(c, a, kw)),
                 ["dump"] = BuiltinFunctionValue.Make("dump", (s, a, kw, c) => DumpTo(c, a, kw)),
-                ["JSONDecodeError"] = DecodeErrorType(),
+                ["JSONDecodeError"] = ModuleKit.ExceptionClass(PyExceptionTypes.JSONDecodeError),
             };
             return ctx.Values.Module("json", m);
         }
 
-        // JSONDecodeError(msg, doc, pos), with CPython's derived message and the five attributes.
-        private static TypeValue DecodeErrorType()
+        // JSONDecodeError(msg, doc, pos), with CPython's derived message and the five attributes. The builtins
+        // table makes the class with this constructor (JSONDecodeError is in its exception tree), so the
+        // class json exports is that same object.
+        internal static readonly BuiltinDelegate DecodeErrorCtor = (self, args, kw, c) =>
         {
-            BuiltinDelegate ctor = (self, args, kw, c) =>
-            {
-                if (args.Length != 3 || kw.Count != 0)
-                    throw Raise.TypeError(c, "JSONDecodeError() takes exactly 3 positional arguments: msg, doc, pos");
-                StrValue msg = args[0] as StrValue;
-                StrValue doc = args[1] as StrValue;
-                IntValue pos = args[2] as IntValue;
-                if (msg == null || doc == null || pos == null || !pos.IsSmall)
-                    throw Raise.TypeError(c, "JSONDecodeError() expects (str, str, int)");
-                return JsonScan.Error(c, doc.Value, doc, msg.Value, (int)pos.Small).Value;
-            };
-            return TypeValue.Make("JSONDecodeError", ctor, null, null, PyExceptionTypes.JSONDecodeError);
-        }
+            if (args.Length != 3 || kw.Count != 0)
+                throw Raise.TypeError(c, "JSONDecodeError() takes exactly 3 positional arguments: msg, doc, pos");
+            StrValue msg = args[0] as StrValue;
+            StrValue doc = args[1] as StrValue;
+            IntValue pos = args[2] as IntValue;
+            if (msg == null || doc == null || pos == null || !pos.IsSmall)
+                throw Raise.TypeError(c, "JSONDecodeError() expects (str, str, int)");
+            return JsonScan.Error(c, doc.Value, doc, msg.Value, (int)pos.Small).Value;
+        };
 
         private static ScriptValue Loads(EvalContext c, ScriptValue[] a, KwArgs kw)
         {
@@ -102,7 +100,7 @@ namespace Outbridge.PyLite.Modules
                 BytesValue b = text as BytesValue;   // a UTF-8 document, the only encoding the sandbox decodes
                 if (b == null)
                     throw Raise.TypeError(c, "load(): read() must return str or bytes, not " + text.PyTypeName);
-                s = c.Values.Str(new System.Text.UTF8Encoding(false, true).GetString(b.Data));
+                s = c.Values.Str(BytesCodec.Decode(c, b.Data, "utf-8", "strict"));
             }
             PyJson.JsonLoadHooks hooks;
             bool strict = ReadLoadKw(c, kw, out hooks);

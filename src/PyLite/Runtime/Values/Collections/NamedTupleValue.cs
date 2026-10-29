@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime.Errors;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
@@ -13,6 +14,9 @@ namespace Outbridge.PyLite.Runtime.Values
         public readonly Dictionary<string, int> FieldIndex;   // Ordinal
         public readonly ScriptTypeInfo InstanceType;
         public readonly ScriptValue[] Defaults;   // per field, null => required (defaults= fills from the right)
+        // The class namedtuple() returned, so type(p) is that class (callable, `is` the name the script
+        // bound); null for an engine-defined namedtuple (urllib.parse's results), whose name is fixed.
+        public TypeValue Class;
 
         internal NamedTupleInfo(string typeName, string[] fields, ScriptTypeInfo instanceType, ScriptValue[] defaults = null)
         {
@@ -48,7 +52,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 slots[fields[i]] = SlotDescriptor.MakeProperty(fields[i], (self, ctx) => ((NamedTupleValue)self).Items[idx]);
             }
             slots["_replace"] = SlotDescriptor.MakeMethod("_replace", (self, a, kw, ctx) => Replace((NamedTupleValue)self, a, kw, ctx));
-            slots["_asdict"] = SlotDescriptor.MakeMethod("_asdict", (self, a, kw, ctx) => AsDict((NamedTupleValue)self, ctx));
+            slots["_asdict"] = SlotDescriptor.MakeMethod("_asdict", Args.Positional("_asdict", 0, 0, (self, a, kw, ctx) => AsDict((NamedTupleValue)self, ctx)));
             slots["_fields"] = SlotDescriptor.MakeProperty("_fields", (self, ctx) => FieldsTuple(((NamedTupleValue)self).NtInfo, ctx));
             if (extra != null)
                 foreach (KeyValuePair<string, SlotDescriptor> kv in extra)

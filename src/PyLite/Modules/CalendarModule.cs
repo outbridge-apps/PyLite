@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
 {
     // calendar: the functions over CalendarMath (Monday-first, as the module's default). The Calendar
     // classes, setfirstweekday (module state would leak between runs) and the locale variants are absent.
-    public static class CalendarModule
+    internal static class CalendarModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -26,17 +26,17 @@ namespace Outbridge.PyLite.Modules
                 ["month"] = BuiltinFunctionValue.Make("month", MonthText),
                 ["weekheader"] = BuiltinFunctionValue.Make("weekheader", Weekheader),
                 ["timegm"] = BuiltinFunctionValue.Make("timegm", Timegm),
-                ["firstweekday"] = BuiltinFunctionValue.Make("firstweekday", (s, a, kw, c) => c.Values.Int(0)),
+                ["firstweekday"] = BuiltinFunctionValue.Make("firstweekday", Args.Positional("firstweekday", 0, 0, (s, a, kw, c) => c.Values.Int(0))),
                 ["month_name"] = Names(ctx, DtNames.FullMonths, true),
                 ["month_abbr"] = Names(ctx, DtNames.AbbrMonths, true),
                 ["day_name"] = Names(ctx, DtNames.FullDays, false),
                 ["day_abbr"] = Names(ctx, DtNames.AbbrDays, false),
-                ["IllegalMonthError"] = ctx.Values.Type("IllegalMonthError", null, null, null, PyExceptionTypes.IllegalMonthError),
-                ["IllegalWeekdayError"] = ctx.Values.Type("IllegalWeekdayError", null, null, null, PyExceptionTypes.IllegalWeekdayError),
+                ["IllegalMonthError"] = ModuleKit.ExceptionClass(PyExceptionTypes.IllegalMonthError),
+                ["IllegalWeekdayError"] = ModuleKit.ExceptionClass(PyExceptionTypes.IllegalWeekdayError),
                 // Lib/calendar.py exports both: February holds 28 here and leap years are handled by
                 // monthrange, and `error` is the ValueError the two Illegal* errors derive from.
                 ["mdays"] = MDays(ctx),
-                ["error"] = ctx.Values.Type("error", null, null, null, PyExceptionTypes.ValueError),
+                ["error"] = PyExceptionTypes.ValueError.ClassValue ?? ctx.Values.Type("error", null, null, null, PyExceptionTypes.ValueError),
             };
             string[] days = { "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY" };
             for (int i = 0; i < days.Length; i++)
@@ -72,15 +72,7 @@ namespace Outbridge.PyLite.Modules
             return IntOf(ctx, a[idx]);
         }
 
-        private static int IntOf(EvalContext ctx, ScriptValue v)
-        {
-            if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
-                throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-            System.Numerics.BigInteger b = NumericOps.AsBigInteger(v);
-            if (b < int.MinValue || b > int.MaxValue)
-                throw Raise.Overflow(ctx, "Python int too large to convert to C int");
-            return (int)b;
-        }
+        private static int IntOf(EvalContext ctx, ScriptValue v) { return Coerce.ToCInt(ctx, v, "calendar"); }
 
         private static int MonthArg(EvalContext ctx, int month)
         {
@@ -201,6 +193,8 @@ namespace Outbridge.PyLite.Modules
                 lv = v;
             int w = Math.Max(2, wv == null ? 0 : IntOf(ctx, wv));
             int l = Math.Max(1, lv == null ? 0 : IntOf(ctx, lv));
+            // w and l come from the script: at most 8 lines of 7 cells of w+1 chars, each followed by l newlines.
+            ctx.Values.CheckStrLen(8L * (7L * (w + 1) + l));
             var sb = new StringBuilder();
             string title = DtNames.FullMonths[mo - 1] + " " + y.ToString(CultureInfo.InvariantCulture);
             sb.Append(Center(title, 7 * (w + 1) - 1).TrimEnd()).Append('\n');

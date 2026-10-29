@@ -16,7 +16,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private readonly IScriptIterator _firstIter;
         private readonly EvalContext _ctx;
         private readonly Evaluator _ev;
-        private readonly bool _fused;   // T2.3c gate: MaxIntBits >= 128, IntOpSmall's own threshold
+        private readonly bool _fused;   // T2.3c gate: Evaluator.FusionAllowed
         private IEnumerator<ScriptValue> _gen;
 
         internal ComprehensionIterator(ComprehensionNode node, Environment scope, IScriptIterator firstIter,
@@ -27,7 +27,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             _firstIter = firstIter;
             _ctx = ctx;
             _ev = ev;
-            _fused = ctx.Limits.MaxIntBits >= 128;
+            _fused = Evaluator.FusionAllowed(ctx);
         }
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
@@ -41,13 +41,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 moved = _gen.MoveNext();
             }
-            catch (ScriptException se) when (se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration))
+            catch (ScriptException se) when (Evaluator.IsStopIteration(se))
             {
                 // PEP 479: a StopIteration escaping the comprehension/genexp body (element
                 // a condition, or a non-first iterable — everything but the eager first for-iterable) is a
                 // RuntimeError, not a silent end-of-iteration. The bool MoveNext protocol never surfaces
                 // StopIteration itself, so anything caught here came from user code in the body.
-                throw Raise.RuntimeError(ctx, "generator raised StopIteration");
+                throw Evaluator.StopIterationEscaped(ctx);
             }
             if (moved)
             {
@@ -90,8 +90,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 FusedScopeCond fusedCond = _fused ? Evaluator.GetFusedScopeCond(ref c.FusedCond, c.Cond) : null;
                 if (!(fusedCond != null && fusedCond(_scope, out keep)))
                 {
-                    CompiledEval condFn = Evaluator.GetCompiledExpr(ref c.CompiledCond, c.Cond);
-                    keep = PyOps.Truth(condFn != null ? condFn(_ev, _scope, _ctx) : _ev.EvalExpr(c.Cond, _scope, _ctx), _ctx);
+                    CompiledEval condFn = Evaluator.GetCompiledExpr(ref c.CompiledCond, c.Cond, _ctx);
+                    keep = PyOps.Truth(_ev.EvalCompiledOr(condFn, c.Cond, _scope, _ctx), _ctx);
                 }
                 if (keep)
                 {
@@ -119,8 +119,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 else
                 {
-                    CompiledEval elemFn = Evaluator.GetCompiledExpr(ref _node.CompiledElement, _node.Element);
-                    k = elemFn != null ? elemFn(_ev, _scope, _ctx) : _ev.EvalExpr(_node.Element, _scope, _ctx);
+                    CompiledEval elemFn = Evaluator.GetCompiledExpr(ref _node.CompiledElement, _node.Element, _ctx);
+                    k = _ev.EvalCompiledOr(elemFn, _node.Element, _scope, _ctx);
                 }
                 ScriptValue v;
                 FusedScopeLong fusedVal = _fused
@@ -131,8 +131,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 else
                 {
-                    CompiledEval valFn = Evaluator.GetCompiledExpr(ref _node.CompiledValueElement, _node.ValueElement);
-                    v = valFn != null ? valFn(_ev, _scope, _ctx) : _ev.EvalExpr(_node.ValueElement, _scope, _ctx);
+                    CompiledEval valFn = Evaluator.GetCompiledExpr(ref _node.CompiledValueElement, _node.ValueElement, _ctx);
+                    v = _ev.EvalCompiledOr(valFn, _node.ValueElement, _scope, _ctx);
                 }
                 return _ctx.Values.Tuple(new[] { k, v });
             }
@@ -140,8 +140,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 return _ctx.Values.Int(f);
             }
-            CompiledEval elemFn2 = Evaluator.GetCompiledExpr(ref _node.CompiledElement, _node.Element);
-            return elemFn2 != null ? elemFn2(_ev, _scope, _ctx) : _ev.EvalExpr(_node.Element, _scope, _ctx);
+            CompiledEval elemFn2 = Evaluator.GetCompiledExpr(ref _node.CompiledElement, _node.Element, _ctx);
+            return _ev.EvalCompiledOr(elemFn2, _node.Element, _scope, _ctx);
         }
     }
 }

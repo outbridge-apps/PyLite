@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules
 {
     // html: escape is our own 5-replacement pass; unescape is a port of CPython's
     // algorithm over the generated HTML5 entity table (Html5Entities).
-    public static class HtmlModule
+    internal static class HtmlModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -140,7 +140,7 @@ namespace Outbridge.PyLite.Modules
             long num = 0;
             while (q < s.Length)
             {
-                int dv = hex ? HexVal(s[q]) : (s[q] >= '0' && s[q] <= '9' ? s[q] - '0' : -1);
+                int dv = hex ? Support.Hex.Nibble(s[q]) : (s[q] >= '0' && s[q] <= '9' ? s[q] - '0' : -1);
                 if (dv < 0)
                     break;
                 if (num <= 0x110000)
@@ -153,17 +153,6 @@ namespace Outbridge.PyLite.Modules
                 q++;
             AppendCodePoint(sb, num);
             return q - p;
-        }
-
-        private static int HexVal(char c)
-        {
-            if (c >= '0' && c <= '9')
-                return c - '0';
-            if (c >= 'a' && c <= 'f')
-                return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F')
-                return c - 'A' + 10;
-            return -1;
         }
 
         private static void AppendCodePoint(StringBuilder sb, long num)
@@ -189,12 +178,6 @@ namespace Outbridge.PyLite.Modules
             sb.Append(char.ConvertFromUtf32((int)num));
         }
 
-        private static string AsStr(EvalContext ctx, ScriptValue v)
-        {
-            StrValue s = v as StrValue;
-            if (s == null)
-                throw Raise.TypeError(ctx, "argument must be str, not " + v.PyTypeName);
-            return s.Value;
-        }
+        private static string AsStr(EvalContext ctx, ScriptValue v) { return Coerce.ToStr(ctx, v, "argument"); }
     }
 }

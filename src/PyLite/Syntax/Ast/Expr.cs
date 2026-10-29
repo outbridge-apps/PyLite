@@ -8,6 +8,7 @@ namespace Outbridge.PyLite.Syntax.Ast
         public readonly object Value;       // BigInteger | double | string | bool | NoneMarker.Instance
         public readonly LiteralKind Kind;
         internal object CachedSmall;        // shared zero-charge IntValue singleton (-5..256), set lazily
+        internal int CacheSlot = -1;        // str/float/bytes: its per-run cache slot, numbered by the resolver
         public LiteralNode(SourceInfo src, object value, LiteralKind kind) : base(src, NodeKind.Literal)
         {
             Value = value;
@@ -194,16 +195,5 @@ namespace Outbridge.PyLite.Syntax.Ast
     {
         public readonly IReadOnlyList<FStringPart> Parts;
         public FStringNode(SourceInfo src, IReadOnlyList<FStringPart> parts) : base(src, NodeKind.FString, ChildDepth.OfFStringParts(parts)) { Parts = parts; }
-    }
-
-    // Created ONLY by the Resolver (const folding); keeps the original for diagnostics.
-    public sealed class ConstFoldedNode : ExprNode
-    {
-        public readonly ExprNode Original;
-        public readonly LiteralNode Folded;
-        public ConstFoldedNode(ExprNode original, LiteralNode folded) : base(original.Src, NodeKind.ConstFolded)
-        {
-            Original = original; Folded = folded;
-        }
     }
 }

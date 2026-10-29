@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -12,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // Codes: x c b B ? h H i I l L q Q f d s with repeat counts; order chars @ = < > !.
     // DEVIATION: '@' behaves like '=' — standard sizes, no native alignment padding
     // (native mode on x64 Windows differs only by alignment, which scripts here never rely on).
-    public static class StructModule
+    internal static class StructModule
     {
         private struct Item
         {
@@ -31,19 +32,13 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["pack"] = BuiltinFunctionValue.Make("pack", (s, a, kw, c) => Pack(c, a));
-            m["unpack"] = BuiltinFunctionValue.Make("unpack", (s, a, kw, c) => Unpack(c, a));
+            m["pack"] = BuiltinFunctionValue.Make("pack", Args.Positional("pack", 1, int.MaxValue, (s, a, kw, c) => Pack(c, a)));
+            m["unpack"] = BuiltinFunctionValue.Make("unpack", Args.Positional("unpack", 2, 2, (s, a, kw, c) => Unpack(c, a)));
             m["unpack_from"] = BuiltinFunctionValue.Make("unpack_from", UnpackFrom);
-            m["calcsize"] = BuiltinFunctionValue.Make("calcsize", (s, a, kw, c) => c.Values.Int(Parsed(c, FmtArg(c, a)).Size));
-            m["iter_unpack"] = BuiltinFunctionValue.Make("iter_unpack", (s, a, kw, c) => IterUnpack(c, a));
-            m["error"] = ErrorType();
+            m["calcsize"] = BuiltinFunctionValue.Make("calcsize", Args.Positional("calcsize", 1, 1, (s, a, kw, c) => c.Values.Int(Parsed(c, FmtArg(c, a)).Size)));
+            m["iter_unpack"] = BuiltinFunctionValue.Make("iter_unpack", Args.Positional("iter_unpack", 2, 2, (s, a, kw, c) => IterUnpack(c, a)));
+            m["error"] = ModuleKit.ExceptionClass(PyExceptionTypes.StructError);
             return ctx.Values.Module("struct", m);
-        }
-
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.StructError, args);
-            return TypeValue.Make("error", ctor, null, null, PyExceptionTypes.StructError);
         }
 
         private static ScriptException Err(EvalContext ctx, string msg)
@@ -223,10 +218,9 @@ namespace Outbridge.PyLite.Modules
 
         private static double AsDoubleArg(EvalContext ctx, ScriptValue v)
         {
-            if (v.Kind == ValueKind.Float)
-                return ((FloatValue)v).Value;
-            if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
-                return (double)NumericOps.AsBigInteger(v);
+            double d;
+            if (Coerce.TryToReal(ctx, v, false, out d))
+                return d;
             throw Err(ctx, "required argument is not a float");
         }
 
@@ -452,16 +446,6 @@ namespace Outbridge.PyLite.Modules
         {
             ulong signBit = 1UL << (size * 8 - 1);
             return (bits & signBit) == 0 ? (long)bits : (long)bits - (long)(signBit << 1);
-        }
-
-        private static byte[] ReadRaw(byte[] data, ref int pos, int size, bool be)
-        {
-            var raw = new byte[size];
-            Array.Copy(data, pos, raw, 0, size);
-            pos += size;
-            if (be == BitConverter.IsLittleEndian)
-                Array.Reverse(raw);
-            return raw;
         }
     }
 }

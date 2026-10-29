@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // just run. Annotations themselves are parsed-and-discarded by the frontend (PEP 649 spirit); this
     // module only has to make runtime uses inert: subscription (Optional[int]) returns the form itself,
     // cast(t, v) returns v, decorators are identity, TYPE_CHECKING is False. No type checking happens.
-    public static class TypingModule
+    internal static class TypingModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -35,16 +35,16 @@ namespace Outbridge.PyLite.Modules
             m["TYPE_CHECKING"] = ctx.Values.Bool(false);
 
             // cast(typ, val) -> val (the entire point of cast is being a runtime no-op).
-            m["cast"] = BuiltinFunctionValue.Make("cast", (self, a, kw, c) =>
+            m["cast"] = BuiltinFunctionValue.Make("cast", Args.Positional("cast", 2, 2, (self, a, kw, c) =>
             {
                 Args.Exactly(c, a, "cast", 2);
                 return a[1];
-            });
-            m["assert_type"] = BuiltinFunctionValue.Make("assert_type", (self, a, kw, c) =>
+            }));
+            m["assert_type"] = BuiltinFunctionValue.Make("assert_type", Args.Positional("assert_type", 2, 2, (self, a, kw, c) =>
             {
                 Args.Exactly(c, a, "assert_type", 2);
                 return a[0];
-            });
+            }));
 
             // Factories returning inert named forms.
             m["TypeVar"] = NamedFactory("TypeVar");
@@ -52,7 +52,7 @@ namespace Outbridge.PyLite.Modules
             m["TypeVarTuple"] = NamedFactory("TypeVarTuple");
 
             // NewType('X', base) -> an identity callable (calling it returns the argument unchanged).
-            m["NewType"] = BuiltinFunctionValue.Make("NewType", (self, a, kw, c) =>
+            m["NewType"] = BuiltinFunctionValue.Make("NewType", Args.Positional("NewType", 2, 2, (self, a, kw, c) =>
             {
                 Args.Exactly(c, a, "NewType", 2);
                 string name = a[0].Kind == ValueKind.Str ? ((StrValue)a[0]).Value : "NewType";
@@ -61,7 +61,7 @@ namespace Outbridge.PyLite.Modules
                     Args.Exactly(c2, a2, name, 1);
                     return a2[0];
                 });
-            });
+            }));
 
             // Identity decorators.
             foreach (string dec in new[] { "overload", "final", "runtime_checkable", "no_type_check", "override" })
@@ -71,9 +71,21 @@ namespace Outbridge.PyLite.Modules
             // type (the annotation part of each pair is ignored). Class-based use needs classes -> v3.
             m["NamedTuple"] = BuiltinFunctionValue.Make("NamedTuple", (self, a, kw, c) =>
             {
-                Args.Exactly(c, a, "NamedTuple", 2);
-                IScriptIterator it = PyOps.GetIterator(a[1], c);
+                // NamedTuple(typename, fields) or NamedTuple(typename, x=int, y=str): the keyword form names the
+                // fields in order (the annotations are not kept).
+                Args.Between(c, a, "NamedTuple", 1, 2);
                 ListValue names = c.Values.List(4);
+                if (kw.Count > 0)
+                {
+                    if (a.Length == 2)
+                        throw Raise.TypeError(c, "Either list of fields or keywords can be provided to NamedTuple, not both");
+                    for (int i = 0; i < kw.Count; i++)
+                        names.Add(c.Values.Str(kw.NameAt(i)), c);
+                    return CollectionsModule.NamedTuple(null, new[] { a[0], (ScriptValue)names }, KwArgs.Empty, c);
+                }
+                if (a.Length < 2)
+                    throw Raise.TypeError(c, "NamedTuple() missing required argument 'fields'");
+                IScriptIterator it = PyOps.GetIterator(a[1], c);
                 ScriptValue item;
                 while (it.MoveNext(c, out item))
                 {
@@ -88,10 +100,11 @@ namespace Outbridge.PyLite.Modules
                 return CollectionsModule.NamedTuple(null, new[] { a[0], (ScriptValue)names }, KwArgs.Empty, c);
             });
 
-            m["get_type_hints"] = BuiltinFunctionValue.Make("get_type_hints", (self, a, kw, c) => GetTypeHints(c, a));
+            m["get_type_hints"] = BuiltinFunctionValue.Make("get_type_hints", (self, a, kw, c) =>
+                GetTypeHints(c, Args.Named(c, a, kw, "get_type_hints", "obj", "globalns", "localns", "include_extras")));
             // Introspection stubs: nothing is stored, so nothing comes back.
-            m["get_args"] = BuiltinFunctionValue.Make("get_args", (self, a, kw, c) => ValueFactory.EmptyTuple);
-            m["get_origin"] = BuiltinFunctionValue.Make("get_origin", (self, a, kw, c) => c.Values.None);
+            m["get_args"] = BuiltinFunctionValue.Make("get_args", Args.Positional("get_args", 1, 1, (self, a, kw, c) => ValueFactory.EmptyTuple));
+            m["get_origin"] = BuiltinFunctionValue.Make("get_origin", Args.Positional("get_origin", 1, 1, (self, a, kw, c) => c.Values.None));
 
             return ctx.Values.Module("typing", m);
         }

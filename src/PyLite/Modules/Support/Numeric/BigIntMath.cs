@@ -1,35 +1,29 @@
 using System.Numerics;
+using Outbridge.PyLite.Runtime;
+using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules.Support
 {
-    // BigInteger helpers absent from net472. GetBitLength does not exist here.
+    // BigInteger helpers absent from net472 (the bit length is NumericOps.BitLength).
     internal static class BigIntMath
     {
-        // Bit length of |n| (n==0 -> 0). Used by loghelper / factorial pre-estimation / fraction growth charging.
-        public static int BitLength(BigInteger n)
+        // 10**e, sized against MaxIntBits together with the bits of the factor it will scale, before it is built.
+        public static BigInteger PowTen(EvalContext ctx, long e, long factorBits)
         {
-            if (n.IsZero)
-                return 0;
-            byte[] b = BigInteger.Abs(n).ToByteArray();   // little-endian, may have a trailing 0 sign byte
-            int i = b.Length - 1;
-            while (i > 0 && b[i] == 0)
-                i--;
-            int top = b[i];
-            int bits = 0;
-            while (top != 0)
-            {
-                bits++;
-                top >>= 1;
-            }
-            return i * 8 + bits;
+            ctx.Values.EnsureIntBits(factorBits + (long)(e * Log2Of10));
+            ctx.Budget.CheckDeadlineNow();
+            BigInteger r = BigOps.Pow(ctx, 10, (int)e, e * Log2Of10);
+            ctx.Budget.CheckDeadlineNow();
+            return r;
         }
+
+        private static readonly double Log2Of10 = System.Math.Log(10, 2);
 
         public static bool IsPowerOfTwo(BigInteger n)
         {
             if (n.Sign <= 0)
                 return false;
-            int bits = BitLength(n);
-            return n == (BigInteger.One << (bits - 1));
+            return n == (BigInteger.One << (int)(NumericOps.BitLength(n) - 1));
         }
     }
 }

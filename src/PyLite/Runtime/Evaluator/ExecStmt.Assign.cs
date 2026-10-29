@@ -47,8 +47,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
-        // Store `value` into obj.attr, or raise the read-only AttributeError. Shared by tree-walk assign
-        // and the bytecode VM's STORE_ATTR so both are byte-identical.
+        // Store `value` into obj.attr, or raise the read-only AttributeError (assignment and augmented
+        // assignment both come here).
         internal void StoreAttrValue(ScriptValue aobj, string attr, ScriptValue value, EvalContext ctx)
         {
             PyOps.SetAttr(aobj, attr, value, ctx);
@@ -168,7 +168,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                         ri.SetAttribute(at.Attr, InplaceOp(op, cur2, EvalExpr(n.Value, env, ctx), ctx), ctx);
                         return ExecSignal.Normal;
                     }
-                    throw ReadOnlyAttrOf(aobj.PyTypeName, at.Attr, ctx);
+                    // Any other object: read, combine, store back; SetAttr refuses what the type does not let a
+                    // script write, with CPython's wording.
+                    ScriptValue cur3 = PyOps.GetAttr(aobj, at.Attr, ctx);
+                    PyOps.SetAttr(aobj, at.Attr, InplaceOp(op, cur3, EvalExpr(n.Value, env, ctx), ctx), ctx);
+                    return ExecSignal.Normal;
                 default:
                     throw EngineBug("cannot augment " + n.Target.GetType().Name);
             }
@@ -215,7 +219,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 && (op == PyBinOp.BitOr || op == PyBinOp.BitAnd || op == PyBinOp.Sub || op == PyBinOp.BitXor))
             {
                 SetValue scur = (SetValue)cur;
-                SetMethods.ReplaceWith(ctx, scur, SetOps.Apply(op, scur, rhs, ctx, false).Table);
+                SetOps.ApplyInPlace(op, scur, rhs, ctx);
                 return scur;
             }
             // Small-int shortcut (n += 1 loops): no TypeError to re-augment on this path — IntOpSmall
@@ -277,15 +281,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 case NameNode nm:
                     NameBinding b = _program.GetBinding(nm);
-                    if (b != null && b.Kind == NameKind.Local)
+                    switch (b == null ? NameKind.Global : b.Kind)
                     {
-                        env.DelLocal(b.Slot, nm.Id);
+                        case NameKind.Local: env.DelLocal(b.Slot, nm.Id); return;
+                        case NameKind.Cell: env.DelCell(b.Slot, nm.Id); return;
+                        case NameKind.Free:
+                        case NameKind.Nonlocal: env.DelFree(b.Slot, nm.Id); return;
+                        default: env.DelGlobal(nm.Id); return;
                     }
-                    else
-                    {
-                        env.DelGlobal(nm.Id);
-                    }
-                    return;
                 case IndexNode ix:
                     ScriptValue obj = EvalExpr(ix.Value, env, ctx);
                     ScriptValue idx = EvalSubscript(ix.Index, env, ctx);

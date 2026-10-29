@@ -15,16 +15,16 @@ namespace Outbridge.PyLite.Modules
     // on decompress. compressobj/decompressobj (streaming) are not provided. Compressed bytes are
     // valid zlib streams but not byte-identical to CPython's; inflation pre-charges the
     // budget per chunk, so a decompression bomb dies as BudgetExceeded, not as host OOM.
-    public static class ZlibModule
+    internal static class ZlibModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["compress"] = BuiltinFunctionValue.Make("compress", (s, a, kw, c) => Compress(c, a, kw));
             m["decompress"] = BuiltinFunctionValue.Make("decompress", (s, a, kw, c) => Decompress(c, a, kw));
-            m["crc32"] = BuiltinFunctionValue.Make("crc32", (s, a, kw, c) => BinasciiModule.Crc32(c, a));
-            m["adler32"] = BuiltinFunctionValue.Make("adler32", (s, a, kw, c) => Adler32Fn(c, a));
-            m["error"] = ErrorType();
+            m["crc32"] = BuiltinFunctionValue.Make("crc32", Args.Positional("crc32", 1, 2, (s, a, kw, c) => BinasciiModule.Crc32(c, a)));
+            m["adler32"] = BuiltinFunctionValue.Make("adler32", Args.Positional("adler32", 1, 2, (s, a, kw, c) => Adler32Fn(c, a)));
+            m["error"] = ModuleKit.ExceptionClass(PyExceptionTypes.ZlibError);
             m["MAX_WBITS"] = ctx.Values.Int(15);
             m["DEFLATED"] = ctx.Values.Int(8);
             m["Z_DEFAULT_COMPRESSION"] = ctx.Values.Int(-1);
@@ -32,12 +32,6 @@ namespace Outbridge.PyLite.Modules
             m["Z_BEST_SPEED"] = ctx.Values.Int(1);
             m["Z_BEST_COMPRESSION"] = ctx.Values.Int(9);
             return ctx.Values.Module("zlib", m);
-        }
-
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.ZlibError, args);
-            return TypeValue.Make("error", ctor, null, null, PyExceptionTypes.ZlibError);
         }
 
         private static ScriptException Err(EvalContext ctx, string msg)
@@ -133,6 +127,13 @@ namespace Outbridge.PyLite.Modules
         // final BytesValue charges again — the double charge is deliberate (conservative direction).
         internal static byte[] InflateRaw(EvalContext c, byte[] input, int offset, int count)
         {
+            return InflateRaw(c, input, offset, count, -1);
+        }
+
+        // maxOut >= 0 stops inflating once that many bytes are out (a zip member never yields more than
+        // its recorded size, as in CPython); the rest of the stream is not inflated at all.
+        internal static byte[] InflateRaw(EvalContext c, byte[] input, int offset, int count, long maxOut)
+        {
             using (var inMs = new MemoryStream(input, offset, count, false))
             using (var ds = new DeflateStream(inMs, CompressionMode.Decompress))
             using (var outMs = new MemoryStream())
@@ -152,10 +153,14 @@ namespace Outbridge.PyLite.Modules
                     }
                     if (n <= 0)
                         break;
+                    if (maxOut >= 0 && outMs.Length + n > maxOut)
+                        n = (int)(maxOut - outMs.Length);
                     c.Budget.ChargeAllocation(n);
                     if (outMs.Length + n > c.Limits.MaxStrChars)
                         throw c.Budget.CreateAbort(EngineAbortKind.Memory, "MaxStrChars", c.Limits.MaxStrChars, outMs.Length + n);
                     outMs.Write(buf, 0, n);
+                    if (maxOut >= 0 && outMs.Length >= maxOut)
+                        break;
                 }
                 return outMs.ToArray();
             }

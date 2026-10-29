@@ -32,10 +32,31 @@ namespace Outbridge.PyLite.Modules
             d[name] = BuiltinFunctionValue.Make(name, fn);
         }
 
-        // Reentrant call into a script callable through the single Evaluator.Call point.
-        internal static ScriptValue Invoke(Outbridge.PyLite.Runtime.EvalContext c, ScriptValue fn, params ScriptValue[] args)
+        // A builtin of min..max positional arguments and no keywords (CPython's METH_O and PyArg_UnpackTuple
+        // builtins): both are checked before the body, so neither a keyword nor an extra argument is dropped
+        // silently (len(x, y=1) used to be len(x)).
+        internal static void Add(Dictionary<string, ScriptValue> d, string name, int min, int max, BuiltinDelegate fn)
         {
-            return c.CallHook(fn, args, Outbridge.PyLite.Runtime.Evaluator.KwArgs.Empty);
+            Add(d, name, Positional(name, min, max, fn));
+        }
+
+        internal static TypeValue AddType(Dictionary<string, ScriptValue> d, string name, int min, int max, BuiltinDelegate ctor,
+            IReadOnlyDictionary<string, ScriptValue> staticSlots = null, ScriptTypeInfo describes = null)
+        {
+            return AddType(d, name, Positional(name, min, max, ctor), staticSlots, describes);
+        }
+
+        private static BuiltinDelegate Positional(string name, int min, int max, BuiltinDelegate fn)
+        {
+            return (self, args, kw, c) =>
+            {
+                if (kw.Count != 0 || args.Length < min || args.Length > max)
+                {
+                    Support.Args.NoKw(c, kw, name);
+                    Support.Args.CheckPositional(c, args, name, min, max);
+                }
+                return fn(self, args, kw, c);
+            };
         }
 
         // Register a type name (int/str/...) as a callable TypeValue and cache it for type().
@@ -64,8 +85,15 @@ namespace Outbridge.PyLite.Modules
         // have no registered constructor (their instances still answer type()).
         internal static TypeValue TypeObjectFor(string name)
         {
+            TypeValue tv;
+            if (TypeCache.TryGetValue(name, out tv))
+                return tv;
+            if (TypeCache.Count >= MaxCachedTypeNames)
+                return TypeValue.Make(name, null, null, null, null);   // the cache outlives runs: never let it grow without end
             return TypeCache.GetOrAdd(name, nm => TypeValue.Make(nm, null, null, null, null));
         }
+
+        private const int MaxCachedTypeNames = 1024;
 
         // partial Register* declared in the sibling files
         static partial void RegisterConvert(Dictionary<string, ScriptValue> d);

@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Modules
     // uuid: UUID over byte[16] big-endian; uuid1/3/4/5 and NAMESPACE_* constants.
     // 2026-07-08 decision: MD5/SHA1 from System.Security.Cryptography (no managed MD5 port). RNG-dependent
     // parts (uuid4, clock_seq, node) come from ctx.Random; time from ctx.Clock; per-context uuid1 state.
-    public static class UuidModule
+    internal static class UuidModule
     {
         private static readonly BigInteger Uuid1582Offset = BigInteger.Parse("122192928000000000"); // 0x01b21dd213814000
         private static readonly BigInteger TwoPow128 = BigInteger.One << 128;
@@ -101,7 +101,7 @@ namespace Outbridge.PyLite.Modules
 
             if (versionArg != null && versionArg.Kind != ValueKind.None)
             {
-                BigInteger ver = NumericOps.AsBigInteger(versionArg);
+                BigInteger ver = Coerce.ToIndex(ctx, versionArg, "version");
                 if (ver < 1 || ver > 5)
                     throw Raise.ValueError(ctx, "illegal version number");
                 intval = ApplyVariantVersion(intval, (int)ver);
@@ -150,6 +150,8 @@ namespace Outbridge.PyLite.Modules
             {
                 if (item.Kind != ValueKind.Int && item.Kind != ValueKind.Bool)
                     throw Raise.TypeError(ctx, "fields must be integers");
+                if (vals.Count == 6)
+                    throw Raise.ValueError(ctx, "fields is not a 6-tuple");   // an endless iterator stops here
                 vals.Add(NumericOps.AsBigInteger(item));
             }
             if (vals.Count != 6)

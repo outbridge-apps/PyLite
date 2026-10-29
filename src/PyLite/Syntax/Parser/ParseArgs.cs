@@ -54,10 +54,11 @@ namespace Outbridge.PyLite.Syntax
                         NameNode nn = e as NameNode;
                         if (nn == null)
                             throw ErrorAt(at, "keyword can't be an expression");
-                        if (!kwNames.Add(nn.Id))
+                        string keyword = at.Text;   // the token, not nn.Id: a class-body constant may have renamed it
+                        if (!kwNames.Add(keyword))
                             throw ErrorAt(at, "keyword argument repeated");
                         ExprNode val = ParseTest();
-                        args.Add(new Arg(Src(at), ArgKind.Keyword, nn.Id, val));
+                        args.Add(new Arg(Src(at), ArgKind.Keyword, keyword, val));
                         sawKeyword = true;
                     }
                     else

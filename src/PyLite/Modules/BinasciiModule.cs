@@ -10,28 +10,23 @@ namespace Outbridge.PyLite.Modules
 {
     // binascii (corpus-gated): hexlify/unhexlify (+ b2a_hex/a2b_hex aliases)
     // b2a_base64/a2b_base64, crc32, Error (<- ValueError). Rides on BytesValue and the BCL base64.
-    public static class BinasciiModule
+    internal static class BinasciiModule
     {
-        private static readonly uint[] Crc32Table = BuildCrc32Table();   // immutable static
 
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["hexlify"] = BuiltinFunctionValue.Make("hexlify", (s, a, kw, c) => Hexlify(c, a));
-            m["b2a_hex"] = BuiltinFunctionValue.Make("b2a_hex", (s, a, kw, c) => Hexlify(c, a));
-            m["unhexlify"] = BuiltinFunctionValue.Make("unhexlify", (s, a, kw, c) => Unhexlify(c, a));
-            m["a2b_hex"] = BuiltinFunctionValue.Make("a2b_hex", (s, a, kw, c) => Unhexlify(c, a));
+            m["hexlify"] = BuiltinFunctionValue.Make("hexlify", (s, a, kw, c) =>
+                Hexlify(c, StrMethods.WithKw(c, a, kw, "hexlify", "data", "sep", "bytes_per_sep"), "hexlify"));
+            m["b2a_hex"] = BuiltinFunctionValue.Make("b2a_hex", (s, a, kw, c) =>
+                Hexlify(c, StrMethods.WithKw(c, a, kw, "b2a_hex", "data", "sep", "bytes_per_sep"), "b2a_hex"));
+            m["unhexlify"] = BuiltinFunctionValue.Make("unhexlify", Args.Positional("unhexlify", 1, 1, (s, a, kw, c) => Unhexlify(c, a)));
+            m["a2b_hex"] = BuiltinFunctionValue.Make("a2b_hex", Args.Positional("a2b_hex", 1, 1, (s, a, kw, c) => Unhexlify(c, a)));
             m["b2a_base64"] = BuiltinFunctionValue.Make("b2a_base64", B2aBase64);
-            m["a2b_base64"] = BuiltinFunctionValue.Make("a2b_base64", (s, a, kw, c) => A2bBase64(c, a));
-            m["crc32"] = BuiltinFunctionValue.Make("crc32", (s, a, kw, c) => Crc32(c, a));
-            m["Error"] = ErrorType();
+            m["a2b_base64"] = BuiltinFunctionValue.Make("a2b_base64", Args.Positional("a2b_base64", 1, 1, (s, a, kw, c) => A2bBase64(c, a)));
+            m["crc32"] = BuiltinFunctionValue.Make("crc32", Args.Positional("crc32", 1, 2, (s, a, kw, c) => Crc32(c, a)));
+            m["Error"] = ModuleKit.ExceptionClass(PyExceptionTypes.BinasciiError);
             return ctx.Values.Module("binascii", m);
-        }
-
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.BinasciiError, args);
-            return TypeValue.Make("Error", ctor, null, null, PyExceptionTypes.BinasciiError);
         }
 
         private static byte[] DataArg(EvalContext ctx, ScriptValue[] a, string name)
@@ -63,18 +58,20 @@ namespace Outbridge.PyLite.Modules
             throw Raise.TypeError(ctx, "argument should be a bytes-like object or ASCII string, not " + a[0].PyTypeName);
         }
 
-        private static ScriptValue Hexlify(EvalContext ctx, ScriptValue[] a)
+        // hexlify(data, sep=None, bytes_per_sep=1): with a separator it is bytes.hex(sep, bytes_per_sep), as bytes.
+        private static ScriptValue Hexlify(EvalContext ctx, ScriptValue[] a, string fn)
         {
-            byte[] data = DataArg(ctx, a, "hexlify");
-            ctx.Values.PreCharge(24 + 2L * data.Length);
-            var result = new byte[data.Length * 2];
-            const string digits = "0123456789abcdef";
-            for (int i = 0; i < data.Length; i++)
+            Args.Between(ctx, a, fn, 1, 3);
+            byte[] data = DataArg(ctx, a, fn);
+            if (a.Length > 1 && a[1].Kind != ValueKind.None)
             {
-                result[i * 2] = (byte)digits[data[i] >> 4];
-                result[i * 2 + 1] = (byte)digits[data[i] & 0xF];
+                var rest = new ScriptValue[a.Length - 1];
+                Array.Copy(a, 1, rest, 0, rest.Length);
+                string hex = ((StrValue)BytesMethods.Hex(ctx, data, rest)).Value;
+                return ctx.Values.Bytes(System.Text.Encoding.ASCII.GetBytes(hex));
             }
-            return ctx.Values.Bytes(result);
+            ctx.Values.PreCharge(24 + 2L * data.Length);
+            return ctx.Values.Bytes(Hex.EncodeAscii(data));
         }
 
         private static ScriptValue Unhexlify(EvalContext ctx, ScriptValue[] a)
@@ -95,12 +92,9 @@ namespace Outbridge.PyLite.Modules
 
         private static int HexDigit(EvalContext ctx, char c)
         {
-            if (c >= '0' && c <= '9')
-                return c - '0';
-            if (c >= 'a' && c <= 'f')
-                return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F')
-                return c - 'A' + 10;
+            int v = Hex.Nibble(c);
+            if (v >= 0)
+                return v;
             throw Raise.Make(ctx, PyExceptionTypes.BinasciiError, "Non-hexadecimal digit found");
         }
 

@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // CPython marks them: `elem.tag is ET.Comment` is the test, they never match a tag filter, and the
     // serializer writes their text verbatim. The factories are static so that identity holds across
     // module instances.
-    public static partial class XmlModule
+    internal static partial class XmlModule
     {
         internal static readonly BuiltinFunctionValue CommentFn =
             BuiltinFunctionValue.Make("Comment", (s, a, kw, c) => MakeNode(c, a, kw, "Comment", CommentFn, false));
@@ -42,13 +42,7 @@ namespace Outbridge.PyLite.Modules
             return e;
         }
 
-        private static string StrOf(EvalContext ctx, ScriptValue v, string fn)
-        {
-            StrValue s = v as StrValue;
-            if (s == null)
-                throw Raise.TypeError(ctx, fn + "() argument must be str, not " + v.PyTypeName);
-            return s.Value;
-        }
+        private static string StrOf(EvalContext ctx, ScriptValue v, string fn) { return Coerce.ToStr(ctx, v, fn + "() argument"); }
 
         // dump(elem): the element (or a whole tree) written to the print sink with a trailing newline,
         // as CPython's debugging helper does.
@@ -59,17 +53,7 @@ namespace Outbridge.PyLite.Modules
             string text = ((StrValue)Serialize(ctx, root, "unicode", false)).Value;
             if (!text.EndsWith("\n", StringComparison.Ordinal))
                 text += "\n";
-            if (ctx.Out != null)
-            {
-                ctx.Out.Write(text);
-            }
-            else
-            {
-                ctx.Budget.ChargeOutput(2L * text.Length);
-                if (ctx.PrintBuffer == null)
-                    ctx.PrintBuffer = new System.Text.StringBuilder();
-                ctx.PrintBuffer.Append(text);
-            }
+            Builtins.Emit(ctx, text);   // print()'s route
             return ctx.Values.None;
         }
 

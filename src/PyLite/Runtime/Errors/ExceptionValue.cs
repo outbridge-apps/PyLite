@@ -47,13 +47,13 @@ namespace Outbridge.PyLite.Runtime.Errors
         {
             ExcType = excType;
             Args = args ?? Array.Empty<ScriptValue>();
-            _type = new ScriptTypeInfo(excType.Name, Slots);
+            _type = excType.InstanceTypeInfo ?? (excType.InstanceTypeInfo = new ScriptTypeInfo(excType.Name, Slots));   // one per type (P2)
         }
 
         private static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-            d["add_note"] = SlotDescriptor.MakeMethod("add_note", (self, a, kw, c) => ((ExceptionValue)self).AddNote(c, a));
+            d["add_note"] = SlotDescriptor.MakeMethod("add_note", Modules.Support.Args.Positional("add_note", 1, 1, (self, a, kw, c) => ((ExceptionValue)self).AddNote(c, a)));
             return d;
         }
 

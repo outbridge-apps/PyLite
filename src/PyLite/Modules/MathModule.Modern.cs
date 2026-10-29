@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -19,22 +20,22 @@ namespace Outbridge.PyLite.Modules
             m["nan"] = ctx.Values.Float(double.NaN);
 
             m["isclose"] = BuiltinFunctionValue.Make("isclose", IsClose);
-            m["gcd"] = Fn("gcd", Gcd);
-            m["lcm"] = Fn("lcm", Lcm);
-            m["isqrt"] = Fn("isqrt", Isqrt);
+            m["gcd"] = Fn("gcd", 0, int.MaxValue, Gcd);
+            m["lcm"] = Fn("lcm", 0, int.MaxValue, Lcm);
+            m["isqrt"] = Fn("isqrt", 1, 1, Isqrt);
             m["prod"] = BuiltinFunctionValue.Make("prod", Prod);
-            m["comb"] = Fn("comb", Comb);
-            m["perm"] = Fn("perm", Perm);
-            m["dist"] = Fn("dist", Dist);
-            m["remainder"] = Fn("remainder", Remainder);
+            m["comb"] = Fn("comb", 2, 2, Comb);
+            m["perm"] = Fn("perm", 1, 2, Perm);
+            m["dist"] = Fn("dist", 2, 2, Dist);
+            m["remainder"] = Fn("remainder", 2, 2, Remainder);
             m["nextafter"] = BuiltinFunctionValue.Make("nextafter", NextAfter);
-            m["ulp"] = Fn("ulp", (c, a) => c.Values.Float(Ulp(AsDouble(c, Arg2(c, a, 0, "ulp"), "ulp"))));
-            m["cbrt"] = Fn("cbrt", (c, a) => c.Values.Float(Cbrt(AsDouble(c, Arg2(c, a, 0, "cbrt"), "cbrt"))));
+            m["ulp"] = Fn("ulp", 1, 1, (c, a) => c.Values.Float(Ulp(AsDouble(c, Arg2(c, a, 0, "ulp")))));
+            m["cbrt"] = Fn("cbrt", 1, 1, (c, a) => c.Values.Float(Cbrt(AsDouble(c, Arg2(c, a, 0, "cbrt")))));
             m["exp2"] = Wrap("exp2", x => Math.Pow(2.0, x));
-            m["sumprod"] = Fn("sumprod", SumProd);
-            m["fma"] = Fn("fma", Fma);
+            m["sumprod"] = Fn("sumprod", 2, 2, SumProd);
+            m["fma"] = Fn("fma", 3, 3, Fma);
             // n-ary hypot (3.8) replaces the 2-arg entry from the base table.
-            m["hypot"] = Fn("hypot", HypotN);
+            m["hypot"] = Fn("hypot", 0, int.MaxValue, HypotN);
         }
 
         private static ScriptValue Arg2(EvalContext ctx, ScriptValue[] a, int i, string name)
@@ -44,26 +45,18 @@ namespace Outbridge.PyLite.Modules
             return a[i];
         }
 
-        private static BigInteger AsInt(EvalContext ctx, ScriptValue v, string func)
-        {
-            if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
-                return NumericOps.AsBigInteger(v);
-            throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-        }
-
         // ---- isclose (PEP 485, 3.5) ----
         private static ScriptValue IsClose(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "isclose expected 2 arguments, got " + a.Length);
-            double x = AsDouble(ctx, a[0], "isclose");
-            double y = AsDouble(ctx, a[1], "isclose");
+            Args.Unpack(ctx, a, "isclose", 2, 2);
+            double x = AsDouble(ctx, a[0]);
+            double y = AsDouble(ctx, a[1]);
             double relTol = 1e-09, absTol = 0.0;
             ScriptValue v;
             if (kw.TryGet("rel_tol", out v))
-                relTol = AsDouble(ctx, v, "isclose");
+                relTol = AsDouble(ctx, v);
             if (kw.TryGet("abs_tol", out v))
-                absTol = AsDouble(ctx, v, "isclose");
+                absTol = AsDouble(ctx, v);
             if (relTol < 0.0 || absTol < 0.0)
                 throw Raise.ValueError(ctx, "tolerances must be non-negative");
             if (x == y)
@@ -82,7 +75,7 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < a.Length; i++)
             {
                 ctx.Budget.Step();
-                g = BigInteger.GreatestCommonDivisor(g, AsInt(ctx, a[i], "gcd"));
+                g = BigOps.Gcd(ctx, g, Coerce.ToIndex(ctx, a[i], "gcd"));
             }
             return ctx.Values.Int(g);
         }
@@ -93,12 +86,12 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < a.Length; i++)
             {
                 ctx.Budget.Step();
-                BigInteger n = BigInteger.Abs(AsInt(ctx, a[i], "lcm"));
+                BigInteger n = BigInteger.Abs(Coerce.ToIndex(ctx, a[i], "lcm"));
                 if (n.IsZero)
                     return ctx.Values.Int(0);
-                BigInteger g = BigInteger.GreatestCommonDivisor(l, n);
+                BigInteger g = BigOps.Gcd(ctx, l, n);
                 ctx.Values.EnsureIntBits(NumericOps.BitLength(l) + NumericOps.BitLength(n));
-                l = l / g * n;
+                l = BigOps.Multiply(ctx, BigOps.Divide(ctx, l, g), n);
             }
             return ctx.Values.Int(l);
         }
@@ -106,28 +99,32 @@ namespace Outbridge.PyLite.Modules
         // ---- isqrt (3.8): Newton on BigInteger ----
         private static ScriptValue Isqrt(EvalContext ctx, ScriptValue[] a)
         {
-            BigInteger n = AsInt(ctx, Arg2(ctx, a, 0, "isqrt"), "isqrt");
+            BigInteger n = Coerce.ToIndex(ctx, Arg2(ctx, a, 0, "isqrt"), "isqrt");
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "isqrt() argument must be nonnegative");
             if (n.IsZero)
                 return ctx.Values.Int(0);
-            long bits = NumericOps.BitLength(n);
-            BigInteger x = BigInteger.One << (int)((bits + 1) / 2);   // initial guess >= sqrt(n)
-            while (true)
+            // CPython's mathmodule.c algorithm: root doubles its correct bits per pass, so the divisions grow
+            // geometrically and the whole costs about one full-size division (Newton from 2^(bits/2) did
+            // ~log2(bits) of them, with no deadline check between).
+            int c = (int)((NumericOps.BitLength(n) - 1) / 2);
+            BigInteger root = BigInteger.One;
+            int d = 0;
+            for (int s = NumericOps.BitLengthLong(c) - 1; s >= 0; s--)
             {
                 ctx.Budget.Step();
-                BigInteger y = (x + n / x) >> 1;
-                if (y >= x)
-                    return ctx.Values.Int(x);
-                x = y;
+                ctx.Budget.CheckDeadlineNow();
+                int e = d;
+                d = c >> s;
+                root = (root << (d - e - 1)) + BigOps.Divide(ctx, n >> (2 * c - e - d + 1), root);
             }
+            return ctx.Values.Int(BigOps.Multiply(ctx, root, root) > n ? root - 1 : root);
         }
 
         // ---- prod (3.8) ----
         private static ScriptValue Prod(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
-            if (a.Length != 1)
-                throw Raise.TypeError(ctx, "prod expected 1 argument, got " + a.Length);
+            Args.Unpack(ctx, a, "prod", 1, 1);
             ScriptValue acc;
             if (!kw.TryGet("start", out acc))
                 acc = ctx.Values.Int(1);
@@ -141,9 +138,7 @@ namespace Outbridge.PyLite.Modules
         // ---- comb/perm (3.8): exact multiplicative loops ----
         private static ScriptValue Comb(EvalContext ctx, ScriptValue[] a)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "comb expected 2 arguments, got " + a.Length);
-            BigInteger n = AsInt(ctx, a[0], "comb"), k = AsInt(ctx, a[1], "comb");
+            BigInteger n = Coerce.ToIndex(ctx, a[0], "comb"), k = Coerce.ToIndex(ctx, a[1], "comb");
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "n must be a non-negative integer");
             if (k.Sign < 0)
@@ -166,13 +161,13 @@ namespace Outbridge.PyLite.Modules
         {
             if (a.Length < 1 || a.Length > 2)
                 throw Raise.TypeError(ctx, "perm expected 1 or 2 arguments, got " + a.Length);
-            BigInteger n = AsInt(ctx, a[0], "perm");
+            BigInteger n = Coerce.ToIndex(ctx, a[0], "perm");
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "n must be a non-negative integer");
             BigInteger k = n;
             if (a.Length == 2 && a[1].Kind != ValueKind.None)
             {
-                k = AsInt(ctx, a[1], "perm");
+                k = Coerce.ToIndex(ctx, a[1], "perm");
                 if (k.Sign < 0)
                     throw Raise.ValueError(ctx, "k must be a non-negative integer");
             }
@@ -193,14 +188,12 @@ namespace Outbridge.PyLite.Modules
         {
             var coords = new double[a.Length];
             for (int i = 0; i < a.Length; i++)
-                coords[i] = AsDouble(ctx, a[i], "hypot");
+                coords[i] = AsDouble(ctx, a[i]);
             return ctx.Values.Float(ScaledNorm(coords));
         }
 
         private static ScriptValue Dist(EvalContext ctx, ScriptValue[] a)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "dist expected 2 arguments, got " + a.Length);
             double[] p = ReadPoint(ctx, a[0]);
             double[] q = ReadPoint(ctx, a[1]);
             if (p.Length != q.Length)
@@ -217,7 +210,7 @@ namespace Outbridge.PyLite.Modules
             var list = new List<double>();
             ScriptValue item;
             while (it.MoveNext(ctx, out item))
-                list.Add(AsDouble(ctx, item, "dist"));
+                list.Add(AsDouble(ctx, item));
             return list.ToArray();
         }
 
@@ -251,10 +244,8 @@ namespace Outbridge.PyLite.Modules
         // ---- remainder (3.7): IEEE 754 remainder with CPython domain errors ----
         private static ScriptValue Remainder(EvalContext ctx, ScriptValue[] a)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "remainder expected 2 arguments, got " + a.Length);
-            double x = AsDouble(ctx, a[0], "remainder");
-            double y = AsDouble(ctx, a[1], "remainder");
+            double x = AsDouble(ctx, a[0]);
+            double y = AsDouble(ctx, a[1]);
             if (double.IsNaN(x) || double.IsNaN(y))
                 return ctx.Values.Float(double.NaN);
             if (double.IsInfinity(x) || y == 0.0)
@@ -277,15 +268,14 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue NextAfter(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "nextafter expected 2 arguments, got " + a.Length);
-            double x = AsDouble(ctx, a[0], "nextafter");
-            double y = AsDouble(ctx, a[1], "nextafter");
+            Args.Unpack(ctx, a, "nextafter", 2, 2);
+            double x = AsDouble(ctx, a[0]);
+            double y = AsDouble(ctx, a[1]);
             BigInteger steps = BigInteger.One;
             ScriptValue sv;
             if (kw.TryGet("steps", out sv) && sv.Kind != ValueKind.None)
             {
-                steps = AsInt(ctx, sv, "nextafter");
+                steps = Coerce.ToIndex(ctx, sv, "nextafter");
                 if (steps.Sign < 0)
                     throw Raise.ValueError(ctx, "steps must be a non-negative integer");
             }
@@ -331,8 +321,6 @@ namespace Outbridge.PyLite.Modules
         // ---- sumprod (3.12): pairwise multiply-add through the engine operators ----
         private static ScriptValue SumProd(EvalContext ctx, ScriptValue[] a)
         {
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "sumprod expected 2 arguments, got " + a.Length);
             IScriptIterator ip = PyOps.GetIterator(a[0], ctx);
             IScriptIterator iq = PyOps.GetIterator(a[1], ctx);
             ScriptValue total = ctx.Values.Int(0);
@@ -352,11 +340,9 @@ namespace Outbridge.PyLite.Modules
         // ---- fma (3.13): software double-double (Dekker two-product + two-sum) ----
         private static ScriptValue Fma(EvalContext ctx, ScriptValue[] a)
         {
-            if (a.Length != 3)
-                throw Raise.TypeError(ctx, "fma expected 3 arguments, got " + a.Length);
-            double x = AsDouble(ctx, a[0], "fma");
-            double y = AsDouble(ctx, a[1], "fma");
-            double z = AsDouble(ctx, a[2], "fma");
+            double x = AsDouble(ctx, a[0]);
+            double y = AsDouble(ctx, a[1]);
+            double z = AsDouble(ctx, a[2]);
             bool invalidProd = (x == 0.0 && double.IsInfinity(y)) || (double.IsInfinity(x) && y == 0.0);
             if (invalidProd)
             {

@@ -35,7 +35,11 @@ namespace Outbridge.PyLite.Runtime.Values
             PartialValue inner = func as PartialValue;
             if (inner != null)
             {
-                var args = new ScriptValue[inner.Args.Length + newArgs.Length];
+                // Flattening copies the inner bound args: a chain of partials is quadratic unless charged.
+                long n = (long)inner.Args.Length + newArgs.Length;
+                SequenceOps.CheckCap(n, ctx);
+                ChargeCopy(n + inner.KwNames.Length + newKw.Count, ctx);
+                var args = new ScriptValue[n];
                 Array.Copy(inner.Args, args, inner.Args.Length);
                 Array.Copy(newArgs, 0, args, inner.Args.Length, newArgs.Length);
                 string[] mn;
@@ -43,6 +47,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 Merge(inner.KwNames, inner.KwValues, newKw, out mn, out mv);
                 return new PartialValue(inner.Func, args, mn, mv);
             }
+            ChargeCopy((long)newArgs.Length + newKw.Count, ctx);
             string[] names = new string[newKw.Count];
             ScriptValue[] vals = new ScriptValue[newKw.Count];
             for (int i = 0; i < newKw.Count; i++)
@@ -55,6 +60,11 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override ScriptValue CallCore(ScriptValue[] callArgs, KwArgs callKw, EvalContext ctx)
         {
+            // The per-call copy is transient, like any call's argument array: its time is charged when it is
+            // long, its bytes are not (they would make a loop of partial calls die early on MaxAllocBytes).
+            long copied = (long)Args.Length + callArgs.Length + KwNames.Length + callKw.Count;
+            if (copied > 64)
+                ctx.Budget.ChargeLinear(copied);
             var finalArgs = new ScriptValue[Args.Length + callArgs.Length];
             Array.Copy(Args, finalArgs, Args.Length);
             Array.Copy(callArgs, 0, finalArgs, Args.Length, callArgs.Length);
@@ -71,16 +81,35 @@ namespace Outbridge.PyLite.Runtime.Values
             return ctx.CallHook(Func, finalArgs, finalKw);
         }
 
-        // base keywords overlaid with `over` (over wins).
+        // The args/keywords a partial keeps, n slots: steps for the copy, bytes for the arrays it holds.
+        private static void ChargeCopy(long n, EvalContext ctx)
+        {
+            ctx.Budget.ChargeLinear(n);
+            ctx.Budget.ChargeAllocation(48 + 8 * n);
+        }
+
+        // base keywords overlaid with `over` (over wins). Past a few names the lookup is by table, so a
+        // merge of two large ** dicts stays linear.
         private static void Merge(string[] baseNames, ScriptValue[] baseVals, KwArgs over,
             out string[] names, out ScriptValue[] values)
         {
             var ns = new List<string>(baseNames);
             var vs = new List<ScriptValue>(baseVals);
+            Dictionary<string, int> index = null;
+            if (baseNames.Length > 8 && over.Count > 0)
+            {
+                index = new Dictionary<string, int>(baseNames.Length, StringComparer.Ordinal);
+                for (int i = 0; i < baseNames.Length; i++)
+                    index[baseNames[i]] = i;
+            }
             for (int i = 0; i < over.Count; i++)
             {
                 string n = over.NameAt(i);
-                int at = ns.IndexOf(n);
+                int at;
+                if (index == null)
+                    at = ns.IndexOf(n);
+                else if (!index.TryGetValue(n, out at))
+                    at = -1;
                 if (at >= 0)
                     vs[at] = over.ValueAt(i);
                 else

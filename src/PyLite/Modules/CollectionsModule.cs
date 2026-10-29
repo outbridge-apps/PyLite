@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
@@ -9,7 +10,7 @@ namespace Outbridge.PyLite.Modules
 {
     // collections: OrderedDict, defaultdict, Counter, namedtuple, deque.
     // Each container type is registered as a callable TypeValue whose constructor builds the value.
-    public static partial class CollectionsModule
+    internal static partial class CollectionsModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -33,13 +34,9 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue OrderedDictCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length > 1)
-                throw Raise.TypeError(ctx, "OrderedDict expected at most 1 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "OrderedDict", 0, 1);
             OrderedDictValue od = ctx.Values.OrderedDict(kw.Count + 4);
-            if (args.Length == 1)
-                DictMethods.Merge(ctx, od, args[0]);
-            for (int j = 0; j < kw.Count; j++)
-                od.SetItem(ctx.Values.Str(kw.NameAt(j)), kw.ValueAt(j), ctx);
+            DictMethods.InitFrom(ctx, od, args.Length == 1 ? args[0] : null, kw);
             return od;
         }
 
@@ -49,12 +46,7 @@ namespace Outbridge.PyLite.Modules
             if (args.Length < 1 || args.Length > 2)
                 throw Raise.TypeError(ctx, "fromkeys expected 1 or 2 arguments, got " + args.Length);
             ScriptValue value = args.Length == 2 ? args[1] : ctx.Values.None;
-            OrderedDictValue od = ctx.Values.OrderedDict(4);
-            IScriptIterator it = PyOps.GetIterator(args[0], ctx);
-            ScriptValue key;
-            while (it.MoveNext(ctx, out key))
-                od.SetItem(key, value, ctx);
-            return od;
+            return DictMethods.FillFromKeys(ctx, ctx.Values.OrderedDict(4), args[0], value);
         }
 
         // ChainMap(*maps): no maps -> one fresh empty dict (CPython).
@@ -75,8 +67,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue DequeCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length > 2)
-                throw Raise.TypeError(ctx, "deque expected at most 2 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "deque", 0, 2);
             ScriptValue iterable = args.Length >= 1 ? args[0] : null;
             ScriptValue maxlenArg = args.Length >= 2 ? args[1] : null;
             ScriptValue mkw;
@@ -108,8 +99,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue CounterCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length > 1)
-                throw Raise.TypeError(ctx, "Counter expected at most 1 argument, got " + args.Length);
+            Args.Unpack(ctx, args, "Counter", 0, 1);
             CounterValue c = ctx.Values.Counter(kw.Count + 4);
             CounterValue.UpdateFrom(ctx, c, args.Length == 1 ? args[0] : null, kw, +1);
             return c;
@@ -128,14 +118,11 @@ namespace Outbridge.PyLite.Modules
             if (args.Length >= 2)
             {
                 if (args.Length > 2)
-                    throw Raise.TypeError(ctx, "dict expected at most 1 arguments, got " + (args.Length - 1));
+                    throw Args.UnpackError(ctx, "dict", "at most ", 1, args.Length - 1);
                 mapping = args[1];
             }
             DefaultDictValue dd = ctx.Values.DefaultDict(factory, kw.Count + 4);
-            if (mapping != null)
-                DictMethods.Merge(ctx, dd, mapping);
-            for (int j = 0; j < kw.Count; j++)
-                dd.SetItem(ctx.Values.Str(kw.NameAt(j)), kw.ValueAt(j), ctx);
+            DictMethods.InitFrom(ctx, dd, mapping, kw);
             return dd;
         }
     }

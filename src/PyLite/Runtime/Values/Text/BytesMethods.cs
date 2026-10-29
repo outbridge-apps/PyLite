@@ -15,22 +15,22 @@ namespace Outbridge.PyLite.Runtime.Values
             var s = new Slots(v => ((BytesValue)v).Data.Length);   // every bytes method is at most one pass over the receiver
             s.Linear("decode", (self, a, kw, c) => Decode(c, B(self), StrMethods.WithKw(c, a, kw, "decode", "encoding", "errors")));
             s.Linear("hex", (self, a, kw, c) => Hex(c, B(self), StrMethods.WithKw(c, a, kw, "hex", "sep", "bytes_per_sep")));
-            s.Linear("find", (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, false, false)));
-            s.Linear("rfind", (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, true, false)));
-            s.Linear("index", (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, false, true)));
-            s.Linear("rindex", (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, true, true)));
-            s.Linear("count", (self, a, kw, c) => c.Values.Int(Count(c, B(self), a)));
-            s.Linear("startswith", (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, false)));
-            s.Linear("endswith", (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, true)));
-            s.Linear("replace", (self, a, kw, c) => Replace(c, B(self), a));
+            s.Linear("find", 1, 3, (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, false, false)));
+            s.Linear("rfind", 1, 3, (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, true, false)));
+            s.Linear("index", 1, 3, (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, false, true)));
+            s.Linear("rindex", 1, 3, (self, a, kw, c) => c.Values.Int(Find(c, B(self), a, true, true)));
+            s.Linear("count", 1, 3, (self, a, kw, c) => c.Values.Int(Count(c, B(self), a)));
+            s.Linear("startswith", 1, 3, (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, false)));
+            s.Linear("endswith", 1, 3, (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, true)));
+            s.Linear("replace", (self, a, kw, c) => Replace(c, B(self), StrMethods.WithKw(c, a, kw, "replace", "old", "new", "count")));
             s.Linear("split", (self, a, kw, c) => Split(c, B(self), StrMethods.WithKw(c, a, kw, "split", "sep", "maxsplit"), false));
             s.Linear("rsplit", (self, a, kw, c) => Split(c, B(self), StrMethods.WithKw(c, a, kw, "rsplit", "sep", "maxsplit"), true));
-            s.Linear("join", (self, a, kw, c) => Join(c, B(self), a));
-            s.Linear("strip", (self, a, kw, c) => Strip(c, B(self), a, true, true));
-            s.Linear("lstrip", (self, a, kw, c) => Strip(c, B(self), a, true, false));
-            s.Linear("rstrip", (self, a, kw, c) => Strip(c, B(self), a, false, true));
-            s.Linear("upper", (self, a, kw, c) => MapCase(c, B(self), true));
-            s.Linear("lower", (self, a, kw, c) => MapCase(c, B(self), false));
+            s.Linear("join", 1, 1, (self, a, kw, c) => Join(c, B(self), a));
+            s.Linear("strip", 0, 1, (self, a, kw, c) => Strip(c, B(self), a, true, true));
+            s.Linear("lstrip", 0, 1, (self, a, kw, c) => Strip(c, B(self), a, true, false));
+            s.Linear("rstrip", 0, 1, (self, a, kw, c) => Strip(c, B(self), a, false, true));
+            s.Linear("upper", 0, 0, (self, a, kw, c) => MapCase(c, B(self), true));
+            s.Linear("lower", 0, 0, (self, a, kw, c) => MapCase(c, B(self), false));
             AddTextSlots(s);
             return s.Table;
         }
@@ -49,14 +49,20 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Decode(EvalContext c, byte[] data, ScriptValue[] a)
         {
             string enc = a.Length >= 1 && a[0].Kind != ValueKind.None ? BytesCodec.Normalize(c, a[0]) : "utf-8";
-            string errors = a.Length >= 2 ? ((StrValue)a[1]).Value : "strict";
+            string errors = "strict";
+            if (a.Length >= 2)
+            {
+                StrValue ev = a[1] as StrValue;
+                if (ev == null)
+                    throw Raise.TypeError(c, "decode() argument 'errors' must be str, not " + a[1].PyTypeName);
+                errors = ev.Value;
+            }
             return c.Values.Str(BytesCodec.Decode(c, data, enc, errors));
         }
 
         // hex([sep[, bytes_per_sep]]): a positive group count separates from the right, negative from the left.
-        private static ScriptValue Hex(EvalContext c, byte[] data, ScriptValue[] a)
+        internal static ScriptValue Hex(EvalContext c, byte[] data, ScriptValue[] a)
         {
-            const string H = "0123456789abcdef";
             string sep = null;
             int per = 1;
             if (a.Length >= 1 && a[0].Kind != ValueKind.None)
@@ -83,8 +89,8 @@ namespace Outbridge.PyLite.Runtime.Values
                     if (boundary)
                         sb.Append(sep);
                 }
-                sb.Append(H[data[i] >> 4]);
-                sb.Append(H[data[i] & 0xF]);
+                sb.Append(Modules.Support.Hex.Digit(data[i] >> 4));
+                sb.Append(Modules.Support.Hex.Digit(data[i] & 0xF));
             }
             return c.Values.Str(sb.ToString());
         }
@@ -101,33 +107,12 @@ namespace Outbridge.PyLite.Runtime.Values
             return PySearch.LastIndexOf(c, hay, needle, from, to);
         }
 
-        // Optional start/end at a[idx], a[idx+1] (None allowed), normalised like slice bounds.
+        // Optional start/end at a[idx], a[idx+1] (None allowed), normalised as str's find/count do: a start
+        // past the end stays past it, so an empty needle is not found there.
         private static void Window(EvalContext c, ScriptValue[] a, int idx, int len, out int start, out int end)
         {
-            start = 0;
-            end = len;
-            if (a.Length > idx && a[idx].Kind != ValueKind.None)
-                start = Clamp(BoundArg(c, a[idx]), len);
-            if (a.Length > idx + 1 && a[idx + 1].Kind != ValueKind.None)
-                end = Clamp(BoundArg(c, a[idx + 1]), len);
-        }
-
-        private static BigInteger BoundArg(EvalContext c, ScriptValue v)
-        {
-            if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
-                throw Raise.TypeError(c, "slice indices must be integers or None or have an __index__ method");
-            return NumericOps.AsBigInteger(v);
-        }
-
-        private static int Clamp(BigInteger i, int len)
-        {
-            if (i.Sign < 0)
-            {
-                i += len;
-                if (i.Sign < 0)
-                    i = 0;
-            }
-            return i > len ? len : (int)i;
+            Coerce.AdjustIndices(c, a.Length > idx ? a[idx] : null, a.Length > idx + 1 ? a[idx + 1] : null, len,
+                out start, out end);
         }
 
         private static byte[] SubArg(EvalContext c, ScriptValue[] a)
@@ -205,43 +190,54 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Replace(EvalContext c, byte[] data, ScriptValue[] a)
         {
+            Args.Between(c, a, "replace", 2, 3);
             byte[] oldB = ArgBytes(c, a, 0, "replace");
             byte[] newB = ArgBytes(c, a, 1, "replace");
-            int max = a.Length >= 3 ? (int)NumericOps.AsBigInteger(a[2]) : -1;
-            var outB = new List<byte>(data.Length);
-            int i = 0, done = 0;
-            while (i < data.Length)
+            int max = a.Length >= 3 ? Coerce.ToInt32(c, a[2], "replace") : -1;
+            // An empty needle matches before every byte and at the end, as in str.replace.
+            List<int> positions = null;
+            int hits;
+            if (oldB.Length == 0)
             {
-                if ((max < 0 || done < max) && oldB.Length > 0 && MatchAt(data, oldB, i))
-                {
-                    outB.AddRange(newB);
-                    i += oldB.Length;
-                    done++;
-                }
-                else
-                {
-                    outB.Add(data[i]);
-                    i++;
-                }
+                hits = max < 0 ? data.Length + 1 : (int)Math.Min(max, data.Length + 1L);
             }
-            return c.Values.Bytes(outB.ToArray());
-        }
-
-        private static bool MatchAt(byte[] hay, byte[] needle, int i)
-        {
-            if (i + needle.Length > hay.Length)
-                return false;
-            for (int k = 0; k < needle.Length; k++)
-                if (hay[i + k] != needle[k])
-                    return false;
-            return true;
+            else
+            {
+                positions = new List<int>();
+                int scan = 0, at;
+                while ((max < 0 || positions.Count < max) && (at = PySearch.IndexOf(c, data, oldB, scan, data.Length)) >= 0)
+                {
+                    c.Budget.Step();
+                    positions.Add(at);
+                    scan = at + oldB.Length;
+                }
+                hits = positions.Count;
+            }
+            if (hits == 0)
+                return c.Values.Bytes((byte[])data.Clone());
+            long newLen = data.Length + (long)hits * (newB.Length - oldB.Length);
+            c.Values.CheckStrLen(newLen);
+            c.Budget.ChargeLinear(hits);
+            var outB = new byte[newLen];
+            int prev = 0, w = 0;
+            for (int k = 0; k < hits; k++)
+            {
+                int p = positions == null ? k : positions[k];
+                Buffer.BlockCopy(data, prev, outB, w, p - prev);
+                w += p - prev;
+                Buffer.BlockCopy(newB, 0, outB, w, newB.Length);
+                w += newB.Length;
+                prev = p + oldB.Length;
+            }
+            Buffer.BlockCopy(data, prev, outB, w, data.Length - prev);
+            return c.Values.Bytes(outB);
         }
 
         private static ScriptValue Split(EvalContext c, byte[] data, ScriptValue[] a, bool right)
         {
             ListValue result = c.Values.List(4);
             bool bySep = a.Length >= 1 && a[0].Kind != ValueKind.None;
-            int max = a.Length >= 2 && a[1].Kind != ValueKind.None ? (int)BoundArg(c, a[1]) : -1;
+            int max = a.Length >= 2 && a[1].Kind != ValueKind.None ? Coerce.ToInt32(c, a[1], "split") : -1;
             var parts = new List<byte[]>();
             if (!bySep)
             {
@@ -324,22 +320,34 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Join(EvalContext c, byte[] sep, ScriptValue[] a)
         {
-            Args.AtLeast(c, a, "join", 1);
-            var outB = new List<byte>();
+            Args.Exactly(c, a, "join", 1);
+            var parts = new List<byte[]>();
+            long total = 0;
             IScriptIterator it = PyOps.GetIterator(a[0], c);
             ScriptValue e;
-            bool first = true;
             while (it.MoveNext(c, out e))
             {
                 BytesValue bv = e as BytesValue;
                 if (bv == null)
-                    throw Raise.TypeError(c, "sequence item: expected a bytes-like object, " + e.PyTypeName + " found");
-                if (!first)
-                    outB.AddRange(sep);
-                outB.AddRange(bv.Data);
-                first = false;
+                    throw Raise.TypeError(c, "sequence item " + parts.Count + ": expected a bytes-like object, " + e.PyTypeName + " found");
+                total += (parts.Count > 0 ? sep.Length : 0) + bv.Data.Length;
+                c.Values.CheckStrLen(total);
+                parts.Add(bv.Data);
             }
-            return c.Values.Bytes(outB.ToArray());
+            c.Budget.ChargeLinear(parts.Count);
+            var outB = new byte[total];
+            int w = 0;
+            for (int k = 0; k < parts.Count; k++)
+            {
+                if (k > 0)
+                {
+                    Buffer.BlockCopy(sep, 0, outB, w, sep.Length);
+                    w += sep.Length;
+                }
+                Buffer.BlockCopy(parts[k], 0, outB, w, parts[k].Length);
+                w += parts[k].Length;
+            }
+            return c.Values.Bytes(outB);
         }
 
         private static ScriptValue Strip(EvalContext c, byte[] data, ScriptValue[] a, bool left, bool right)

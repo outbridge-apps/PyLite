@@ -24,13 +24,10 @@ namespace Outbridge.PyLite.Runtime.Values
             IDictionary<string, SlotDescriptor> slots = DictMethods.BuildSlots();   // inherit keys/values/items/get/pop/update/...
             slots["move_to_end"] = SlotDescriptor.MakeMethod("move_to_end", MoveToEnd);
             slots["popitem"] = SlotDescriptor.MakeMethod("popitem", PopItem);
-            slots["copy"] = SlotDescriptor.MakeMethod("copy", (self, a, kw, ctx) =>
+            slots["copy"] = SlotDescriptor.MakeMethod("copy", Args.Positional("copy", 0, 0, (self, a, kw, ctx) =>
             {
-                OrderedDictValue src = (OrderedDictValue)self;
-                OrderedDictValue r = ctx.Values.OrderedDict(src.Count);
-                DictMethods.Merge(ctx, r, src);
-                return r;
-            });
+                return ctx.Values.CopyDict((OrderedDictValue)self);
+            }));
             return slots;
         }
 
@@ -72,20 +69,7 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             else
             {
-                // No prepend primitive: rebuild with the moved key first, the rest in order.
-                var rest = new List<TableEntry>();
-                for (int p = 0; p < od.Table.EntriesUsed; p++)
-                {
-                    long eh;
-                    ScriptValue ek, ev;
-                    if (od.Table.TryGetEntryAt(p, out eh, out ek, out ev)
-                        && !(ReferenceEquals(ek, key) || PyOps.Equals(ek, key, ctx, 0)))
-                        rest.Add(new TableEntry { Hash = eh, Key = ek, Value = ev });
-                }
-                od.Table.Clear(ctx);
-                od.Table.InsertOrUpdate(key, h, val, ctx, 0);
-                foreach (TableEntry e in rest)
-                    od.Table.InsertOrUpdate(e.Key, e.Hash, e.Value, ctx, 0);
+                od.Table.MoveToFront(key, h, ctx, 0);
             }
             return ctx.Values.None;
         }
@@ -97,7 +81,7 @@ namespace Outbridge.PyLite.Runtime.Values
             bool last = ResolveLast(ctx, args.Length == 1 ? args[0] : null, kw);
             if (od.Count == 0)
                 throw Raise.KeyError(ctx, ctx.Values.Str("dictionary is empty"));
-            int pos = last ? od.Table.FindLastLive() : FindFirstLive(od.Table);
+            int pos = last ? od.Table.FindLastLive() : od.Table.FindFirstLive();
             long h;
             ScriptValue k, v;
             od.Table.TryGetEntryAt(pos, out h, out k, out v);
@@ -112,18 +96,6 @@ namespace Outbridge.PyLite.Runtime.Values
             if (kw.TryGet("last", out lkw))
                 lastArg = lkw;
             return lastArg == null || lastArg.IsTruthy(ctx);
-        }
-
-        private static int FindFirstLive(OrderedTable t)
-        {
-            for (int p = 0; p < t.EntriesUsed; p++)
-            {
-                long h;
-                ScriptValue k, v;
-                if (t.TryGetEntryAt(p, out h, out k, out v))
-                    return p;
-            }
-            return -1;
         }
     }
 }

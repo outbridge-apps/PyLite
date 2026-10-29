@@ -17,15 +17,33 @@ namespace Outbridge.PyLite.Runtime.Evaluator
     {
         private static readonly object NotCompilable = new object();
 
-        internal static CompiledEval GetCompiledExpr(ref object cache, ExprNode e)
+        internal static CompiledEval GetCompiledExpr(ref object cache, ExprNode e, EvalContext ctx)
         {
+            if (ctx.InterpretOnly)
+                return null;
             object c = cache;
-            if (c == null)
-            {
-                CompiledEval f = TryCompileExpr(e);
-                cache = c = f != null ? (object)f : NotCompilable;
-            }
-            return c as CompiledEval;
+            return c != null ? c as CompiledEval : Store(ref cache, TryCompileExpr(e));
+        }
+
+        // Every tier caches on the shared AST node: the built delegate, or NotCompilable when there is none.
+        private static T Store<T>(ref object cache, T built) where T : class
+        {
+            cache = (object)built ?? NotCompilable;
+            return built;
+        }
+
+        // The compiled form when there is one, else the tree walk: the two always agree.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal ScriptValue EvalCompiledOr(CompiledEval fn, ExprNode e, Environment env, EvalContext ctx)
+        {
+            return fn != null ? fn(this, env, ctx) : EvalExpr(e, env, ctx);
+        }
+
+        // Fused longs only when IntOpSmall's own threshold holds (the big path's estimate aborts stay
+        // reachable) and the run is not interpret-only.
+        internal static bool FusionAllowed(EvalContext ctx)
+        {
+            return ctx.Limits.MaxIntBits >= 128 && !ctx.InterpretOnly;
         }
 
         private static CompiledEval TryCompileExpr(ExprNode e)
@@ -35,12 +53,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 case NodeKind.Literal:
                 {
                     LiteralNode lit = (LiteralNode)e;
-                    return (ev, env, ctx) => EvalLiteral(lit, ctx);
-                }
-                case NodeKind.ConstFolded:
-                {
-                    LiteralNode lit = ((ConstFoldedNode)e).Folded;
-                    return (ev, env, ctx) => EvalLiteral(lit, ctx);
+                    return (ev, env, ctx) => ev.EvalLiteral(lit, ctx);
                 }
                 case NodeKind.Name:
                 {
@@ -58,9 +71,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     return (ev, env, ctx) =>
                     {
                         ScriptValue x = fa(ev, env, ctx);
-                        ScriptValue y = fb(ev, env, ctx);
-                        ScriptValue fast = PyOps.TrySmallIntBinOp(op, x, y, ctx);
-                        return fast ?? PyOps.BinaryOp(op, x, y, ctx);
+                        return ApplyBinary(op, x, fb(ev, env, ctx), ctx);
                     };
                 }
                 case NodeKind.UnaryOp:
@@ -69,19 +80,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     CompiledEval fo = TryCompileExpr(u.Operand);
                     if (fo == null)
                         return null;
-                    switch (u.Op)
-                    {
-                        case UnaryOp.Not:
-                            return (ev, env, ctx) => ctx.Values.Bool(!PyOps.Truth(fo(ev, env, ctx), ctx));
-                        case UnaryOp.USub:
-                            return (ev, env, ctx) => PyOps.UnaryOp(PyUnaryOp.Neg, fo(ev, env, ctx), ctx);
-                        case UnaryOp.UAdd:
-                            return (ev, env, ctx) => PyOps.UnaryOp(PyUnaryOp.Pos, fo(ev, env, ctx), ctx);
-                        case UnaryOp.Invert:
-                            return (ev, env, ctx) => PyOps.UnaryOp(PyUnaryOp.Invert, fo(ev, env, ctx), ctx);
-                        default:
-                            return null;   // a future op falls back to the tree walk, which names it
-                    }
+                    UnaryOp uop = u.Op;
+                    return (ev, env, ctx) => ApplyUnary(uop, fo(ev, env, ctx), ctx);
                 }
                 case NodeKind.CompareChain:
                 {
@@ -129,15 +129,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                         for (int i = 0; i < fs.Length; i++)
                         {
                             v = fs[i](ev, env, ctx);
-                            bool t = PyOps.Truth(v, ctx);
-                            if (isAnd && !t)
-                            {
-                                return v;
-                            }
-                            if (!isAnd && t)
-                            {
-                                return v;
-                            }
+                            if (PyOps.Truth(v, ctx) != isAnd)
+                                return v;   // and: the first falsy; or: the first truthy
                         }
                         return v;
                     };

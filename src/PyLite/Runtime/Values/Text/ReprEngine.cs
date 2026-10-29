@@ -21,6 +21,8 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (depth > ctx.Limits.MaxDataDepth)
                 throw Raise.RecursionError(ctx, "maximum recursion depth exceeded while getting the repr of an object");
+            if (depth > 0)
+                StackGuard.ProbeData(ctx);
             var sb = new BudgetStringBuilder(ctx);
             // A record whose auto-repr would descend through the stack below is still a LEAF for str()
             // when it defines __str__: that method answers for the whole value.
@@ -73,16 +75,10 @@ namespace Outbridge.PyLite.Runtime.Values
             return sb.ToString();
         }
 
-        public static string RenderCapped(ScriptValue v, EvalContext ctx, int maxLen)
-        {
-            string s = Render(v, ctx, false);
-            return s.Length <= maxLen ? s : s.Substring(0, maxLen) + "...";
-        }
-
         private static bool HasUserStr(ScriptValue v)
         {
             RecordInstanceValue rec = v as RecordInstanceValue;
-            return rec != null && rec.Class.FindMethod("__str__") != null;
+            return rec != null && rec.Class.Dunder(RecordDunder.Str) != null;
         }
 
         private static bool IsContainer(ScriptValue v)
@@ -100,7 +96,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     // Auto-repr records descend through this cycle-detecting work stack; a record with a
                     // user __repr__ stays a leaf (its call is StackGuard-probed via ctx.CallHook).
                     RecordInstanceValue rec = (RecordInstanceValue)v;
-                    return rec.Class.FindMethod("__repr__") == null && (rec.Class.Dataclass == null || rec.Class.Dataclass.Repr);
+                    return rec.Class.Dunder(RecordDunder.Repr) == null && (rec.Class.Dataclass == null || rec.Class.Dataclass.Repr);
                 default:
                     return false;
             }

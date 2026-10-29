@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules.Support
     {
         internal static StrValue PercentFormat(EvalContext ctx, StrValue format, ScriptValue rhs)
         {
-            return (StrValue)ctx.Values.Str(PercentCore(ctx, format.Value, rhs, false));
+            return (StrValue)ctx.Values.Str(PercentCore(ctx, format.Value, rhs, false));   // the builder only caps
         }
 
         // bytes % args (CPython 3.5+). Latin-1 maps every byte to the same-numbered char and back, so the
@@ -147,8 +147,9 @@ namespace Outbridge.PyLite.Modules.Support
                 }
 
                 ScriptValue value = hasKey ? mapped : Next(ctx, args, ref argIndex);
-                sb.Append(RenderConv(ctx, conv, convPos, value,
-                    left, plus, space, alt, zero, width, prec, bytesMode));
+                string piece = RenderConv(ctx, conv, convPos, value, left, plus, space, alt, zero, width, prec, bytesMode);
+                ctx.Values.CheckStrLen((long)sb.Length + piece.Length);   // capped as it grows: one large %s may repeat
+                sb.Append(piece);
             }
 
             // In mapping mode (rhs is a dict) leftover keys are fine; the leftover-args check applies to
@@ -293,34 +294,31 @@ namespace Outbridge.PyLite.Modules.Support
             throw Raise.TypeError(ctx, "%" + conv + " format: an integer is required, not " + v.PyTypeName);
         }
 
-        private static double ToDoublePct(EvalContext ctx, ScriptValue v)
-        {
-            if (v.Kind == ValueKind.Float)
-                return ((FloatValue)v).Value;
-            if (v.Kind == ValueKind.Int)
-            {
-                double d = (double)((IntValue)v).Value;
-                if (double.IsInfinity(d))
-                    throw Raise.Overflow(ctx, "long int too large to convert to float");
-                return d;
-            }
-            if (v.Kind == ValueKind.Bool)
-                return ((BoolValue)v).Value ? 1.0 : 0.0;
-            throw Raise.TypeError(ctx, "a float is required");
-        }
+        private static double ToDoublePct(EvalContext ctx, ScriptValue v) { return Coerce.ToDouble(ctx, v, "a float is required"); }
 
         private static string RenderInt(EvalContext ctx, BigInteger v, int radix, string prefix,
             bool left, bool plus, bool space, bool zero, int width, int prec)
         {
+            long bits = NumericOps.BitLength(v);
+            if (radix != 10)
+                ctx.Values.EnsureStrLen(bits + 1);   // InBase's binary working string
+            else if (bits > 64)
+                NumericOps.ChargeIntToStr(v, ctx);   // the quadratic ToString of a big int; a machine-size one is cheap
             string digits = radix == 10
-                ? BigInteger.Abs(v).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ? BigOps.ToDecimalString(ctx, BigInteger.Abs(v))
                 : InBase(BigInteger.Abs(v), radix);
             if (prec >= 0 && digits.Length < prec)
+            {
+                ctx.Values.EnsureStrLen(prec);   // "%.2000000000d" must stop here, not in new string()
                 digits = new string('0', prec - digits.Length) + digits;
+            }
             string sign = v.Sign < 0 ? "-" : plus ? "+" : space ? " " : "";
             string head = sign + prefix;
             if (zero && !left && prec < 0 && width > head.Length + digits.Length)
+            {
+                ctx.Values.EnsureStrLen(width);
                 digits = new string('0', width - head.Length - digits.Length) + digits;
+            }
             return Pad(ctx, head + digits, ' ', left ? '<' : '>', width, '>');
         }
 

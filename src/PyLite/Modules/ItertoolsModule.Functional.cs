@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Modules
 {
     // itertools functional iterators: accumulate, chain (+from_iterable), compress
     // dropwhile, takewhile, filterfalse. Predicate/accumulator callables are invoked via ctx.CallHook.
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         // chain is a type (CPython parity) so chain.from_iterable resolves via its static slots.
         internal static TypeValue MakeChain(EvalContext ctx)
@@ -60,27 +60,24 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue DropWhile(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length != 2)
-                throw Raise.TypeError(ctx, "dropwhile expected 2 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "dropwhile", 2, 2);
             IScriptIterator src = IterArg(ctx, args[1]);
             return ctx.Values.Iterator(new DropWhileIterator(args[0], src), "itertools.dropwhile");
         }
 
         private static ScriptValue TakeWhile(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length != 2)
-                throw Raise.TypeError(ctx, "takewhile expected 2 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "takewhile", 2, 2);
             IScriptIterator src = IterArg(ctx, args[1]);
             return ctx.Values.Iterator(new TakeWhileIterator(args[0], src), "itertools.takewhile");
         }
 
         private static ScriptValue FilterFalse(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length != 2)
-                throw Raise.TypeError(ctx, "filterfalse expected 2 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "filterfalse", 2, 2);
             ScriptValue pred = args[0].Kind == ValueKind.None ? null : args[0];
             IScriptIterator src = IterArg(ctx, args[1]);
-            return ctx.Values.Iterator(new FilterFalseIterator(pred, src), "itertools.filterfalse");
+            return ctx.Values.Iterator(new FilterIterator(pred, src, keepWhenTrue: false), "itertools.filterfalse");
         }
     }
 
@@ -258,30 +255,4 @@ namespace Outbridge.PyLite.Modules
         }
     }
 
-    // filterfalse: yields elements where pred is falsy; pred=None filters by the elements' own truthiness.
-    internal sealed class FilterFalseIterator : ScriptIteratorBase
-    {
-        private readonly ScriptValue _pred;   // null => filter by falsy
-        private readonly IScriptIterator _src;
-
-        internal FilterFalseIterator(ScriptValue pred, IScriptIterator src) { _pred = pred; _src = src; }
-
-        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
-        {
-            ScriptValue v;
-            while (_src.MoveNext(ctx, out v))
-            {
-                bool keep = _pred == null
-                    ? !v.IsTruthy(ctx)
-                    : !ctx.CallHook1(_pred, v).IsTruthy(ctx);
-                if (keep)
-                {
-                    value = v;
-                    return true;
-                }
-            }
-            value = null;
-            return false;
-        }
-    }
 }

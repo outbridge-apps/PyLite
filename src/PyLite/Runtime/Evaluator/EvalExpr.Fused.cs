@@ -30,26 +30,17 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
     internal sealed partial class Evaluator
     {
+        // Callers gate on FusionAllowed(ctx).
         internal static FusedLong GetFusedLong(ref object cache, ExprNode e, int xSlot)
         {
             object c = cache;
-            if (c == null)
-            {
-                FusedLong f = TryFuseLong(e, xSlot);
-                cache = c = f != null ? (object)f : NotCompilable;
-            }
-            return c as FusedLong;
+            return c != null ? c as FusedLong : Store(ref cache, TryFuseLong(e, xSlot));
         }
 
         internal static FusedCond GetFusedCond(ref object cache, ExprNode e, int xSlot)
         {
             object c = cache;
-            if (c == null)
-            {
-                FusedCond f = TryFuseCond(e, xSlot);
-                cache = c = f != null ? (object)f : NotCompilable;
-            }
-            return c as FusedCond;
+            return c != null ? c as FusedCond : Store(ref cache, TryFuseCond(e, xSlot));
         }
 
         // Odometer accessors. They share the AST cache fields with the flat-drain accessors — safe
@@ -58,23 +49,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         internal static FusedScopeLong GetFusedScopeLong(ref object cache, ExprNode e)
         {
             object c = cache;
-            if (c == null)
-            {
-                FusedScopeLong f = TryFuseScopeLong(e);
-                cache = c = f != null ? (object)f : NotCompilable;
-            }
-            return c as FusedScopeLong;
+            return c != null ? c as FusedScopeLong : Store(ref cache, TryFuseScopeLong(e));
         }
 
         internal static FusedScopeCond GetFusedScopeCond(ref object cache, ExprNode e)
         {
             object c = cache;
-            if (c == null)
-            {
-                FusedScopeCond f = TryFuseScopeCond(e);
-                cache = c = f != null ? (object)f : NotCompilable;
-            }
-            return c as FusedScopeCond;
+            return c != null ? c as FusedScopeCond : Store(ref cache, TryFuseScopeCond(e));
         }
 
         private static FusedScopeLong TryFuseScopeLong(ExprNode e)
@@ -140,7 +121,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             switch (e.NodeKind)
             {
                 case NodeKind.Literal:
-                case NodeKind.ConstFolded:
                     return NoName;
                 case NodeKind.Name:
                 {
@@ -201,8 +181,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 case NodeKind.Literal:
                     return FuseIntLiteral((LiteralNode)e);
-                case NodeKind.ConstFolded:
-                    return FuseIntLiteral(((ConstFoldedNode)e).Folded);
                 case NodeKind.Name:
                 {
                     NameBinding b = ((NameNode)e).Binding;
@@ -442,7 +420,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             };
         }
 
-        // Exactly CompareOne's small-int shortcut — Int x Int RichCompare reduces to these.
+        // The six ordering/equality ops (CompareOp lists them first, through Ne) on two machine ints —
+        // what Int x Int RichCompare reduces to. CompareOne and the fused conditions share it.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private static bool LongCompare(CompareOp op, long a, long b)
         {
             switch (op)

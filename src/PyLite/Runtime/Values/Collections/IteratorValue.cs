@@ -33,7 +33,13 @@ namespace Outbridge.PyLite.Runtime.Values
             Iterator = it;
             IterTypeName = iterTypeName;
             _identity = identity;
-            _type = Types.GetOrAdd(iterTypeName, n => new ScriptTypeInfo(n, slots));
+            ScriptTypeInfo t;
+            if (Types.TryGetValue(iterTypeName, out t))
+                _type = t;
+            else if (Types.Count >= 1024)
+                _type = new ScriptTypeInfo(iterTypeName, slots);   // the cache outlives runs: never let it grow without end
+            else
+                _type = Types.GetOrAdd(iterTypeName, n => new ScriptTypeInfo(n, slots));
         }
 
         public override ScriptTypeInfo TypeInfo { get { return _type; } }

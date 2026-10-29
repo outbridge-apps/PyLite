@@ -14,14 +14,14 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-            d["is_integer"] = SlotDescriptor.MakeMethod("is_integer", (self, a, kw, c) =>
+            d["is_integer"] = SlotDescriptor.MakeMethod("is_integer", Args.Positional("is_integer", 0, 0, (self, a, kw, c) =>
             {
                 double v = ((FloatValue)self).Value;
                 return c.Values.Bool(!double.IsNaN(v) && !double.IsInfinity(v) && Math.Floor(v) == v);
-            });
+            }));
             d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio",
                 (self, a, kw, c) => AsIntegerRatio(c, ((FloatValue)self).Value));
-            d["hex"] = SlotDescriptor.MakeMethod("hex", (self, a, kw, c) => c.Values.Str(ToHex(((FloatValue)self).Value)));
+            d["hex"] = SlotDescriptor.MakeMethod("hex", Args.Positional("hex", 0, 0, (self, a, kw, c) => c.Values.Str(ToHex(((FloatValue)self).Value))));
             // The numeric tower: a float is its own real part, with a float zero imaginary part.
             d["real"] = SlotDescriptor.MakeProperty("real", (self, c) => self);
             d["imag"] = SlotDescriptor.MakeProperty("imag", (self, c) => c.Values.Float(0.0));
@@ -119,7 +119,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 if (++digits > 4096)
                     throw Raise.ValueError(c, "invalid hexadecimal floating-point string");
-                mant = (mant << 4) + HexVal(t[i]);
+                mant = (mant << 4) + Modules.Support.Hex.Nibble(t[i]);
                 i++;
             }
             if (i < t.Length && t[i] == '.')
@@ -129,7 +129,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 {
                     if (++digits > 4096)
                         throw Raise.ValueError(c, "invalid hexadecimal floating-point string");
-                    mant = (mant << 4) + HexVal(t[i]);
+                    mant = (mant << 4) + Modules.Support.Hex.Nibble(t[i]);
                     fracDigits++;
                     i++;
                 }
@@ -236,13 +236,6 @@ namespace Outbridge.PyLite.Runtime.Values
         private static bool IsHex(char ch)
         {
             return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
-        }
-
-        private static int HexVal(char ch)
-        {
-            if (ch <= '9')
-                return ch - '0';
-            return (ch | 0x20) - 'a' + 10;
         }
     }
 }

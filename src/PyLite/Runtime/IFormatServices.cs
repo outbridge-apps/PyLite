@@ -13,5 +13,6 @@ namespace Outbridge.PyLite.Runtime
         StrValue StrFormatMap(EvalContext ctx, StrValue self, ScriptValue mapping);
         StrValue PercentFormat(EvalContext ctx, StrValue format, ScriptValue rhs);
         ScriptValue PercentFormatBytes(EvalContext ctx, BytesValue format, ScriptValue rhs);
+        string AsciiEscape(string repr);   // ascii() of a repr, for the f-string !a conversion
     }
 }

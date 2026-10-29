@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // No GzipFile/open (no filesystem in the sandbox). mtime defaults to 0 — deterministic output,
     // unlike CPython's wall-clock default. Multi-member streams are concatenated, with
     // the member boundaries found by trailer validation (see InflateMember).
-    public static class GzipModule
+    internal static class GzipModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -20,14 +20,8 @@ namespace Outbridge.PyLite.Modules
             m["compress"] = BuiltinFunctionValue.Make("compress", (s, a, kw, c) => Compress(c, a, kw));
             m["decompress"] = BuiltinFunctionValue.Make("decompress",
                 (s, a, kw, c) => Decompress(c, ZlibModule.DataArg(c, a, "decompress")));
-            m["BadGzipFile"] = BadGzipType();
+            m["BadGzipFile"] = ModuleKit.ExceptionClass(PyExceptionTypes.BadGzipFile);
             return ctx.Values.Module("gzip", m);
-        }
-
-        private static TypeValue BadGzipType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.BadGzipFile, args);
-            return TypeValue.Make("BadGzipFile", ctor, null, null, PyExceptionTypes.BadGzipFile);
         }
 
         private static ScriptException BadGzip(EvalContext ctx, string msg)

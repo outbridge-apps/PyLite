@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules
 {
     // collections.namedtuple: a C# factory (no Python source generation). verbose is
     // accepted-and-ignored; _source -> "" (a documented divergence). The returned type is a TypeValue.
-    public static partial class CollectionsModule
+    internal static partial class CollectionsModule
     {
         internal static ScriptValue NamedTuple(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
@@ -21,7 +21,7 @@ namespace Outbridge.PyLite.Modules
             List<string> fields = ParseFieldNames(ctx, args[1]);
             bool rename = BoolKw(ctx, kw, "rename");
 
-            if (!IsPyIdentifier(typename))
+            if (!StrMethods.IsIdentifier(typename))
                 throw Raise.ValueError(ctx, "Type names and field names must be valid identifiers: " + Repr(ctx, typename));
             if (IsKeyword(typename))
                 throw Raise.ValueError(ctx, "Type names and field names cannot be a keyword: " + Repr(ctx, typename));
@@ -61,13 +61,14 @@ namespace Outbridge.PyLite.Modules
                 ["_fields"] = NamedTupleValue.FieldsTuple(info, ctx),
                 ["_field_defaults"] = fieldDefaults,
                 ["_source"] = ctx.Values.Str(""),
-                ["_make"] = BuiltinFunctionValue.Make("_make", (s, a, k, c) =>
+                ["_make"] = BuiltinFunctionValue.Make("_make", Args.Positional("_make", 1, 1, (s, a, k, c) =>
                 {
                     Args.Exactly(c, a, "_make", 1);
                     return NamedTupleValue.Make(info, a[0], c);
-                }),
+                })),
             };
-            return ctx.Values.Type(typename, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), instanceType, statics);
+            info.Class = ctx.Values.Type(typename, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), instanceType, statics);
+            return info.Class;
         }
 
         private static List<string> ParseFieldNames(EvalContext ctx, ScriptValue arg)
@@ -94,7 +95,7 @@ namespace Outbridge.PyLite.Modules
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string name in fields)
             {
-                if (!IsPyIdentifier(name))
+                if (!StrMethods.IsIdentifier(name))
                     throw Raise.ValueError(ctx, "Type names and field names must be valid identifiers: " + Repr(ctx, name));
                 if (IsKeyword(name))
                     throw Raise.ValueError(ctx, "Type names and field names cannot be a keyword: " + Repr(ctx, name));
@@ -112,7 +113,7 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < fields.Count; i++)
             {
                 string name = fields[i];
-                if (!IsPyIdentifier(name) || IsKeyword(name) || name.Length == 0 || name[0] == '_' || seen.Contains(name))
+                if (!StrMethods.IsIdentifier(name) || IsKeyword(name) || name.Length == 0 || name[0] == '_' || seen.Contains(name))
                     fields[i] = "_" + i;
                 seen.Add(name);   // the ORIGINAL name (CPython parity)
             }
@@ -138,23 +139,6 @@ namespace Outbridge.PyLite.Modules
         {
             TokenKind kind;
             return Keywords.TryGet(s, out kind);
-        }
-
-        // ASCII isidentifier (the tested field/type names are ASCII); no keyword check here.
-        private static bool IsPyIdentifier(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-                return false;
-            char c0 = s[0];
-            if (!(c0 == '_' || (c0 >= 'A' && c0 <= 'Z') || (c0 >= 'a' && c0 <= 'z')))
-                return false;
-            for (int i = 1; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (!(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')))
-                    return false;
-            }
-            return true;
         }
     }
 }

@@ -81,34 +81,38 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private FunctionValue BuildFunction(string name, FunctionInfo info, ParamList prms,
             IReadOnlyList<StmtNode> body, ExprNode lambdaBody, Environment env, EvalContext ctx, string returnAnn = null)
         {
-            // (a) positional defaults, left to right, evaluated NOW (def-time)
-            var defaults = new List<ScriptValue>();
+            // (a) positional defaults, left to right, evaluated NOW (def-time); counted first, so the arrays are
+            // sized once and a def without defaults allocates none (P16)
+            int nd = 0, nk = 0;
             for (int i = 0; i < prms.Positional.Count; i++)
+                if (prms.Positional[i].Default != null)
+                    nd++;
+            for (int i = 0; i < prms.KwOnly.Count; i++)
+                if (prms.KwOnly[i].Default != null)
+                    nk++;
+            ScriptValue[] defaults = nd == 0 ? System.Array.Empty<ScriptValue>() : new ScriptValue[nd];
+            for (int i = 0, j = 0; i < prms.Positional.Count; i++)
             {
                 Param p = prms.Positional[i];
                 if (p.Default != null)
                 {
-                    defaults.Add(EvalExpr(p.Default, env, ctx));
+                    defaults[j++] = EvalExpr(p.Default, env, ctx);
                 }
             }
 
             // (b) keyword-only defaults, by name
-            var kwDefaults = new List<KeyValuePair<string, ScriptValue>>();
-            for (int i = 0; i < prms.KwOnly.Count; i++)
+            var kwDefaults = nk == 0 ? System.Array.Empty<KeyValuePair<string, ScriptValue>>() : new KeyValuePair<string, ScriptValue>[nk];
+            for (int i = 0, j = 0; i < prms.KwOnly.Count; i++)
             {
                 Param p = prms.KwOnly[i];
                 if (p.Default != null)
                 {
-                    kwDefaults.Add(new KeyValuePair<string, ScriptValue>(p.Name, EvalExpr(p.Default, env, ctx)));
+                    kwDefaults[j++] = new KeyValuePair<string, ScriptValue>(p.Name, EvalExpr(p.Default, env, ctx));
                 }
             }
 
             // (c) closure: capture Cell references for the function's free variables from the current frame
-            var closure = new Cell[info.FreeVars.Count];
-            for (int i = 0; i < closure.Length; i++)
-            {
-                closure[i] = env.GetClosureCell(info.FreeVars[i]);
-            }
+            Cell[] closure = env.CaptureClosure(info);
 
             // (d) annotations: the plain-name ones, in parameter order, then the return one
             // (typing.get_type_hints answers with these names)
@@ -119,7 +123,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 AddAnnotation(ref ann, p.Name, p.AnnotationName);
             AddAnnotation(ref ann, "return", returnAnn);
 
-            return ctx.Values.Function(name, info, defaults.ToArray(), kwDefaults.ToArray(),
+            return ctx.Values.Function(name, info, defaults, kwDefaults,
                 closure, env.ModuleEnv, _program, body, lambdaBody, ann == null ? null : ann.ToArray());
         }
 

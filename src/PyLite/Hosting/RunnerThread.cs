@@ -145,18 +145,13 @@ namespace Outbridge.PyLite.Hosting
             return RunResult.Failure(err, null, StatsFrom(ctx));
         }
 
+        // ctx.Stats keeps the running totals (host/regex time, peak depth) the run already accumulated.
         private static RunStatistics StatsFrom(EvalContext ctx)
         {
-            var s = new RunStatistics();
-            if (ctx != null)
-            {
-                s.Steps = ctx.Budget.StepsUsed;
-                s.AllocatedBytes = ctx.Budget.AllocBytesUsed;
-                s.OutputBytes = ctx.Budget.OutputBytesUsed;
-                s.TerminatingEntered = ctx.Budget.IsTerminating;
-                s.ModulesImported = ctx.ModuleInstances.Count;
-            }
-            return s;
+            if (ctx == null)
+                return new RunStatistics();
+            ctx.Stats.Snapshot(ctx);
+            return ctx.Stats;
         }
     }
 }

@@ -34,15 +34,6 @@ namespace Outbridge.PyLite.Modules.Support
             return u == 0x85 || u == 0x2028 || u == 0x2029;   // NEL LS PS
         }
 
-        // Cased = category Lu/Ll/Lt.
-        internal static bool IsCased(char c)
-        {
-            UnicodeCategory cat = CharUnicodeInfo.GetUnicodeCategory(c);
-            return cat == UnicodeCategory.UppercaseLetter
-                || cat == UnicodeCategory.LowercaseLetter
-                || cat == UnicodeCategory.TitlecaseLetter;
-        }
-
         internal static int DecimalDigitValue(char c) { return CharUnicodeInfo.GetDecimalDigitValue(c); }
         internal static int DigitValue(char c) { return CharUnicodeInfo.GetDigitValue(c); }
         internal static double NumericValue(char c) { return CharUnicodeInfo.GetNumericValue(c); }

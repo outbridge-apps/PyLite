@@ -139,17 +139,24 @@ namespace Outbridge.PyLite.Modules
         private readonly ScriptValue _fn;   // null => identity predicate (truthiness)
         private readonly IScriptIterator _src;
 
-        internal FilterIterator(ScriptValue fn, IScriptIterator src) { _fn = fn; _src = src; }
+        private readonly bool _keepWhenTrue;   // false: itertools.filterfalse
+
+        internal FilterIterator(ScriptValue fn, IScriptIterator src, bool keepWhenTrue = true)
+        {
+            _fn = fn;
+            _src = src;
+            _keepWhenTrue = keepWhenTrue;
+        }
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
             ScriptValue item;
             while (_src.MoveNext(ctx, out item))
             {
-                bool ok = _fn == null
+                bool truthy = _fn == null
                     ? item.IsTruthy(ctx)
                     : ctx.CallHook1(_fn, item).IsTruthy(ctx);
-                if (ok)
+                if (truthy == _keepWhenTrue)
                 {
                     value = item;
                     return true;

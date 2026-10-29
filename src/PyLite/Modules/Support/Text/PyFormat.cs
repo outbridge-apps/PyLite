@@ -241,23 +241,18 @@ namespace Outbridge.PyLite.Modules.Support
                 case 'd':
                 case 'n':
                     NumericOps.ChargeIntToStr(v, ctx);
-                    digits = BigInteger.Abs(v).ToString(CultureInfo.InvariantCulture);
+                    digits = BigOps.ToDecimalString(ctx, BigInteger.Abs(v));
                     break;
                 case 'b':
-                    digits = InBase(BigInteger.Abs(v), 2);
-                    prefix = f.AltForm ? "0b" : "";
-                    break;
                 case 'o':
-                    digits = InBase(BigInteger.Abs(v), 8);
-                    prefix = f.AltForm ? "0o" : "";
-                    break;
                 case 'x':
-                    digits = InBase(BigInteger.Abs(v), 16);
-                    prefix = f.AltForm ? "0x" : "";
-                    break;
                 case 'X':
-                    digits = InBase(BigInteger.Abs(v), 16).ToUpperInvariant();
-                    prefix = f.AltForm ? "0X" : "";
+                    // InBase works through a binary string as long as the bit length: charge and cap it first.
+                    ctx.Values.EnsureStrLen(NumericOps.BitLength(v) + 1);
+                    digits = InBase(BigInteger.Abs(v), type == 'b' ? 2 : type == 'o' ? 8 : 16);
+                    if (type == 'X')
+                        digits = digits.ToUpperInvariant();
+                    prefix = f.AltForm ? "0" + type : "";
                     break;
                 default:
                     throw Raise.ValueError(ctx, "Unknown format code '" + type + "' for object of type 'int'");
@@ -271,6 +266,7 @@ namespace Outbridge.PyLite.Modules.Support
                 if (!decimalType && !(f.GroupChar == '_' && baseType))
                     throw Raise.ValueError(ctx, "Cannot specify '" + f.GroupChar + "' with '" + type + "'.");
                 f.GroupSize = (f.GroupChar == '_' && baseType) ? 4 : 3;
+                ctx.Values.EnsureStrLen(digits.Length + digits.Length / f.GroupSize);
                 digits = Group(digits, f.GroupChar, f.GroupSize);
             }
 
@@ -420,21 +416,25 @@ namespace Outbridge.PyLite.Modules.Support
         // Group the integer part of a positive decimal body (Decimal.__format__ reuse; comma, /3).
         internal static string GroupNumber(string bodyWithDot, char sep) { return Group(bodyWithDot, sep, 3); }
 
-        // Insert `sep` every `size` digits in the integer part (leaves any '.'/frac untouched).
+        // Insert `sep` every `size` digits in the integer part (leaves any '.'/frac untouched): one
+        // right-to-left fill, linear in the length (prepending to a builder was quadratic and unchecked).
         private static string Group(string digits, char sep, int size)
         {
             int dot = digits.IndexOf('.');
-            string intPart = dot < 0 ? digits : digits.Substring(0, dot);
-            string rest = dot < 0 ? "" : digits.Substring(dot);
-            var sb = new StringBuilder();
+            int intLen = dot < 0 ? digits.Length : dot;
+            if (intLen <= size)
+                return digits;
+            var buf = new char[digits.Length + (intLen - 1) / size];
+            int w = buf.Length - (digits.Length - intLen);
+            digits.CopyTo(intLen, buf, w, digits.Length - intLen);
             int count = 0;
-            for (int i = intPart.Length - 1; i >= 0; i--)
+            for (int i = intLen - 1; i >= 0; i--)
             {
-                sb.Insert(0, intPart[i]);
+                buf[--w] = digits[i];
                 if (++count % size == 0 && i > 0)
-                    sb.Insert(0, sep);
+                    buf[--w] = sep;
             }
-            return sb.ToString() + rest;
+            return new string(buf);
         }
 
         private static string GroupFloat(string body, char sep)
@@ -445,7 +445,7 @@ namespace Outbridge.PyLite.Modules.Support
             return Group(body, sep, 3);
         }
 
-        private static string InBase(BigInteger a, int radix)
+        internal static string InBase(BigInteger a, int radix)
         {
             if (a.IsZero)
                 return "0";

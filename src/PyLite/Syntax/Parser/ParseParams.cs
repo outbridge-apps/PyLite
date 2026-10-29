@@ -10,7 +10,17 @@ namespace Outbridge.PyLite.Syntax
             Token lam = Take();   // 'lambda'
             ParamList prms = ParseParamList(TokenKind.Colon);
             Expect(TokenKind.Colon, "':'");
-            ExprNode body = ParseTest();
+            string savedSelf = _superSelf;
+            _superSelf = null;   // a lambda in a method is a function of its own: super() there has no arguments
+            ExprNode body;
+            try
+            {
+                body = ParseTest();
+            }
+            finally
+            {
+                _superSelf = savedSelf;
+            }
             return new LambdaNode(Src(lam), prms, body);
         }
 

@@ -10,7 +10,7 @@ namespace Outbridge.PyLite.Modules
     // copy.deepcopy: iterative, two-phase, explicit stack (zero C# recursion over data).
     // A container is cloned empty into memo first, then filled, so cycles converge; shared references are
     // deduplicated via a reference-identity memo; tuples use the CPython identity optimization.
-    public static partial class CopyModule
+    internal static partial class CopyModule
     {
         private enum Phase { CreateClone, Fill, BuildTuple }
 

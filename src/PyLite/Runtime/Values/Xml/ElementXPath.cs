@@ -199,13 +199,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return map;
         }
 
-        private static string StrArg(EvalContext ctx, ScriptValue v, string name)
-        {
-            StrValue s = v as StrValue;
-            if (s == null)
-                throw Raise.TypeError(ctx, name + "() path must be str, not " + v.PyTypeName);
-            return s.Value;
-        }
+        private static string StrArg(EvalContext ctx, ScriptValue v, string name) { return Coerce.ToStr(ctx, v, name + "() path"); }
 
         // ---- matcher ----
 
@@ -380,6 +374,7 @@ namespace Outbridge.PyLite.Runtime.Values
             while (work.Count > 0)
             {
                 ctx.Budget.Step();
+                ctx.Values.CheckStrLen(sb.Length);   // one large text may be shared by many elements
                 TextWork item = work.Pop();
                 if (item.Node == null)
                 {

@@ -28,6 +28,14 @@ namespace Outbridge.PyLite.Syntax
         // AST/binding data.
         public object CompiledLambdaBody;
 
+        // The same for a def whose body is one `return <expr>` (a docstring before it allowed): the compiled
+        // expression, or the not-compilable sentinel, which also stands for any other body shape (P6).
+        public object CompiledReturnBody;
+
+        // Where this scope's free variables sit in the defining frame (Environment.CaptureClosure, P16).
+        internal int[] CaptureMap;
+        internal FunctionInfo CaptureScope;
+
         public FunctionInfo(string name, ScopeKind kind, int paramCount, int positionalCount, int kwOnlyCount,
             bool hasStarArg, bool hasKwArg, IReadOnlyList<string> paramNames, IReadOnlyList<int> paramSlots,
             IReadOnlyList<bool> paramIsCell, IReadOnlyList<string> localNames, int localSlotCount,

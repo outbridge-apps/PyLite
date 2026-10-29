@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // so iter(it) is it and next(it) work through the existing model. Every MoveNext charges one Budget.Step
     // (ScriptIteratorBase), which makes the infinite count/cycle/repeat safe by construction. All reentrant
     // script-callable invocations go through ctx.CallHook; all materialization is charged before allocation.
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {

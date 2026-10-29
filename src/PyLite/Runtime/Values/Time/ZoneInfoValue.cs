@@ -219,29 +219,29 @@ namespace Outbridge.PyLite.Runtime.Values
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal)
             {
                 ["key"] = SlotDescriptor.MakeProperty("key", (self, c) => c.Values.Str(((ZoneInfoValue)self).Key)),
-                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", (self, a, kw, c) =>
+                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 1, 1, (self, a, kw, c) =>
                 {
                     long? off = ((ZoneInfoValue)self).OffsetUsAt(DtArg(c, a, "utcoffset"));
                     return off == null ? (ScriptValue)c.Values.None : ((ZoneInfoValue)self).OffsetTd(c, off.Value);
-                }),
-                ["dst"] = SlotDescriptor.MakeMethod("dst", (self, a, kw, c) =>
+                })),
+                ["dst"] = SlotDescriptor.MakeMethod("dst", Args.Positional("dst", 1, 1, (self, a, kw, c) =>
                 {
                     long? dst = ((ZoneInfoValue)self).DstUsAt(DtArg(c, a, "dst"));
                     return dst == null ? (ScriptValue)c.Values.None : ((ZoneInfoValue)self).OffsetTd(c, dst.Value);
-                }),
-                ["tzname"] = SlotDescriptor.MakeMethod("tzname", (self, a, kw, c) =>
+                })),
+                ["tzname"] = SlotDescriptor.MakeMethod("tzname", Args.Positional("tzname", 1, 1, (self, a, kw, c) =>
                 {
                     string name = ((ZoneInfoValue)self).TzNameAt(DtArg(c, a, "tzname"));
                     return name == null ? (ScriptValue)c.Values.None : c.Values.Str(name);
-                }),
-                ["fromutc"] = SlotDescriptor.MakeMethod("fromutc", (self, a, kw, c) =>
+                })),
+                ["fromutc"] = SlotDescriptor.MakeMethod("fromutc", Args.Positional("fromutc", 1, 1, (self, a, kw, c) =>
                 {
                     DateTimeValue dt = DtArg(c, a, "fromutc");
                     if (dt == null || !ReferenceEquals(dt.Tz, self))
                         throw Raise.ValueError(c, "fromutc: dt.tzinfo is not self");
                     long utc = dt.ToNaiveUsLong();
                     return PyOps.BinaryOp(PyBinOp.Add, dt, ((ZoneInfoValue)self).OffsetTd(c, ((ZoneInfoValue)self).OffsetUsForUtc(utc)), c);
-                }),
+                })),
             };
             return new ScriptTypeInfo("zoneinfo.ZoneInfo", d);
         }

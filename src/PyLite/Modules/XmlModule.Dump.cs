@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // xml tostring: our own writer over an explicit stack; attributes in insertion order
     // (3.8+). Namespaced Clark tags render with generated ns0/ns1 prefixes honoring
     // register_namespace. Only encoding='unicode' yields str; the default (us-ascii) and utf-8 give bytes.
-    public static partial class XmlModule
+    internal static partial class XmlModule
     {
         private struct DumpFrame
         {
@@ -120,6 +120,7 @@ namespace Outbridge.PyLite.Modules
             while (stack.Count > 0)
             {
                 ctx.Budget.Step();
+                ctx.Values.CheckStrLen(sb.Length);   // capped as it grows: one large text may be shared by many elements
                 DumpFrame f = stack.Pop();
                 ElementValue e = f.El;
                 if (!f.Close)
@@ -163,7 +164,10 @@ namespace Outbridge.PyLite.Modules
                         if (hasText)
                         {
                             string body = ((StrValue)e.Text).Value;
-                            sb.Append(html && HtmlRaw.Contains(LocalName(plain)) ? body : EscapeText(body));
+                            if (html && HtmlRaw.Contains(LocalName(plain)))
+                                sb.Append(body);
+                            else
+                                AppendText(sb, body);
                         }
                         stack.Push(new DumpFrame(e, true));
                         for (int i = e.Children.Count - 1; i >= 0; i--)
@@ -223,14 +227,16 @@ namespace Outbridge.PyLite.Modules
                 ScriptValue k, v;
                 if (!t.TryGetEntryAt(p, out h, out k, out v))
                     continue;
-                sb.Append(' ').Append(QName(ctx, k, nsmap)).Append("=\"").Append(EscapeAttr(v.Str(ctx))).Append('"');
+                sb.Append(' ').Append(QName(ctx, k, nsmap)).Append("=\"");
+                AppendAttr(sb, v.Str(ctx));
+                sb.Append('"');
             }
         }
 
         private static void AppendTail(StringBuilder sb, ElementValue e)
         {
             if (e.Tail.Kind != ValueKind.None)
-                sb.Append(EscapeText(((StrValue)e.Tail).Value));
+                AppendText(sb, ((StrValue)e.Tail).Value);
         }
 
         // Collect all namespace URIs (document order DFS), assign registered or ns0/ns1 prefixes.
@@ -296,7 +302,11 @@ namespace Outbridge.PyLite.Modules
             var items = new List<KeyValuePair<string, string>>(nsmap);
             items.Sort((x, y) => string.CompareOrdinal(x.Value, y.Value));
             foreach (KeyValuePair<string, string> kv in items)
-                sb.Append(" xmlns:").Append(kv.Value).Append("=\"").Append(EscapeAttr(kv.Key)).Append('"');
+            {
+                sb.Append(" xmlns:").Append(kv.Value).Append("=\"");
+                AppendAttr(sb, kv.Key);
+                sb.Append('"');
+            }
         }
 
         // Clark {uri}local -> prefix:local; plain name stays as-is.
@@ -319,9 +329,15 @@ namespace Outbridge.PyLite.Modules
             return t;
         }
 
-        private static string EscapeText(string s)
+        // Escaped straight into the document (P17): no builder and string per text, and a text with nothing
+        // to escape is appended whole.
+        private static void AppendText(StringBuilder sb, string s)
         {
-            var sb = new StringBuilder(s.Length);
+            if (s.IndexOfAny(TextSpecials) < 0)
+            {
+                sb.Append(s);
+                return;
+            }
             foreach (char ch in s)
             {
                 switch (ch)
@@ -332,12 +348,15 @@ namespace Outbridge.PyLite.Modules
                     default: sb.Append(ch); break;
                 }
             }
-            return sb.ToString();
         }
 
-        private static string EscapeAttr(string s)
+        private static void AppendAttr(StringBuilder sb, string s)
         {
-            var sb = new StringBuilder(s.Length);
+            if (s.IndexOfAny(AttrSpecials) < 0)
+            {
+                sb.Append(s);
+                return;
+            }
             foreach (char ch in s)
             {
                 switch (ch)
@@ -352,8 +371,10 @@ namespace Outbridge.PyLite.Modules
                     default: sb.Append(ch); break;
                 }
             }
-            return sb.ToString();
         }
+
+        private static readonly char[] TextSpecials = { '&', '<', '>' };
+        private static readonly char[] AttrSpecials = { '&', '<', '>', '"', '\n', '\t', '\r' };
 
         private static ScriptValue RegisterNamespace(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {

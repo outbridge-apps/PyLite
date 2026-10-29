@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Modules
     // xml.etree.ElementTree subset: Element/SubElement/fromstring/XML/tostring/
     // iselement/ParseError. Anti-XXE is hard-wired (DTD prohibited, no resolver). Tree mapping and
     // serialization use explicit stacks (no CLR recursion).
-    public static partial class XmlModule
+    internal static partial class XmlModule
     {
         private const string XmlnsNs = "http://www.w3.org/2000/xmlns/";
 
@@ -35,15 +35,9 @@ namespace Outbridge.PyLite.Modules
             m["PI"] = ProcessingInstructionFn;
             m["dump"] = BuiltinFunctionValue.Make("dump", Dump);
             m["tostringlist"] = BuiltinFunctionValue.Make("tostringlist", ToStringList);
-            m["ParseError"] = ParseErrorType();
+            m["ParseError"] = ModuleKit.ExceptionClass(PyExceptionTypes.XmlParseError);
             AddSources(m, ctx);
             return ctx.Values.Module("xml.etree.ElementTree", m);
-        }
-
-        private static TypeValue ParseErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.XmlParseError, args);
-            return TypeValue.Make("ParseError", ctor, null, null, PyExceptionTypes.XmlParseError);
         }
 
         // ParseError carries `position` as CPython's does: the (line, column) the reader stopped at.
@@ -238,7 +232,7 @@ namespace Outbridge.PyLite.Modules
                 return Parse(ctx, s.Value);
             BytesValue b = args[0] as BytesValue;   // a UTF-8 document (the only encoding the sandbox decodes)
             if (b != null)
-                return Parse(ctx, new System.Text.UTF8Encoding(false, true).GetString(b.Data));
+                return Parse(ctx, BytesCodec.Decode(ctx, b.Data, "utf-8", "strict"));
             throw Raise.TypeError(ctx, "fromstring() argument must be str or bytes, not " + args[0].PyTypeName);
         }
 

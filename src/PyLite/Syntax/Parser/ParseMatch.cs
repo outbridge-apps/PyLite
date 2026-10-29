@@ -73,8 +73,7 @@ namespace Outbridge.PyLite.Syntax
             Token c = Take();   // 'case' (soft keyword)
             PatternNode pattern = ParsePatterns();
             ExprNode guard = Match(TokenKind.KwIf) ? ParseTest() : null;
-            Expect(TokenKind.Colon, "':'");
-            IReadOnlyList<StmtNode> body = ParseSuite();
+            IReadOnlyList<StmtNode> body = ParseColonSuite();
             return new MatchCase(Src(c), pattern, guard, body);
         }
 

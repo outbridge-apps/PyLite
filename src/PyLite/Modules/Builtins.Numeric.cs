@@ -16,12 +16,12 @@ namespace Outbridge.PyLite.Modules
         static partial void RegisterNumeric(Dictionary<string, ScriptValue> d)
         {
             Add(d, "round", (self, args, kw, c) => RoundBuiltin(c, args, kw));
-            Add(d, "divmod", (self, args, kw, c) => DivmodBuiltin(c, args));
-            Add(d, "pow", (self, args, kw, c) => PowBuiltin(c, args));
-            Add(d, "abs", (self, args, kw, c) => AbsBuiltin(c, args));
-            Add(d, "hex", (self, args, kw, c) => BaseReprBuiltin(c, args, "0x", 16));
-            Add(d, "oct", (self, args, kw, c) => BaseReprBuiltin(c, args, "0o", 8));
-            Add(d, "bin", (self, args, kw, c) => BaseReprBuiltin(c, args, "0b", 2));
+            Add(d, "divmod", 2, 2, (self, args, kw, c) => DivmodBuiltin(c, args));
+            Add(d, "pow", (self, args, kw, c) => PowBuiltin(c, StrMethods.WithKw(c, args, kw, "pow", "base", "exp", "mod")));
+            Add(d, "abs", 1, 1, (self, args, kw, c) => AbsBuiltin(c, args));
+            Add(d, "hex", 1, 1, (self, args, kw, c) => BaseReprBuiltin(c, args, "0x", 16));
+            Add(d, "oct", 1, 1, (self, args, kw, c) => BaseReprBuiltin(c, args, "0o", 8));
+            Add(d, "bin", 1, 1, (self, args, kw, c) => BaseReprBuiltin(c, args, "0b", 2));
         }
 
         // ---- round ----
@@ -29,8 +29,7 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue RoundBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
             ScriptValue number = args.Length >= 1 ? args[0] : null;
-            if (args.Length > 2)
-                throw Raise.TypeError(c, "round expected at most 2 arguments, got " + args.Length);
+            Args.Unpack(c, args, "round", 0, 2);
             ScriptValue ndigits = args.Length >= 2 ? args[1] : null;
             var r = new KwReader(c, kw, "round");
             ndigits = r.Get("ndigits", ndigits);
@@ -52,7 +51,7 @@ namespace Outbridge.PyLite.Modules
                 long p = -(long)n;
                 if (p > (long)NumericOps.BitLength(x) / 3 + 2)
                     return c.Values.Int(BigInteger.Zero);
-                return c.Values.Int(RoundIntNeg(x, (int)p));
+                return c.Values.Int(RoundIntNeg(c, x, (int)p));
             }
             if (number.Kind == ValueKind.Float)
             {
@@ -68,22 +67,19 @@ namespace Outbridge.PyLite.Modules
             throw Raise.TypeError(c, "type " + number.PyTypeName + " doesn't define __round__ method");
         }
 
-        private static int NDigits(EvalContext c, ScriptValue v)
-        {
-            BigInteger b = Coerce.ToIndex(c, v, "round()");
-            if (b > int.MaxValue)
-                return int.MaxValue;
-            if (b < int.MinValue)
-                return int.MinValue;
-            return (int)b;
-        }
+        private static int NDigits(EvalContext c, ScriptValue v) { return Coerce.ToInt32(c, v, "round()"); }
 
-        // round(int, n<0): magnitude/10^p to nearest, half-even, times 10^p, sign restored.
-        private static BigInteger RoundIntNeg(BigInteger x, int p)
+        // round(int, n<0): magnitude/10^p to nearest, half-even, times 10^p, sign restored. The power, the
+        // quotient and the product are |x|-sized, so each runs under BigOps.
+        private static BigInteger RoundIntNeg(EvalContext c, BigInteger x, int p)
         {
-            BigInteger pow = BigInteger.Pow(10, p);
-            BigInteger mag = BigInteger.Abs(x);
-            BigInteger r = FloatRepr.DivmodNearHalfEven(mag, pow) * pow;
+            BigInteger pow = BigOps.Pow(c, 10, p, p * 3.3219280948873622);
+            BigInteger rem;
+            BigInteger q = BigOps.DivRem(c, BigInteger.Abs(x), pow, out rem);
+            BigInteger twice = rem * 2;
+            if (twice > pow || (twice == pow && !q.IsEven))
+                q += 1;
+            BigInteger r = BigOps.Multiply(c, q, pow);
             return x.Sign < 0 ? -r : r;
         }
 
@@ -91,8 +87,6 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue DivmodBuiltin(EvalContext c, ScriptValue[] args)
         {
-            if (args.Length != 2)
-                throw Raise.TypeError(c, "divmod expected 2 arguments, got " + args.Length);
             ScriptValue a = args[0], b = args[1];
             bool aInt = a.Kind == ValueKind.Int || a.Kind == ValueKind.Bool;
             bool bInt = b.Kind == ValueKind.Int || b.Kind == ValueKind.Bool;
@@ -102,12 +96,7 @@ namespace Outbridge.PyLite.Modules
                 if (y.IsZero)
                     throw Raise.ZeroDivision(c, "integer division or modulo by zero");
                 BigInteger r;
-                BigInteger q = BigInteger.DivRem(x, y, out r);
-                if (!r.IsZero && (r.Sign != y.Sign))
-                {
-                    q -= 1;
-                    r += y;
-                }
+                BigInteger q = NumericOps.FloorDiv(x, y, out r, c);
                 return c.Values.Tuple(new ScriptValue[] { c.Values.Int(q), c.Values.Int(r) });
             }
             if (NumericOps.IsNumber(a) && NumericOps.IsNumber(b))
@@ -115,31 +104,8 @@ namespace Outbridge.PyLite.Modules
                 double x = Coerce.ToDouble(c, a, "divmod"), y = Coerce.ToDouble(c, b, "divmod");
                 if (y == 0.0)
                     throw Raise.ZeroDivision(c, "float divmod()");
-                double mod = x % y;
-                double div = (x - mod) / y;
-                if (mod != 0.0)
-                {
-                    if ((y < 0.0) != (mod < 0.0))
-                    {
-                        mod += y;
-                        div -= 1.0;
-                    }
-                }
-                else
-                {
-                    mod = y < 0.0 ? -0.0 : 0.0;
-                }
-                double floordiv;
-                if (div != 0.0)
-                {
-                    floordiv = Math.Floor(div);
-                    if (div - floordiv > 0.5)
-                        floordiv += 1.0;
-                }
-                else
-                {
-                    floordiv = BitConverter.DoubleToInt64Bits(x / y) < 0 ? -0.0 : 0.0;
-                }
+                double mod;
+                double floordiv = NumericOps.FloatDivMod(x, y, out mod);
                 return c.Values.Tuple(new ScriptValue[] { c.Values.Float(floordiv), c.Values.Float(mod) });
             }
             ScriptValue viaHook = a.DivmodCore(b, false, c);
@@ -154,7 +120,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue PowBuiltin(EvalContext c, ScriptValue[] args)
         {
-            if (args.Length == 2)
+            if (args.Length == 2 || (args.Length == 3 && args[2].Kind == ValueKind.None))   // pow(x, y, None) == x ** y
                 return PyOps.BinaryOp(PyBinOp.Pow, args[0], args[1], c);
             if (args.Length != 3)
                 throw Raise.TypeError(c, "pow expected 2 or 3 arguments, got " + args.Length);
@@ -165,17 +131,18 @@ namespace Outbridge.PyLite.Modules
             if (z.IsZero)
                 throw Raise.ValueError(c, "pow() 3rd argument cannot be 0");
             BigInteger m = BigInteger.Abs(z);
-            BigInteger baseMod = ((x % m) + m) % m;
+            BigInteger baseMod;
+            NumericOps.FloorDiv(x, m, out baseMod, c);   // in [0, m)
             if (y < 0)
             {
                 // 3.8+: a negative exponent means the modular inverse of the base.
                 BigInteger inv;
-                if (!TryModInverse(baseMod, m, out inv))
+                if (!TryModInverse(c, baseMod, m, out inv))
                     throw Raise.ValueError(c, "base is not invertible for the given modulus");
                 baseMod = inv;
                 y = -y;
             }
-            BigInteger r = BigInteger.ModPow(baseMod, y, m);
+            BigInteger r = ModPowBounded(c, baseMod, y, m);
             if (z.Sign < 0 && !r.IsZero)
                 r -= m;
             return c.Values.Int(r);
@@ -186,17 +153,57 @@ namespace Outbridge.PyLite.Modules
             return v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool;
         }
 
-        // Extended Euclid; false when gcd(a, m) != 1. Result is in [0, m).
-        private static bool TryModInverse(BigInteger a, BigInteger m, out BigInteger inverse)
+        // ModPow is one native call of about bits(y) * words(m)^2 word products. Past ModPowChunkWork the
+        // exponent is taken from the top in chunks that cost about that much each (r = r^(2^len) * b^chunk),
+        // each charged and followed by a deadline check, so a huge exponent or modulus ends on the budget
+        // instead of running past the deadline. y >= 0, 0 <= b < m.
+        private const long ModPowChunkWork = 1L << 24;
+
+        private static BigInteger ModPowBounded(EvalContext c, BigInteger b, BigInteger y, BigInteger m)
+        {
+            long words = 1 + NumericOps.BitLength(m) / 64;
+            long perBit = words * words;
+            long ybits = NumericOps.BitLength(y);
+            if (ybits * perBit <= ModPowChunkWork)
+                return BigOps.ModPow(c, b, y, m, ybits * perBit);
+            int k = (int)Math.Max(1, Math.Min(4096, ModPowChunkWork / perBit));
+            BigInteger r = BigInteger.One;
+            for (long top = ybits; top > 0; top -= k)
+            {
+                int len = (int)Math.Min(k, top);
+                c.Budget.Step((int)Math.Min(int.MaxValue, 1 + 2 * len * perBit / 64));
+                c.Budget.CheckDeadlineNow();
+                BigInteger chunk = (y >> (int)(top - len)) & ((BigInteger.One << len) - 1);
+                r = BigOps.ModPow(c, r, BigInteger.One << len, m, len * perBit);   // past LongWork each call runs under BigOps
+                if (!chunk.IsZero)
+                    r = Mod(c, BigOps.Multiply(c, r, BigOps.ModPow(c, b, chunk, m, len * perBit)), m);
+            }
+            return r;
+        }
+
+        // x mod m for x >= 0, m > 0, deadline-bounded.
+        private static BigInteger Mod(EvalContext c, BigInteger x, BigInteger m)
+        {
+            BigInteger r;
+            BigOps.DivRem(c, x, m, out r);
+            return r;
+        }
+
+        // Extended Euclid; false when gcd(a, m) != 1. Result is in [0, m). A step and a deadline check per
+        // quotient (a million-bit modulus takes about a million of them); a long quotient or product runs
+        // under BigOps.
+        private static bool TryModInverse(EvalContext c, BigInteger a, BigInteger m, out BigInteger inverse)
         {
             BigInteger r0 = m, r1 = a % m, t0 = BigInteger.Zero, t1 = BigInteger.One;
             while (!r1.IsZero)
             {
-                BigInteger q = BigInteger.Divide(r0, r1);
-                BigInteger r2 = r0 - q * r1;
+                c.Budget.Step();
+                c.Budget.CheckDeadlineNow();
+                BigInteger q = BigOps.Divide(c, r0, r1);
+                BigInteger r2 = r0 - BigOps.Multiply(c, q, r1);
                 r0 = r1;
                 r1 = r2;
-                BigInteger t2 = t0 - q * t1;
+                BigInteger t2 = t0 - BigOps.Multiply(c, q, t1);
                 t0 = t1;
                 t1 = t2;
             }
@@ -231,60 +238,13 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue BaseReprBuiltin(EvalContext c, ScriptValue[] args, string prefix, int radix)
         {
-            if (args.Length != 1)
-                throw Raise.TypeError(c, "expected 1 argument, got " + args.Length);
             ScriptValue x = args[0];
             if (!IsIntLike(x))
                 throw Raise.TypeError(c, "'" + x.PyTypeName + "' object cannot be interpreted as an integer");
             BigInteger v = NumericOps.AsBigInteger(x);
-            c.Values.PreCharge((long)NumericOps.BitLength(v) / 3 + 16);
-            string body = MagnitudeInBase(BigInteger.Abs(v), radix);
+            c.Values.EnsureStrLen(NumericOps.BitLength(v) + 1);   // InBase works through a binary string that long
+            string body = Support.PyFormat.InBase(BigInteger.Abs(v), radix);
             return c.Values.Str((v.Sign < 0 ? "-" : "") + prefix + body);
-        }
-
-        private static string MagnitudeInBase(BigInteger a, int radix)
-        {
-            if (a.IsZero)
-                return "0";
-            string hex = a.ToString("x", CultureInfo.InvariantCulture);
-            hex = TrimLeadingZeros(hex);
-            if (radix == 16)
-                return hex;
-            var bits = new StringBuilder(hex.Length * 4);
-            for (int i = 0; i < hex.Length; i++)
-            {
-                int nib = HexDigit(hex[i]);
-                for (int b = 3; b >= 0; b--)
-                    bits.Append((char)('0' + ((nib >> b) & 1)));
-            }
-            string bin = TrimLeadingZeros(bits.ToString());
-            if (radix == 2)
-                return bin;
-            int pad = (3 - bin.Length % 3) % 3;
-            if (pad > 0)
-                bin = new string('0', pad) + bin;
-            var oct = new StringBuilder(bin.Length / 3);
-            for (int i = 0; i < bin.Length; i += 3)
-            {
-                int val = (bin[i] - '0') * 4 + (bin[i + 1] - '0') * 2 + (bin[i + 2] - '0');
-                oct.Append((char)('0' + val));
-            }
-            return TrimLeadingZeros(oct.ToString());
-        }
-
-        private static int HexDigit(char c)
-        {
-            if (c >= '0' && c <= '9')
-                return c - '0';
-            return c - 'a' + 10;   // BigInteger "x" gives lowercase
-        }
-
-        private static string TrimLeadingZeros(string s)
-        {
-            int i = 0;
-            while (i < s.Length - 1 && s[i] == '0')
-                i++;
-            return s.Substring(i);
         }
     }
 }

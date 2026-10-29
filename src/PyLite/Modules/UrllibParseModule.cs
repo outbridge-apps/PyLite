@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // urllib.parse: a port of Lib/urllib/parse.py's str functions (quote/unquote, urlencode, parse_qs,
     // urlsplit/urlparse/urlunsplit/urlunparse/urljoin/urldefrag). The results are namedtuples with
     // CPython's extra properties (hostname/port/username/password, geturl). bytes inputs are not taken.
-    public static class UrllibParseModule
+    internal static class UrllibParseModule
     {
         private const string SchemeChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-.";
         private const string AlwaysSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~";
@@ -57,8 +57,8 @@ namespace Outbridge.PyLite.Modules
                 ["parse_qsl"] = BuiltinFunctionValue.Make("parse_qsl", (s, a, kw, c) => ParseQs(c, a, kw, false)),
                 ["urlsplit"] = BuiltinFunctionValue.Make("urlsplit", (s, a, kw, c) => SplitFn(c, a, kw, false)),
                 ["urlparse"] = BuiltinFunctionValue.Make("urlparse", (s, a, kw, c) => SplitFn(c, a, kw, true)),
-                ["urlunsplit"] = BuiltinFunctionValue.Make("urlunsplit", (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunsplit", 5))),
-                ["urlunparse"] = BuiltinFunctionValue.Make("urlunparse", (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunparse", 6))),
+                ["urlunsplit"] = BuiltinFunctionValue.Make("urlunsplit", Args.Positional("urlunsplit", 1, 1, (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunsplit", 5)))),
+                ["urlunparse"] = BuiltinFunctionValue.Make("urlunparse", Args.Positional("urlunparse", 1, 1, (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunparse", 6)))),
                 ["urljoin"] = BuiltinFunctionValue.Make("urljoin", UrlJoin),
                 ["urldefrag"] = BuiltinFunctionValue.Make("urldefrag", UrlDefrag),
                 ["unwrap"] = BuiltinFunctionValue.Make("unwrap", Unwrap),
@@ -130,7 +130,7 @@ namespace Outbridge.PyLite.Modules
         {
             var extra = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal)
             {
-                ["geturl"] = SlotDescriptor.MakeMethod("geturl", (self, a, kw, c) => c.Values.Str(GetUrl((NamedTupleValue)self, c))),
+                ["geturl"] = SlotDescriptor.MakeMethod("geturl", Args.Positional("geturl", 0, 0, (self, a, kw, c) => c.Values.Str(GetUrl((NamedTupleValue)self, c)))),
             };
             if (netlocProps)
             {
@@ -513,6 +513,28 @@ namespace Outbridge.PyLite.Modules
                 errV = v;
             // quote defaults safe to '/', quote_plus to '' — a path separator is not safe in a query value.
             string safe = safeV != null ? StrArg(ctx, safeV, fn, "safe") : (plus ? "" : "/");
+            return ctx.Values.Str(Quote(ctx, sv, SafeTable(safe, plus), encV, errV, fn, plus));
+        }
+
+        // a table, not a scan of safe per byte: safe is script-sized, and CPython caches the same way;
+        // urlencode builds it once for every key and value it quotes (P17)
+        private static bool[] SafeTable(string safe, bool plus)
+        {
+            var ok = new bool[128];
+            foreach (char ch in AlwaysSafe)
+                ok[ch] = true;
+            foreach (char ch in safe)
+            {
+                if (ch < 128)
+                    ok[ch] = true;
+            }
+            if (plus)
+                ok[' '] = true;
+            return ok;
+        }
+
+        private static string Quote(EvalContext ctx, ScriptValue sv, bool[] ok, ScriptValue encV, ScriptValue errV, string fn, bool plus)
+        {
             byte[] data;
             BytesValue bv = sv as BytesValue;
             if (bv != null)
@@ -525,27 +547,16 @@ namespace Outbridge.PyLite.Modules
                 data = BytesCodec.Encode(ctx, s, BytesCodec.Normalize(ctx, ctx.Values.Str(enc)), errors);
             }
             ctx.Budget.ChargeLinear(data.Length);   // the quoting pass; the codec charged its own
-            if (plus)
-                safe = safe + " ";
-            // a table, not a scan of safe per byte: safe is script-sized, and CPython caches the same way
-            var ok = new bool[128];
-            foreach (char ch in AlwaysSafe)
-                ok[ch] = true;
-            foreach (char ch in safe)
-            {
-                if (ch < 128)
-                    ok[ch] = true;
-            }
             var sb = new StringBuilder(data.Length + 8);
             foreach (byte b in data)
             {
                 if (b < 128 && ok[b])
                     sb.Append(plus && b == ' ' ? '+' : (char)b);
                 else
-                    sb.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+                    sb.Append('%').Append(Hex.Digit(b >> 4, upper: true)).Append(Hex.Digit(b & 0xF, upper: true));
             }
             ctx.Values.EnsureStrLen(sb.Length);
-            return ctx.Values.Str(sb.ToString());
+            return sb.ToString();
         }
 
         private static ScriptValue UnquoteFn(EvalContext ctx, ScriptValue[] a, KwArgs kw, string fn, bool plus)
@@ -577,9 +588,9 @@ namespace Outbridge.PyLite.Modules
             int i = 0;
             while (i < s.Length)
             {
-                if (s[i] == '%' && i + 2 < s.Length + 0 && i + 2 <= s.Length - 1 && IsHex(s[i + 1]) && IsHex(s[i + 2]))
+                if (s[i] == '%' && i + 2 < s.Length && Hex.Nibble(s[i + 1]) >= 0 && Hex.Nibble(s[i + 2]) >= 0)
                 {
-                    pending.Add((byte)Convert.ToInt32(s.Substring(i + 1, 2), 16));
+                    pending.Add((byte)(Hex.Nibble(s[i + 1]) * 16 + Hex.Nibble(s[i + 2])));
                     i += 3;
                     continue;
                 }
@@ -595,11 +606,6 @@ namespace Outbridge.PyLite.Modules
                 sb.Append(BytesCodec.Decode(ctx, pending.ToArray(), codec, errors));
             ctx.Values.EnsureStrLen(sb.Length);
             return sb.ToString();
-        }
-
-        private static bool IsHex(char c)
-        {
-            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
         // ---- urlencode / parse_qs ----
@@ -666,25 +672,26 @@ namespace Outbridge.PyLite.Modules
                 }
             }
 
+            bool[] ok = SafeTable(safe, plus);
             var sb = new StringBuilder();
             foreach (KeyValuePair<ScriptValue, ScriptValue> kv in pairs)
             {
-                string k = QuoteValue(ctx, kv.Key, safe, encArg, errArg, plus);
+                string k = QuoteValue(ctx, kv.Key, ok, encArg, errArg, plus);
                 ScriptValue val = kv.Value;
                 if (!doseq || val is StrValue || val is BytesValue)
                 {
-                    AppendPair(sb, k, QuoteValue(ctx, val, safe, encArg, errArg, plus));
+                    AppendPair(sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
                     continue;
                 }
                 IScriptIterator it = TryIter(ctx, val);
                 if (it == null)
                 {
-                    AppendPair(sb, k, QuoteValue(ctx, val, safe, encArg, errArg, plus));
+                    AppendPair(sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
                     continue;
                 }
                 ScriptValue elem;
                 while (it.MoveNext(ctx, out elem))
-                    AppendPair(sb, k, QuoteValue(ctx, elem, safe, encArg, errArg, plus));
+                    AppendPair(sb, k, QuoteValue(ctx, elem, ok, encArg, errArg, plus));
             }
             ctx.Values.EnsureStrLen(sb.Length);
             return ctx.Values.Str(sb.ToString());
@@ -702,11 +709,10 @@ namespace Outbridge.PyLite.Modules
             sb.Append(k).Append('=').Append(v);
         }
 
-        private static string QuoteValue(EvalContext ctx, ScriptValue v, string safe, ScriptValue enc, ScriptValue err, bool plus)
+        private static string QuoteValue(EvalContext ctx, ScriptValue v, bool[] ok, ScriptValue enc, ScriptValue err, bool plus)
         {
             ScriptValue input = v is StrValue || v is BytesValue ? v : ctx.Values.Str(v.Str(ctx));
-            var args = new[] { input, ctx.Values.Str(safe), enc, err };
-            return ((StrValue)QuoteFn(ctx, args, KwArgs.Empty, plus ? "quote_plus" : "quote", plus)).Value;
+            return Quote(ctx, input, ok, enc, err, plus ? "quote_plus" : "quote", plus);
         }
 
         private static ScriptValue ParseQs(EvalContext ctx, ScriptValue[] a, KwArgs kw, bool asDict)

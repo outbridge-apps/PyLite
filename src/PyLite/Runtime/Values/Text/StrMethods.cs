@@ -7,8 +7,8 @@ using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
-    // str method slots. Lives with the value model (uses Modules.Support helpers
-    // which is the allowed direction) so StrValue.TypeInfo can carry the slot table directly. All matching
+    // str method slots. Lives with the value model (it uses Modules.Support helpers, the allowed
+    // direction) so StrValue.TypeInfo can carry the slot table directly. All matching
     // is Ordinal; indices go through Coerce.AdjustIndices; results allocate via the ValueFactory.
     internal static partial class StrMethods
     {
@@ -16,30 +16,35 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             var s = new Slots(v => ((StrValue)v).Value.Length);   // every str method is at most one pass over the receiver
             // search / replace
-            s.Linear("find", (self, a, kw, c) => FindImpl(c, S(self), a, false, false));
-            s.Linear("rfind", (self, a, kw, c) => FindImpl(c, S(self), a, true, false));
-            s.Linear("index", (self, a, kw, c) => FindImpl(c, S(self), a, false, true));
-            s.Linear("rindex", (self, a, kw, c) => FindImpl(c, S(self), a, true, true));
-            s.Linear("count", (self, a, kw, c) => CountImpl(c, S(self), a));
-            s.Linear("startswith", (self, a, kw, c) => TailMatch(c, S(self), a, false));
-            s.Linear("endswith", (self, a, kw, c) => TailMatch(c, S(self), a, true));
-            s.Linear("replace", (self, a, kw, c) => ReplaceImpl(c, self, a));
+            s.Linear("find", 1, 3, (self, a, kw, c) => FindImpl(c, S(self), a, false, false));
+            s.Linear("rfind", 1, 3, (self, a, kw, c) => FindImpl(c, S(self), a, true, false));
+            s.Linear("index", 1, 3, (self, a, kw, c) => FindImpl(c, S(self), a, false, true));
+            s.Linear("rindex", 1, 3, (self, a, kw, c) => FindImpl(c, S(self), a, true, true));
+            s.Linear("count", 1, 3, (self, a, kw, c) => CountImpl(c, S(self), a));
+            s.Linear("startswith", 1, 3, (self, a, kw, c) => TailMatch(c, S(self), a, false));
+            s.Linear("endswith", 1, 3, (self, a, kw, c) => TailMatch(c, S(self), a, true));
+            s.Linear("replace", (self, a, kw, c) =>
+            {
+                ScriptValue[] ra = WithKw(c, a, kw, "replace", "old", "new", "count");   // count= is a keyword since 3.13
+                Args.Between(c, ra, "replace", 2, 3);
+                return ReplaceImpl(c, self, ra);
+            });
             // PEP 616 (3.9)
-            s.Linear("removeprefix", (self, a, kw, c) => RemoveAffix(c, self, a, true));
-            s.Linear("removesuffix", (self, a, kw, c) => RemoveAffix(c, self, a, false));
+            s.Linear("removeprefix", 1, 1, (self, a, kw, c) => RemoveAffix(c, self, a, true));
+            s.Linear("removesuffix", 1, 1, (self, a, kw, c) => RemoveAffix(c, self, a, false));
             // split / join / strip
             s.Linear("split", (self, a, kw, c) => SplitImpl(c, S(self), WithKw(c, a, kw, "split", "sep", "maxsplit"), false));
             s.Linear("rsplit", (self, a, kw, c) => SplitImpl(c, S(self), WithKw(c, a, kw, "rsplit", "sep", "maxsplit"), true));
             s.Linear("splitlines", (self, a, kw, c) => SplitLines(c, S(self), WithKw(c, a, kw, "splitlines", "keepends")));
-            s.Linear("partition", (self, a, kw, c) => Partition(c, S(self), a, false));
-            s.Linear("rpartition", (self, a, kw, c) => Partition(c, S(self), a, true));
-            s.Linear("join", (self, a, kw, c) => JoinImpl(c, S(self), a));
-            s.Linear("strip", (self, a, kw, c) => StripImpl(c, self, a, true, true));
-            s.Linear("lstrip", (self, a, kw, c) => StripImpl(c, self, a, true, false));
-            s.Linear("rstrip", (self, a, kw, c) => StripImpl(c, self, a, false, true));
+            s.Linear("partition", 1, 1, (self, a, kw, c) => Partition(c, S(self), a, false));
+            s.Linear("rpartition", 1, 1, (self, a, kw, c) => Partition(c, S(self), a, true));
+            s.Linear("join", 1, 1, (self, a, kw, c) => JoinImpl(c, S(self), a));
+            s.Linear("strip", 0, 1, (self, a, kw, c) => StripImpl(c, self, a, true, true));
+            s.Linear("lstrip", 0, 1, (self, a, kw, c) => StripImpl(c, self, a, true, false));
+            s.Linear("rstrip", 0, 1, (self, a, kw, c) => StripImpl(c, self, a, false, true));
             s.Linear("format", (self, a, kw, c) => c.Format.StrDotFormat(c, (StrValue)self, a, kw));
-            s.Linear("format_map", (self, a, kw, c) => FormatMap(c, (StrValue)self, a));
-            s.Linear("translate", (self, a, kw, c) => Translate(c, S(self), a));
+            s.Linear("format_map", 1, 1, (self, a, kw, c) => FormatMap(c, (StrValue)self, a));
+            s.Linear("translate", 1, 1, (self, a, kw, c) => Translate(c, S(self), a));
             s.Linear("encode", (self, a, kw, c) =>
             {
                 ScriptValue[] ea = WithKw(c, a, kw, "encode", "encoding", "errors");
@@ -316,22 +321,18 @@ namespace Outbridge.PyLite.Runtime.Values
 
             if (oldS.Length == 0)
             {
-                var sb = new StringBuilder();
-                int inserted = 0;
+                // newS goes before every char and at the end, at most `count` times: size it first.
+                long inserts = count < 0 ? s.Length + 1L : Math.Min(count, s.Length + 1L);
+                c.Values.EnsureStrLen(s.Length + inserts * newS.Length);
+                var sb = new StringBuilder((int)(s.Length + inserts * newS.Length));
                 for (int i = 0; i <= s.Length; i++)
                 {
-                    if (count < 0 || inserted < count)
-                    {
+                    if (i < inserts)
                         sb.Append(newS);
-                        inserted++;
-                    }
                     if (i < s.Length)
                         sb.Append(s[i]);
                 }
-                long est0 = sb.Length;
-                if (est0 > c.Limits.MaxStrChars)
-                    throw c.Budget.CreateAbort(EngineAbortKind.Memory, "MaxStrChars", c.Limits.MaxStrChars, est0);
-                return c.Values.Str(sb.ToString());
+                return c.Values.StrPrecharged(sb.ToString());
             }
 
             var positions = new List<int>();

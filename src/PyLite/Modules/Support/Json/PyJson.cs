@@ -232,12 +232,48 @@ namespace Outbridge.PyLite.Modules.Support
 
         // ---- dumps (own iterative writer; no JsonTextWriter, so floats/escaping/separators match Python) ----
 
-        private sealed class Work
+        // A value type (P12): pushing one allocates nothing; the count of items, and so the steps, is unchanged.
+        private struct Work
         {
             public ScriptValue Node;   // non-null => serialize this node at Depth
-            public string Text;        // non-null => append verbatim
+            public string Text;        // non-null => append verbatim, or as a JSON string when IsKey
             public ScriptValue Close;  // non-null => also pop this container from the open set (cycle tracking)
             public int Depth;
+            public bool IsKey;
+        }
+
+        // The separator, indent and closing strings of one dumps call, built once per depth (P12).
+        private sealed class DumpTexts
+        {
+            private readonly JsonDumpOptions _o;
+            private readonly List<string> _newline = new List<string>();
+            private readonly List<string> _sepNewline = new List<string>();
+            private readonly List<string> _closeList = new List<string>();
+            private readonly List<string> _closeDict = new List<string>();
+
+            internal DumpTexts(JsonDumpOptions o) { _o = o; }
+
+            internal string Newline(int depth)
+            {
+                while (_newline.Count <= depth)
+                    _newline.Add(PyJson.Newline(_o, _newline.Count));
+                return _newline[depth];
+            }
+
+            internal string SepNewline(int depth)
+            {
+                while (_sepNewline.Count <= depth)
+                    _sepNewline.Add(_o.ItemSeparator + Newline(_sepNewline.Count));
+                return _sepNewline[depth];
+            }
+
+            internal string Close(int depth, char bracket)
+            {
+                List<string> l = bracket == ']' ? _closeList : _closeDict;
+                while (l.Count <= depth)
+                    l.Add(Newline(l.Count) + bracket);
+                return l[depth];
+            }
         }
 
         public static string Dump(EvalContext ctx, ScriptValue value, JsonDumpOptions o)
@@ -245,6 +281,7 @@ namespace Outbridge.PyLite.Modules.Support
             var sb = new StringBuilder();
             var open = new HashSet<object>(ReferenceEqualityComparer.Instance);
             var stack = new Stack<Work>();
+            var texts = new DumpTexts(o);
             stack.Push(new Work { Node = value, Depth = 0 });
 
             while (stack.Count > 0)
@@ -253,18 +290,30 @@ namespace Outbridge.PyLite.Modules.Support
                 Work w = stack.Pop();
                 if (w.Node == null)
                 {
-                    sb.Append(w.Text);
+                    if (w.IsKey)
+                        WriteString(sb, w.Text, o.EnsureAscii);
+                    else
+                        sb.Append(w.Text);
+                    CheckRoom(ctx, sb, 0);
                     if (w.Close != null)
                         open.Remove(w.Close);
                     continue;
                 }
-                SerializeNode(ctx, w.Node, w.Depth, o, sb, open, stack);
+                SerializeNode(ctx, w.Node, w.Depth, o, sb, open, stack, texts);
+                CheckRoom(ctx, sb, 0);
             }
             return sb.ToString();
         }
 
+        // The document is capped as it grows, not after: one large string referenced many times would
+        // otherwise build gigabytes before the final str() could refuse it.
+        private static void CheckRoom(EvalContext ctx, StringBuilder sb, long add)
+        {
+            ctx.Values.CheckStrLen(sb.Length + add);
+        }
+
         private static void SerializeNode(EvalContext ctx, ScriptValue node, int depth, JsonDumpOptions o,
-            StringBuilder sb, HashSet<object> open, Stack<Work> stack)
+            StringBuilder sb, HashSet<object> open, Stack<Work> stack, DumpTexts texts)
         {
             switch (node.Kind)
             {
@@ -281,25 +330,26 @@ namespace Outbridge.PyLite.Modules.Support
                     sb.Append(FloatToken(ctx, ((FloatValue)node).Value, o));
                     return;
                 case ValueKind.Str:
+                    CheckRoom(ctx, sb, ((StrValue)node).Value.Length);
                     WriteString(sb, ((StrValue)node).Value, o.EnsureAscii);
                     return;
                 case ValueKind.List:
-                    PushList(ctx, node, ((ListValue)node).Items, depth, o, sb, open, stack);
+                    PushList(ctx, node, ((ListValue)node).Items, depth, o, sb, open, stack, texts);
                     return;
                 case ValueKind.Tuple:
-                    PushList(ctx, node, ((TupleValue)node).Items, depth, o, sb, open, stack);
+                    PushList(ctx, node, ((TupleValue)node).Items, depth, o, sb, open, stack, texts);
                     return;
                 case ValueKind.Dict:
-                    PushDict(ctx, (DictValue)node, depth, o, sb, open, stack);
+                    PushDict(ctx, (DictValue)node, depth, o, sb, open, stack, texts);
                     return;
                 default:
                     if (o.Default != null)
                     {
-                        // default(o) answers a serializable stand-in; a stand-in that never bottoms out is
-                        // caught by the same depth cap as a nested container.
-                        if (depth >= ctx.Limits.MaxDataDepth)
-                            throw Raise.ValueError(ctx, "Circular reference detected");
-                        SerializeNode(ctx, ctx.CallHook(o.Default, new[] { node }, KwArgs.Empty), depth + 1, o, sb, open, stack);
+                        // default(o) answers a serializable stand-in. As in CPython, o stays open until its
+                        // stand-in is written: o again inside it is a cycle, fresh objects forever hit the depth cap.
+                        EnterContainer(ctx, node, depth, open);
+                        stack.Push(new Work { Text = "", Close = node });
+                        SerializeNode(ctx, ctx.CallHook(o.Default, new[] { node }, KwArgs.Empty), depth + 1, o, sb, open, stack, texts);
                         return;
                     }
                     throw Raise.TypeError(ctx, "Object of type " + node.PyTypeName + " is not JSON serializable");
@@ -307,7 +357,7 @@ namespace Outbridge.PyLite.Modules.Support
         }
 
         private static void PushList(EvalContext ctx, ScriptValue node, IReadOnlyList<ScriptValue> items,
-            int depth, JsonDumpOptions o, StringBuilder sb, HashSet<object> open, Stack<Work> stack)
+            int depth, JsonDumpOptions o, StringBuilder sb, HashSet<object> open, Stack<Work> stack, DumpTexts texts)
         {
             EnterContainer(ctx, node, depth, open);
             if (items.Count == 0)
@@ -317,17 +367,17 @@ namespace Outbridge.PyLite.Modules.Support
                 return;
             }
             sb.Append('[');
-            string childIndent = Newline(o, depth + 1);
-            stack.Push(new Work { Text = Newline(o, depth) + "]", Close = node });
+            string first = texts.Newline(depth + 1), next = texts.SepNewline(depth + 1);
+            stack.Push(new Work { Text = texts.Close(depth, ']'), Close = node });
             for (int i = items.Count - 1; i >= 0; i--)
             {
                 stack.Push(new Work { Node = items[i], Depth = depth + 1 });
-                stack.Push(new Work { Text = i == 0 ? childIndent : o.ItemSeparator + childIndent });
+                stack.Push(new Work { Text = i == 0 ? first : next });
             }
         }
 
         private static void PushDict(EvalContext ctx, DictValue node, int depth, JsonDumpOptions o,
-            StringBuilder sb, HashSet<object> open, Stack<Work> stack)
+            StringBuilder sb, HashSet<object> open, Stack<Work> stack, DumpTexts texts)
         {
             var keys = new List<string>();
             var vals = new List<ScriptValue>();
@@ -356,17 +406,15 @@ namespace Outbridge.PyLite.Modules.Support
 
             int[] order = SortOrder(keys, o.SortKeys);
             sb.Append('{');
-            string childIndent = Newline(o, depth + 1);
-            stack.Push(new Work { Text = Newline(o, depth) + "}", Close = node });
+            string first = texts.Newline(depth + 1), next = texts.SepNewline(depth + 1);
+            stack.Push(new Work { Text = texts.Close(depth, '}'), Close = node });
             for (int idx = order.Length - 1; idx >= 0; idx--)
             {
                 int i = order[idx];
                 stack.Push(new Work { Node = vals[i], Depth = depth + 1 });
                 stack.Push(new Work { Text = o.KeySeparator });
-                var keyBuf = new StringBuilder();
-                WriteString(keyBuf, keys[i], o.EnsureAscii);
-                stack.Push(new Work { Text = keyBuf.ToString() });
-                stack.Push(new Work { Text = idx == 0 ? childIndent : o.ItemSeparator + childIndent });
+                stack.Push(new Work { Text = keys[i], IsKey = true });   // escaped straight into the document
+                stack.Push(new Work { Text = idx == 0 ? first : next });
             }
         }
 
@@ -377,7 +425,7 @@ namespace Outbridge.PyLite.Modules.Support
             if (depth >= ctx.Limits.MaxDataDepth)
             {
                 open.Remove(node);
-                throw Raise.ValueError(ctx, "Too deeply nested");
+                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded while encoding a JSON object");   // CPython's _json text
             }
         }
 

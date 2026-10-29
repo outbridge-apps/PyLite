@@ -20,5 +20,20 @@ namespace Outbridge.PyLite.Hosting
         public bool TerminatingEntered { get; internal set; } // Budget.IsTerminating at exit
         public bool TracebackTruncated { get; internal set; }
         public int LeakedThreadsAtStart { get; internal set; }// RunGate leak snapshot when the ticket issued
+
+        // The exit-time fields; the running totals (host/regex time, depth) accumulate during the run.
+        internal void Snapshot(Runtime.EvalContext ctx)
+        {
+            Runtime.Budget budget = ctx.Budget;
+            Steps = budget.StepsUsed;
+            AllocatedBytes = budget.AllocBytesUsed;
+            OutputBytes = budget.OutputBytesUsed;
+            SleepMs = budget.SleepMsUsed;
+            RegexTime = TimeSpan.FromTicks(budget.RegexTicksUsed);
+            RegexOps = budget.RegexOps;
+            Elapsed = budget.Elapsed;
+            ModulesImported = ctx.ModuleInstances.Count;
+            TerminatingEntered = budget.IsTerminating;
+        }
     }
 }

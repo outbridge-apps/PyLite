@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 using Outbridge.PyLite.Runtime;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
@@ -10,14 +11,13 @@ namespace Outbridge.PyLite.Modules
     // itertools tee + product. tee shares one divergence buffer capped at
     // TeeBufferCap (a module constant rather than a ResourceLimits field, to avoid churning that ctor);
     // product materializes all pools up front (an infinite input aborts in the constructor).
-    public static partial class ItertoolsModule
+    internal static partial class ItertoolsModule
     {
         internal const int TeeBufferCap = 10000;
 
         private static ScriptValue Tee(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length < 1 || args.Length > 2)
-                throw Raise.TypeError(ctx, "tee expected at most 2 arguments, got " + args.Length);
+            Args.Unpack(ctx, args, "tee", 1, 2);
             int n = 2;
             if (args.Length == 2)
             {
@@ -27,6 +27,7 @@ namespace Outbridge.PyLite.Modules
                 n = ToSsize(ctx, nb);
             }
             IScriptIterator src = IterArg(ctx, args[0]);
+            ctx.Values.EnsureCollectionSize(n);   // n comes from the script: cap it before the array
             var buf = new TeeBuffer(src);
             var tuple = new ScriptValue[n];
             for (int i = 0; i < n; i++)
@@ -52,15 +53,7 @@ namespace Outbridge.PyLite.Modules
             var basePools = new ScriptValue[args.Length][];
             for (int i = 0; i < args.Length; i++)
             {
-                IScriptIterator it = IterArg(ctx, args[i]);
-                var pool = new List<ScriptValue>();
-                ScriptValue v;
-                while (it.MoveNext(ctx, out v))   // an infinite input never returns -> EngineAbort here (constructor)
-                {
-                    ctx.Values.PreCharge(16);
-                    pool.Add(v);
-                }
-                basePools[i] = pool.ToArray();
+                basePools[i] = Support.Iter.ToArray(ctx, args[i]);   // an infinite input stops on MaxCollectionItems here
             }
             long poolCount = (long)args.Length * repeat;
             ctx.Values.PreCharge(poolCount * 8 + 16);   // bounds poolCount before the (int) cast + alloc
@@ -72,16 +65,7 @@ namespace Outbridge.PyLite.Modules
             return ctx.Values.Iterator(new ProductIterator(pools), "itertools.product");
         }
 
-        // Interpret a value as a count/index int (int or bool); float/other -> TypeError.
-        private static BigInteger AsCountInt(EvalContext ctx, ScriptValue v)
-        {
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return iv.Value;
-            if (v is BoolValue)
-                return ((BoolValue)v).Value ? BigInteger.One : BigInteger.Zero;
-            throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
-        }
+        private static BigInteger AsCountInt(EvalContext ctx, ScriptValue v) { return Coerce.ToIndex(ctx, v, "count"); }
     }
 
     // tee's shared divergence buffer: a ring holding elements still needed by at least one clone.

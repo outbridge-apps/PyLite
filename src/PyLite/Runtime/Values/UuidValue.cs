@@ -62,10 +62,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             get
             {
-                var sb = new System.Text.StringBuilder(32);
-                for (int i = 0; i < 16; i++)
-                    sb.Append(_bytes[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
-                return sb.ToString();
+                return Modules.Support.Hex.Encode(_bytes);
             }
         }
 

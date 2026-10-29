@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
+using static Outbridge.PyLite.Modules.Support.CalendarFormat;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 
@@ -343,7 +344,21 @@ namespace Outbridge.PyLite.Runtime.Values
             return false;
         }
 
+        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        private long _hash;
+        private bool _hashed;
+
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            if (!_hashed)
+            {
+                _hash = ComputeHash(ctx, depth);
+                _hashed = true;
+            }
+            return _hash;
+        }
+
+        private long ComputeHash(EvalContext ctx, int depth)
         {
             if (Tz != null)
                 return NumericHash.HashBigInteger(HashKey());
@@ -361,36 +376,18 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal string IsoFormat(char sep, string timespec)
         {
-            string core = Year.ToString("0000", CultureInfo.InvariantCulture) + "-" + Pad2(Month) + "-" + Pad2(Day)
-                + sep + TimeValue.IsoTime(Hour, Minute, Second, Microsecond, timespec);
+            string core = CalendarFormat.IsoDate(Year, Month, Day) + sep + TimeValue.IsoTime(Hour, Minute, Second, Microsecond, timespec);
             if (Tz != null)
                 core += TimezoneValue.IsoOffset(OffsetUsLong());
             return core;
         }
 
-        internal string CtimeString()
-        {
-            int wd = CalendarMath.Weekday(ToOrdinalInt());
-            return DtNames.AbbrDays[wd] + " " + DtNames.AbbrMonths[Month - 1] + " "
-                + ((int)Day).ToString(CultureInfo.InvariantCulture).PadLeft(2, ' ') + " "
-                + Pad2(Hour) + ":" + Pad2(Minute) + ":" + Pad2(Second) + " "
-                + Year.ToString(CultureInfo.InvariantCulture);
-        }
+        internal string CtimeString() { return CalendarFormat.Ctime(Year, Month, Day, Hour, Minute, Second); }
 
         internal string Strftime(EvalContext ctx, string fmt)
         {
-            int ord = ToOrdinalInt();
-            var t = new BrokenTime
-            {
-                Year = Year, Month = Month, Day = Day,
-                Hour = Hour, Minute = Minute, Second = Second, Microsecond = Microsecond,
-                WeekdayMon0 = CalendarMath.Weekday(ord),
-                DayOfYear = CalendarMath.DayOfYear(Year, Month, Day),
-                OffsetUs = Tz == null ? (long?)null : Tz.OffsetUsAt(this),
-                TzName = Tz == null ? null : Tz.TzNameAt(this),
-                HasMicroseconds = true,
-            };
-            return StrftimeFormatter.Format(ctx, fmt, t);
+            return StrftimeFormatter.Format(ctx, fmt, CalendarFormat.Broken(Year, Month, Day, Hour, Minute, Second,
+                Microsecond, Tz == null ? (long?)null : Tz.OffsetUsAt(this), Tz == null ? null : Tz.TzNameAt(this)));
         }
 
         protected internal override ScriptValue FormatSpecCore(string spec, EvalContext ctx)
@@ -402,11 +399,11 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            string body = Fmt(Year) + ", " + Fmt(Month) + ", " + Fmt(Day) + ", " + Fmt(Hour) + ", " + Fmt(Minute);
+            string body = Num(Year) + ", " + Num(Month) + ", " + Num(Day) + ", " + Num(Hour) + ", " + Num(Minute);
             if (Microsecond != 0)
-                body += ", " + Fmt(Second) + ", " + Fmt(Microsecond);
+                body += ", " + Num(Second) + ", " + Num(Microsecond);
             else if (Second != 0)
-                body += ", " + Fmt(Second);
+                body += ", " + Num(Second);
             if (Tz != null)
                 body += ", tzinfo=" + Tz.Repr(ctx);
             if (Fold != 0)
@@ -414,8 +411,6 @@ namespace Outbridge.PyLite.Runtime.Values
             sb.Append("datetime.datetime(" + body + ")");
         }
 
-        private static string Fmt(int n) { return n.ToString(CultureInfo.InvariantCulture); }
-        private static string Pad2(int n) { return n.ToString("00", CultureInfo.InvariantCulture); }
 
         // ---- instance slots ----
 
@@ -448,9 +443,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private ScriptValue TimeTuple(EvalContext ctx, int isdst)
         {
-            int ord = ToOrdinalInt();
-            return StructTimeValue.Create(ctx, Year, Month, Day, Hour, Minute, Second,
-                CalendarMath.Weekday(ord), CalendarMath.DayOfYear(Year, Month, Day), isdst);
+            return CalendarFormat.TimeTuple(ctx, Year, Month, Day, Hour, Minute, Second, isdst);
         }
 
         private ScriptValue UtcTimeTuple(EvalContext ctx)
@@ -466,9 +459,7 @@ namespace Outbridge.PyLite.Runtime.Values
             int y, mo, d;
             CalendarMath.Ord2Ymd((int)ordinalB, out y, out mo, out d);
             long sec = usOfDay / 1000000L;
-            int h = (int)(sec / 3600), mi = (int)(sec % 3600 / 60), s = (int)(sec % 60);
-            return StructTimeValue.Create(ctx, y, mo, d, h, mi, s,
-                CalendarMath.Weekday((int)ordinalB), CalendarMath.DayOfYear(y, mo, d), 0);
+            return CalendarFormat.TimeTuple(ctx, y, mo, d, (int)(sec / 3600), (int)(sec % 3600 / 60), (int)(sec % 60), 0);
         }
 
         // isoformat(sep='T', timespec='auto')
@@ -489,12 +480,6 @@ namespace Outbridge.PyLite.Runtime.Values
             return ctx.Values.Str(IsoFormat(sep, TimeValue.TimespecArg(ctx, args, kw, 1)));
         }
 
-        private ScriptValue IsoCalendarTuple(EvalContext ctx)
-        {
-            int iy, iw, id;
-            CalendarMath.IsoCalendar(Year, Month, Day, out iy, out iw, out id);
-            return ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Int(iy), ctx.Values.Int(iw), ctx.Values.Int(id) });
-        }
 
         private ScriptValue Timestamp(EvalContext ctx)
         {
@@ -546,38 +531,35 @@ namespace Outbridge.PyLite.Runtime.Values
                 ["microsecond"] = SlotDescriptor.MakeProperty("microsecond", (self, c) => c.Values.Int(((DateTimeValue)self).Microsecond)),
                 ["tzinfo"] = SlotDescriptor.MakeProperty("tzinfo", (self, c) => ((DateTimeValue)self).TzInfoValue(c)),
                 ["fold"] = SlotDescriptor.MakeProperty("fold", (self, c) => c.Values.Int(((DateTimeValue)self).Fold)),
-                ["date"] = SlotDescriptor.MakeMethod("date", (self, a, kw, c) => DateValue.Construct(c, ((DateTimeValue)self).Year, ((DateTimeValue)self).Month, ((DateTimeValue)self).Day)),
-                ["time"] = SlotDescriptor.MakeMethod("time", (self, a, kw, c) => TimeValue.Construct(c, ((DateTimeValue)self).Hour, ((DateTimeValue)self).Minute, ((DateTimeValue)self).Second, ((DateTimeValue)self).Microsecond, null)),
-                ["timetz"] = SlotDescriptor.MakeMethod("timetz", (self, a, kw, c) => TimeValue.Construct(c, ((DateTimeValue)self).Hour, ((DateTimeValue)self).Minute, ((DateTimeValue)self).Second, ((DateTimeValue)self).Microsecond, ((DateTimeValue)self).Tz)),
+                ["date"] = SlotDescriptor.MakeMethod("date", Args.Positional("date", 0, 0, (self, a, kw, c) => DateValue.Construct(c, ((DateTimeValue)self).Year, ((DateTimeValue)self).Month, ((DateTimeValue)self).Day))),
+                ["time"] = SlotDescriptor.MakeMethod("time", Args.Positional("time", 0, 0, (self, a, kw, c) => TimeValue.Construct(c, ((DateTimeValue)self).Hour, ((DateTimeValue)self).Minute, ((DateTimeValue)self).Second, ((DateTimeValue)self).Microsecond, null))),
+                ["timetz"] = SlotDescriptor.MakeMethod("timetz", Args.Positional("timetz", 0, 0, (self, a, kw, c) => TimeValue.Construct(c, ((DateTimeValue)self).Hour, ((DateTimeValue)self).Minute, ((DateTimeValue)self).Second, ((DateTimeValue)self).Microsecond, ((DateTimeValue)self).Tz))),
                 ["replace"] = SlotDescriptor.MakeMethod("replace", (self, a, kw, c) => ((DateTimeValue)self).Replace(c, a, kw)),
-                ["toordinal"] = SlotDescriptor.MakeMethod("toordinal", (self, a, kw, c) => c.Values.Int(((DateTimeValue)self).ToOrdinalInt())),
-                ["weekday"] = SlotDescriptor.MakeMethod("weekday", (self, a, kw, c) => c.Values.Int(CalendarMath.Weekday(((DateTimeValue)self).ToOrdinalInt()))),
-                ["isoweekday"] = SlotDescriptor.MakeMethod("isoweekday", (self, a, kw, c) => c.Values.Int(CalendarMath.Weekday(((DateTimeValue)self).ToOrdinalInt()) + 1)),
-                ["isocalendar"] = SlotDescriptor.MakeMethod("isocalendar", (self, a, kw, c) => ((DateTimeValue)self).IsoCalendarTuple(c)),
-                ["timetuple"] = SlotDescriptor.MakeMethod("timetuple", (self, a, kw, c) => ((DateTimeValue)self).TimeTuple(c, -1)),
-                ["utctimetuple"] = SlotDescriptor.MakeMethod("utctimetuple", (self, a, kw, c) => ((DateTimeValue)self).UtcTimeTuple(c)),
+                ["timetuple"] = SlotDescriptor.MakeMethod("timetuple", Args.Positional("timetuple", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).TimeTuple(c, -1))),
+                ["utctimetuple"] = SlotDescriptor.MakeMethod("utctimetuple", Args.Positional("utctimetuple", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).UtcTimeTuple(c))),
                 ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", (self, a, kw, c) => ((DateTimeValue)self).IsoFormatMethod(c, a, kw)),
-                ["ctime"] = SlotDescriptor.MakeMethod("ctime", (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).CtimeString())),
-                ["strftime"] = SlotDescriptor.MakeMethod("strftime", (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a)))),
-                ["timestamp"] = SlotDescriptor.MakeMethod("timestamp", (self, a, kw, c) => ((DateTimeValue)self).Timestamp(c)),
+                ["ctime"] = SlotDescriptor.MakeMethod("ctime", Args.Positional("ctime", 0, 0, (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).CtimeString()))),
+                ["strftime"] = SlotDescriptor.MakeMethod("strftime", Args.Positional("strftime", 1, 1, (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a))))),
+                ["timestamp"] = SlotDescriptor.MakeMethod("timestamp", Args.Positional("timestamp", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).Timestamp(c))),
                 ["astimezone"] = SlotDescriptor.MakeMethod("astimezone", (self, a, kw, c) => ((DateTimeValue)self).Astimezone(c, a, kw)),
-                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", (self, a, kw, c) =>
+                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 0, 0, (self, a, kw, c) =>
                 {
                     DateTimeValue dt = (DateTimeValue)self;
                     return dt.Tz == null ? (ScriptValue)c.Values.None : dt.Tz.OffsetTd(c, dt.OffsetUsLong());
-                }),
-                ["dst"] = SlotDescriptor.MakeMethod("dst", (self, a, kw, c) =>
+                })),
+                ["dst"] = SlotDescriptor.MakeMethod("dst", Args.Positional("dst", 0, 0, (self, a, kw, c) =>
                 {
                     DateTimeValue dt = (DateTimeValue)self;
                     long? dst = dt.Tz == null ? (long?)null : dt.Tz.DstUsAt(dt);
                     return dst == null ? (ScriptValue)c.Values.None : dt.Tz.OffsetTd(c, dst.Value);
-                }),
-                ["tzname"] = SlotDescriptor.MakeMethod("tzname", (self, a, kw, c) =>
+                })),
+                ["tzname"] = SlotDescriptor.MakeMethod("tzname", Args.Positional("tzname", 0, 0, (self, a, kw, c) =>
                 {
                     DateTimeValue dt = (DateTimeValue)self;
                     return dt.Tz == null ? (ScriptValue)c.Values.None : c.Values.Str(dt.Tz.TzNameAt(dt));
-                }),
+                })),
             };
+            CalendarFormat.AddDaySlots(d, self => ((DateTimeValue)self).ToOrdinalInt());
             return new ScriptTypeInfo("datetime.datetime", d);
         }
     }

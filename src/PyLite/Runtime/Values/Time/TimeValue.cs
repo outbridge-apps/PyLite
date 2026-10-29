@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
+using static Outbridge.PyLite.Modules.Support.CalendarFormat;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 
@@ -114,7 +115,21 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
+        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        private long _hash;
+        private bool _hashed;
+
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            if (!_hashed)
+            {
+                _hash = ComputeHash(ctx, depth);
+                _hashed = true;
+            }
+            return _hash;
+        }
+
+        private long ComputeHash(EvalContext ctx, int depth)
         {
             if (Tz != null)
                 return NumericHash.HashBigInteger(new BigInteger(CmpKey()));
@@ -183,16 +198,8 @@ namespace Outbridge.PyLite.Runtime.Values
         internal string Strftime(EvalContext ctx, string fmt)
         {
             // CPython formats time via timetuple(1900, 1, 1, H, M, S, 0, 1, -1); %z/%Z use this time's tz.
-            var t = new BrokenTime
-            {
-                Year = 1900, Month = 1, Day = 1,
-                Hour = Hour, Minute = Minute, Second = Second, Microsecond = Microsecond,
-                WeekdayMon0 = 0, DayOfYear = 1,
-                OffsetUs = OffsetUsOrNull(),
-                TzName = Tz == null ? null : Tz.TzNameAt(null),
-                HasMicroseconds = true,
-            };
-            return StrftimeFormatter.Format(ctx, fmt, t);
+            return StrftimeFormatter.Format(ctx, fmt, CalendarFormat.Broken(1900, 1, 1, Hour, Minute, Second, Microsecond,
+                OffsetUsOrNull(), Tz == null ? null : Tz.TzNameAt(null)));
         }
 
         protected internal override ScriptValue FormatSpecCore(string spec, EvalContext ctx)
@@ -206,18 +213,16 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             string body;
             if (Microsecond != 0)
-                body = Fmt(Hour) + ", " + Fmt(Minute) + ", " + Fmt(Second) + ", " + Fmt(Microsecond);
+                body = Num(Hour) + ", " + Num(Minute) + ", " + Num(Second) + ", " + Num(Microsecond);
             else if (Second != 0)
-                body = Fmt(Hour) + ", " + Fmt(Minute) + ", " + Fmt(Second);
+                body = Num(Hour) + ", " + Num(Minute) + ", " + Num(Second);
             else
-                body = Fmt(Hour) + ", " + Fmt(Minute);
+                body = Num(Hour) + ", " + Num(Minute);
             if (Tz != null)
                 body += ", tzinfo=" + Tz.Repr(ctx);
             sb.Append("datetime.time(" + body + ")");
         }
 
-        private static string Fmt(int n) { return n.ToString(CultureInfo.InvariantCulture); }
-        private static string Pad2(int n) { return n.ToString("00", CultureInfo.InvariantCulture); }
 
         // ---- instance slots ----
 
@@ -253,20 +258,20 @@ namespace Outbridge.PyLite.Runtime.Values
                 }),
                 ["replace"] = SlotDescriptor.MakeMethod("replace", (self, a, kw, c) => ((TimeValue)self).Replace(c, a, kw)),
                 ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", (self, a, kw, c) => c.Values.Str(((TimeValue)self).IsoFormat(TimespecArg(c, a, kw, 0)))),
-                ["strftime"] = SlotDescriptor.MakeMethod("strftime", (self, a, kw, c) => c.Values.Str(((TimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a)))),
-                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", (self, a, kw, c) =>
+                ["strftime"] = SlotDescriptor.MakeMethod("strftime", Args.Positional("strftime", 1, 1, (self, a, kw, c) => c.Values.Str(((TimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a))))),
+                ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 0, 0, (self, a, kw, c) =>
                 {
                     TimeValue t = (TimeValue)self;
                     long? off = t.OffsetUsOrNull();
                     return off == null ? (ScriptValue)c.Values.None : t.Tz.OffsetTd(c, off.Value);
-                }),
-                ["dst"] = SlotDescriptor.MakeMethod("dst", (self, a, kw, c) => c.Values.None),
-                ["tzname"] = SlotDescriptor.MakeMethod("tzname", (self, a, kw, c) =>
+                })),
+                ["dst"] = SlotDescriptor.MakeMethod("dst", Args.Positional("dst", 0, 0, (self, a, kw, c) => c.Values.None)),
+                ["tzname"] = SlotDescriptor.MakeMethod("tzname", Args.Positional("tzname", 0, 0, (self, a, kw, c) =>
                 {
                     TzInfoValue tz = ((TimeValue)self).Tz;
                     string name = tz == null ? null : tz.TzNameAt(null);
                     return name == null ? (ScriptValue)c.Values.None : c.Values.Str(name);
-                }),
+                })),
             };
             return new ScriptTypeInfo("datetime.time", d);
         }

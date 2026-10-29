@@ -141,12 +141,10 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (index.Kind != ValueKind.Int && index.Kind != ValueKind.Bool)
                 throw Raise.TypeError(ctx, "sequence index must be integer, not '" + index.PyTypeName + "'");
-            BigInteger i = NumericOps.AsBigInteger(index);
-            if (i < 0)
-                i += _count;
-            if (i < 0 || i >= _count)
+            int i;
+            if (!SequenceOps.TryNormIndex(index, _count, out i))
                 throw Raise.IndexError(ctx, "deque index out of range");
-            return (int)i;
+            return i;
         }
 
         // ---- mutation primitives ----
@@ -422,8 +420,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Index_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             DequeValue d = (DequeValue)self;
-            if (a.Length < 1 || a.Length > 3)
-                throw Raise.TypeError(ctx, "index expected at least 1 argument, got " + a.Length);
+            Args.Unpack(ctx, a, "index", 1, 3);
             int start = a.Length >= 2 ? ClampIndex(ctx, a[1], d._count) : 0;
             int stop = a.Length == 3 ? ClampIndex(ctx, a[2], d._count) : d._count;
             for (int i = start; i < stop; i++)
@@ -438,8 +435,7 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Insert_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             DequeValue d = (DequeValue)self;
-            if (a.Length != 2)
-                throw Raise.TypeError(ctx, "insert expected 2 arguments, got " + a.Length);
+            Args.Unpack(ctx, a, "insert", 2, 2);
             if (d._maxlen >= 0 && d._count >= d._maxlen)
                 throw Raise.IndexError(ctx, "deque already at its maximum size");
             int i = ClampIndex(ctx, a[0], d._count);

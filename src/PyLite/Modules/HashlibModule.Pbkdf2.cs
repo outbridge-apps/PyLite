@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Modules
     // point of the function is to be slow: a million iterations inside one uninterruptible native call
     // would outlive the deadline and leak the runner thread. The loop charges a step per iteration, so
     // the budget stops it exactly like any other loop.
-    public static partial class HashlibModule
+    internal static partial class HashlibModule
     {
         private static ScriptValue Pbkdf2Hmac(EvalContext ctx, ScriptValue[] a)
         {
@@ -21,7 +21,7 @@ namespace Outbridge.PyLite.Modules
             if (nameV == null)
                 throw Raise.TypeError(ctx, "pbkdf2_hmac() argument 'hash_name' must be str");
             string algo = nameV.Value.ToLowerInvariant();
-            if (!IsSupported(algo))
+            if (!Support.HashAlgos.IsSupported(algo))
                 throw Raise.Make(ctx, PyExceptionTypes.ValueError, "unsupported hash type " + nameV.Value);
             byte[] password = Bytes(ctx, a[1], "password");
             byte[] salt = Bytes(ctx, a[2], "salt");
@@ -29,7 +29,7 @@ namespace Outbridge.PyLite.Modules
             if (iterations < 1)
                 throw Raise.ValueError(ctx, "iteration value must be greater than 0.");
 
-            int hashLen = DigestSize(algo);
+            int hashLen = Support.HashAlgos.DigestSize(algo);
             int dkLen = hashLen;
             if (a.Length >= 5 && a[4].Kind != ValueKind.None)
             {
@@ -41,7 +41,7 @@ namespace Outbridge.PyLite.Modules
 
             int blocks = (dkLen + hashLen - 1) / hashLen;
             var dk = new byte[blocks * hashLen];
-            using (KeyedHashAlgorithm mac = NewMac(algo, password))
+            using (KeyedHashAlgorithm mac = Support.HashAlgos.NewMac(algo, password))
             {
                 var input = new byte[salt.Length + 4];
                 Array.Copy(salt, input, salt.Length);
@@ -66,19 +66,6 @@ namespace Outbridge.PyLite.Modules
             var result = new byte[dkLen];
             Array.Copy(dk, result, dkLen);
             return ctx.Values.Bytes(result);
-        }
-
-        private static KeyedHashAlgorithm NewMac(string algo, byte[] key)
-        {
-            switch (algo)
-            {
-                case "md5": return new HMACMD5(key);
-                case "sha1": return new HMACSHA1(key);
-                case "sha384": return new HMACSHA384(key);
-                case "sha512": return new HMACSHA512(key);
-                case "sha224": return new Support.HmacGeneric(new Support.Sha224Managed(), key, 64);
-                default: return new HMACSHA256(key);
-            }
         }
 
         private static byte[] Bytes(EvalContext ctx, ScriptValue v, string what)

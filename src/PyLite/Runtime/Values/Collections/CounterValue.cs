@@ -264,16 +264,14 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Update(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length > 1)
-                throw Raise.TypeError(ctx, "update expected at most 1 argument, got " + args.Length);
+            Args.Unpack(ctx, args, "update", 0, 1);
             UpdateFrom(ctx, (CounterValue)self, args.Length == 1 ? args[0] : null, kw, +1);
             return ctx.Values.None;
         }
 
         private static ScriptValue Subtract(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length > 1)
-                throw Raise.TypeError(ctx, "subtract expected at most 1 argument, got " + args.Length);
+            Args.Unpack(ctx, args, "subtract", 0, 1);
             UpdateFrom(ctx, (CounterValue)self, args.Length == 1 ? args[0] : null, kw, -1);
             return ctx.Values.None;
         }
@@ -307,12 +305,9 @@ namespace Outbridge.PyLite.Runtime.Values
             s.Linear("total", Total);
             s.Method("update", Update);
             s.Method("subtract", Subtract);
-            s.Linear("copy", (self, a, kw, ctx) =>
+            s.Linear("copy", 0, 0, (self, a, kw, ctx) =>
             {
-                CounterValue src = (CounterValue)self;
-                CounterValue r = ctx.Values.Counter(src.Count);
-                DictMethods.Merge(ctx, r, src);
-                return r;
+                return ctx.Values.CopyDict((CounterValue)self);
             });
             return s.Table;
         }

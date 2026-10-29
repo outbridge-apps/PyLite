@@ -11,8 +11,8 @@ namespace Outbridge.PyLite.Modules
     {
         static partial void RegisterAggregate(Dictionary<string, ScriptValue> d)
         {
-            Add(d, "any", (self, args, kw, c) => c.Values.Bool(AnyAll(c, args, "any", true)));
-            Add(d, "all", (self, args, kw, c) => c.Values.Bool(AnyAll(c, args, "all", false)));
+            Add(d, "any", 1, 1, (self, args, kw, c) => c.Values.Bool(AnyAll(c, args, "any", true)));
+            Add(d, "all", 1, 1, (self, args, kw, c) => c.Values.Bool(AnyAll(c, args, "all", false)));
             Add(d, "sum", (self, args, kw, c) => SumBuiltin(c, args, kw));
             Add(d, "min", (self, args, kw, c) => MinMax(c, args, kw, true));
             Add(d, "max", (self, args, kw, c) => MinMax(c, args, kw, false));
@@ -38,8 +38,7 @@ namespace Outbridge.PyLite.Modules
             ScriptValue start = null;
             if (kw.Count > 0 && (kw.Count != 1 || !kw.TryGet("start", out start)))
                 throw Raise.TypeError(c, "sum() takes at most 1 keyword argument ('start')");
-            if (args.Length < 1 || args.Length > 2)
-                throw Raise.TypeError(c, "sum expected at most 2 arguments, got " + args.Length);
+            Args.Unpack(c, args, "sum", 1, 2);
             if (args.Length == 2 && start != null)
                 throw Raise.TypeError(c, "sum() got multiple values for argument 'start'");
             if (start == null)
@@ -97,8 +96,7 @@ namespace Outbridge.PyLite.Modules
             r.RejectInvalid();
 
             IScriptIterator it;
-            if (args.Length == 0)
-                throw Raise.TypeError(c, name + " expected 1 argument, got 0");
+            Args.Unpack(c, args, name, 1, int.MaxValue);
             if (args.Length > 1)
             {
                 if (hasDefault)
@@ -120,7 +118,7 @@ namespace Outbridge.PyLite.Modules
             ScriptValue item;
             while (it.MoveNext(c, out item))
             {
-                ScriptValue k = key == null ? item : Invoke(c, key, item);
+                ScriptValue k = key == null ? item : c.CallHook1(key, item);
                 if (best == null)
                 {
                     best = item;
@@ -184,15 +182,7 @@ namespace Outbridge.PyLite.Modules
             reverse = r.Bool("reverse", reverse);
             r.RejectInvalid();
 
-            var buf = new List<ScriptValue>();
-            IScriptIterator it = PyOps.GetIterator(args[0], c);
-            ScriptValue v;
-            while (it.MoveNext(c, out v))
-            {
-                c.Budget.Step();
-                buf.Add(v);
-            }
-            ScriptValue[] values = buf.ToArray();
+            ScriptValue[] values = Materialize(c, args[0]);
 
             if (reverse)
                 System.Array.Reverse(values);   // pre-reverse to keep stability of equal keys
@@ -200,9 +190,10 @@ namespace Outbridge.PyLite.Modules
             ScriptValue[] keys = null;
             if (key != null)
             {
+                c.Values.PreCharge(8L * values.Length);
                 keys = new ScriptValue[values.Length];
                 for (int i = 0; i < values.Length; i++)
-                    keys[i] = Invoke(c, key, values[i]);
+                    keys[i] = c.CallHook1(key, values[i]);
             }
 
             StableSort.Sort(c, values, keys);
@@ -214,6 +205,11 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < values.Length; i++)
                 result.Add(values[i], c);
             return result;
+        }
+
+        private static ScriptValue[] Materialize(EvalContext c, ScriptValue src)
+        {
+            return Support.Iter.ToArray(c, src);
         }
 
         private static bool Less(EvalContext c, ScriptValue a, ScriptValue b)

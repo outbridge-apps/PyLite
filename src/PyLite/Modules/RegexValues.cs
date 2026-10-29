@@ -6,7 +6,8 @@ using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
 {
-    // A compiled pattern. Opaque; immutable; holds the .NET Regex + GroupMap. repr is
+    // A compiled pattern. Opaque; its pattern never changes (the anchored regex and the last sub template
+    // are cached on it lazily); holds the .NET Regex + GroupMap. repr is
     // deterministic (no object address — a documented difference from the 3.4 repr).
     internal sealed class PatternValue : ScriptValue
     {
@@ -25,6 +26,19 @@ namespace Outbridge.PyLite.Modules
 
         // fullmatch needs the WHOLE span to match, which a plain match plus a length check cannot express
         // ('a|ab' against 'ab' picks 'a'); the anchored twin forces the alternation to backtrack.
+        // match() is anchored at pos, as CPython's is: without the anchor a failing match scans the rest of
+        // the subject for a hit it then throws away.
+        private Regex _anchored;
+        internal Regex AnchoredRegex
+        {
+            get
+            {
+                if (_anchored == null)
+                    _anchored = new Regex(@"\G(?:" + Net.ToString() + ")", Net.Options, Net.MatchTimeout);
+                return _anchored;
+            }
+        }
+
         private Regex _full;
         internal Regex FullRegex
         {
@@ -36,23 +50,11 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
-        // Keyword spelling for the Pattern methods; a numeric slot skipped on the way to a later keyword
-        // takes its default (pos/count/maxsplit -> 0, a trailing endpos -> absent).
-        private static ScriptValue[] Kw(EvalContext c, ScriptValue[] a, Outbridge.PyLite.Runtime.Evaluator.KwArgs kw, string fname, params string[] names)
-        {
-            ScriptValue[] r = StrMethods.WithKw(c, a, kw, fname, names);
-            if (kw.Count == 0)
-                return r;
-            for (int i = a.Length; i < r.Length; i++)
-            {
-                string nm = names[i];
-                if (r[i].Kind == ValueKind.None && (nm == "pos" || nm == "count" || nm == "maxsplit"))
-                    r[i] = c.Values.Int(0);
-            }
-            if (r.Length > 0 && r[r.Length - 1].Kind == ValueKind.None && names[r.Length - 1] == "endpos")
-                System.Array.Resize(ref r, r.Length - 1);
-            return r;
-        }
+
+        // the keyword names of the methods, built once (a params array would be built on every call)
+        private static readonly string[] PosNames = { "string", "pos", "endpos" };
+        private static readonly string[] SubNames = { "repl", "string", "count" };
+        private static readonly string[] SplitNames = { "string", "maxsplit" };
 
         public PatternValue(Regex net, GroupMap groups, int flags, string source)
         {
@@ -76,14 +78,14 @@ namespace Outbridge.PyLite.Modules
         {
             var d = new Dictionary<string, SlotDescriptor>(System.StringComparer.Ordinal)
             {
-                ["search"] = SlotDescriptor.MakeMethod("search", (self, a, kw, c) => ReModule.PatSearch((PatternValue)self, Kw(c, a, kw, "search", "string", "pos", "endpos"), c)),
-                ["match"] = SlotDescriptor.MakeMethod("match", (self, a, kw, c) => ReModule.PatMatch((PatternValue)self, Kw(c, a, kw, "match", "string", "pos", "endpos"), c)),
-                ["fullmatch"] = SlotDescriptor.MakeMethod("fullmatch", (self, a, kw, c) => ReModule.PatFullMatch((PatternValue)self, Kw(c, a, kw, "fullmatch", "string", "pos", "endpos"), c)),
-                ["findall"] = SlotDescriptor.MakeMethod("findall", (self, a, kw, c) => ReModule.PatFindall((PatternValue)self, Kw(c, a, kw, "findall", "string", "pos", "endpos"), c)),
-                ["finditer"] = SlotDescriptor.MakeMethod("finditer", (self, a, kw, c) => ReModule.PatFinditer((PatternValue)self, Kw(c, a, kw, "finditer", "string", "pos", "endpos"), c)),
-                ["sub"] = SlotDescriptor.MakeMethod("sub", (self, a, kw, c) => ReModule.PatSub((PatternValue)self, Kw(c, a, kw, "sub", "repl", "string", "count"), c)),
-                ["subn"] = SlotDescriptor.MakeMethod("subn", (self, a, kw, c) => ReModule.PatSubn((PatternValue)self, Kw(c, a, kw, "subn", "repl", "string", "count"), c)),
-                ["split"] = SlotDescriptor.MakeMethod("split", (self, a, kw, c) => ReModule.PatSplit((PatternValue)self, Kw(c, a, kw, "split", "string", "maxsplit"), c)),
+                ["search"] = SlotDescriptor.MakeMethod("search", (self, a, kw, c) => ReModule.PatternOp(c, ReModule.ReOp.Search, (PatternValue)self, ReModule.Kw(c, a, kw, "search", PosNames))),
+                ["match"] = SlotDescriptor.MakeMethod("match", (self, a, kw, c) => ReModule.PatternOp(c, ReModule.ReOp.Match, (PatternValue)self, ReModule.Kw(c, a, kw, "match", PosNames))),
+                ["fullmatch"] = SlotDescriptor.MakeMethod("fullmatch", (self, a, kw, c) => ReModule.PatternOp(c, ReModule.ReOp.FullMatch, (PatternValue)self, ReModule.Kw(c, a, kw, "fullmatch", PosNames))),
+                ["findall"] = SlotDescriptor.MakeMethod("findall", (self, a, kw, c) => ReModule.PatternOp(c, ReModule.ReOp.Findall, (PatternValue)self, ReModule.Kw(c, a, kw, "findall", PosNames))),
+                ["finditer"] = SlotDescriptor.MakeMethod("finditer", (self, a, kw, c) => ReModule.PatternOp(c, ReModule.ReOp.Finditer, (PatternValue)self, ReModule.Kw(c, a, kw, "finditer", PosNames))),
+                ["sub"] = SlotDescriptor.MakeMethod("sub", (self, a, kw, c) => ReModule.PatSub((PatternValue)self, ReModule.Kw(c, a, kw, "sub", SubNames), c, false)),
+                ["subn"] = SlotDescriptor.MakeMethod("subn", (self, a, kw, c) => ReModule.PatSub((PatternValue)self, ReModule.Kw(c, a, kw, "subn", SubNames), c, true)),
+                ["split"] = SlotDescriptor.MakeMethod("split", (self, a, kw, c) => ReModule.PatSplit((PatternValue)self, ReModule.Kw(c, a, kw, "split", SplitNames), c)),
                 ["pattern"] = SlotDescriptor.MakeProperty("pattern", (self, c) => c.Values.Str(((PatternValue)self).Source)),
                 ["flags"] = SlotDescriptor.MakeProperty("flags", (self, c) => c.Values.Int(((PatternValue)self).Flags)),
                 ["groups"] = SlotDescriptor.MakeProperty("groups", (self, c) => c.Values.Int(((PatternValue)self).Groups.Count)),
@@ -142,17 +144,17 @@ namespace Outbridge.PyLite.Modules
         {
             var d = new Dictionary<string, SlotDescriptor>(System.StringComparer.Ordinal)
             {
-                ["group"] = SlotDescriptor.MakeMethod("group", (self, a, kw, c) => ReModule.MatchGroup((MatchValue)self, a, c)),
-                ["groups"] = SlotDescriptor.MakeMethod("groups", (self, a, kw, c) => ReModule.MatchGroups((MatchValue)self, a, c)),
-                ["groupdict"] = SlotDescriptor.MakeMethod("groupdict", (self, a, kw, c) => ReModule.MatchGroupDict((MatchValue)self, a, c)),
-                ["start"] = SlotDescriptor.MakeMethod("start", (self, a, kw, c) => ReModule.MatchStart((MatchValue)self, a, c)),
-                ["end"] = SlotDescriptor.MakeMethod("end", (self, a, kw, c) => ReModule.MatchEnd((MatchValue)self, a, c)),
-                ["span"] = SlotDescriptor.MakeMethod("span", (self, a, kw, c) => ReModule.MatchSpan((MatchValue)self, a, c)),
+                ["group"] = SlotDescriptor.MakeMethod("group", Args.Positional("group", 0, int.MaxValue, (self, a, kw, c) => ReModule.MatchGroup((MatchValue)self, a, c))),
+                ["groups"] = SlotDescriptor.MakeMethod("groups", (self, a, kw, c) => ReModule.MatchGroups((MatchValue)self, Args.Named(c, a, kw, "groups", "default"), c)),
+                ["groupdict"] = SlotDescriptor.MakeMethod("groupdict", (self, a, kw, c) => ReModule.MatchGroupDict((MatchValue)self, Args.Named(c, a, kw, "groupdict", "default"), c)),
+                ["start"] = SlotDescriptor.MakeMethod("start", Args.Positional("start", 0, 1, (self, a, kw, c) => ReModule.MatchStart((MatchValue)self, a, c))),
+                ["end"] = SlotDescriptor.MakeMethod("end", Args.Positional("end", 0, 1, (self, a, kw, c) => ReModule.MatchEnd((MatchValue)self, a, c))),
+                ["span"] = SlotDescriptor.MakeMethod("span", Args.Positional("span", 0, 1, (self, a, kw, c) => ReModule.MatchSpan((MatchValue)self, a, c))),
                 ["re"] = SlotDescriptor.MakeProperty("re", (self, c) => ((MatchValue)self).Pattern),
                 ["string"] = SlotDescriptor.MakeProperty("string", (self, c) => ((MatchValue)self).Subject),
                 ["pos"] = SlotDescriptor.MakeProperty("pos", (self, c) => c.Values.Int(((MatchValue)self).Pos)),
                 ["endpos"] = SlotDescriptor.MakeProperty("endpos", (self, c) => c.Values.Int(((MatchValue)self).EndPos)),
-                ["expand"] = SlotDescriptor.MakeMethod("expand", (self, a, kw, c) => ReModule.MatchExpand((MatchValue)self, a, c)),
+                ["expand"] = SlotDescriptor.MakeMethod("expand", Args.Positional("expand", 1, 1, (self, a, kw, c) => ReModule.MatchExpand((MatchValue)self, a, c))),
                 ["lastindex"] = SlotDescriptor.MakeProperty("lastindex", (self, c) =>
                 {
                     int i = ReModule.LastGroupIndex((MatchValue)self);
@@ -184,6 +186,7 @@ namespace Outbridge.PyLite.Modules
     {
         private readonly PatternValue _pat;
         private readonly StrValue _subj;
+        private string _input;   // the subject cut at the end position, once (P13)
         private readonly int _startPos;
         private readonly int _end;
         private int _pos;
@@ -201,7 +204,7 @@ namespace Outbridge.PyLite.Modules
         {
             if (_pos <= _end)
             {
-                Match m = ReModule.RunMatch(ctx, _pat.Net, _subj.Value, _pos, _end - _pos);
+                Match m = ReModule.RunMatch(ctx, _pat.Net, _input ?? (_input = ReModule.Truncated(_subj.Value, _end)), _pos, _end - _pos);
                 if (m.Success)
                 {
                     int mEnd = m.Index + m.Length;

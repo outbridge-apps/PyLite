@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Modules
     // csv.Error. The reader accepts any iterable of strings (a list of lines, io.StringIO, ...); quoted
     // fields may span lines (the parser pulls more lines mid-record). The writer targets any object with
     // a write() attribute (io.StringIO or user record classes).
-    public static partial class CsvModule
+    internal static partial class CsvModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
@@ -28,19 +28,19 @@ namespace Outbridge.PyLite.Modules
             m["QUOTE_NONE"] = ctx.Values.Int(3);
             m["QUOTE_STRINGS"] = ctx.Values.Int(4);      // 3.12
             m["QUOTE_NOTNULL"] = ctx.Values.Int(5);
-            m["Error"] = ErrorType();
+            m["Error"] = ModuleKit.ExceptionClass(PyExceptionTypes.CsvError);
             // The three CPython registers at import, as objects; get_dialect / list_dialects /
             // register_dialect / unregister_dialect over those plus whatever this RUN registered
             // (EvalContext.Csv — the module dictionary is shared between runs and cannot hold it).
             m["excel"] = new DialectValue(new Dialect());
             m["excel_tab"] = new DialectValue(new Dialect { Delimiter = '\t' });
             m["unix_dialect"] = new DialectValue(new Dialect { LineTerminator = "\n", Quoting = QuoteAll });
-            m["get_dialect"] = BuiltinFunctionValue.Make("get_dialect", (s, a, k, c) =>
+            m["get_dialect"] = BuiltinFunctionValue.Make("get_dialect", Args.Positional("get_dialect", 1, 1, (s, a, k, c) =>
             {
                 Args.Exactly(c, a, "get_dialect", 1);
                 return new DialectValue(NamedDialect(c, a[0]));
-            });
-            m["list_dialects"] = BuiltinFunctionValue.Make("list_dialects", (s, a, k, c) =>
+            }));
+            m["list_dialects"] = BuiltinFunctionValue.Make("list_dialects", Args.Positional("list_dialects", 0, 0, (s, a, k, c) =>
             {
                 ListValue names = c.Values.List(4);
                 foreach (string n in Builtin)
@@ -51,7 +51,7 @@ namespace Outbridge.PyLite.Modules
                         names.Add(c.Values.Str(n), c);
                 }
                 return names;
-            });
+            }));
             m["register_dialect"] = BuiltinFunctionValue.Make("register_dialect", RegisterDialect);
             m["unregister_dialect"] = BuiltinFunctionValue.Make("unregister_dialect", (s, a, k, c) =>
             {
@@ -65,12 +65,6 @@ namespace Outbridge.PyLite.Modules
             m["__version__"] = ctx.Values.Str("1.0");
             m["Sniffer"] = ctx.Values.Type("Sniffer", (s, a, k, c) => new SnifferValue(), null, null);
             return ctx.Values.Module("csv", m);
-        }
-
-        private static TypeValue ErrorType()
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.CsvError, args);
-            return TypeValue.Make("Error", ctor, null, null, PyExceptionTypes.CsvError);
         }
 
         private const int QuoteMinimal = 0, QuoteAll = 1, QuoteNonNumeric = 2, QuoteNone = 3;
@@ -493,11 +487,7 @@ namespace Outbridge.PyLite.Modules
                 }
                 if ((_d.Quoting == QuoteNonNumeric || _d.Quoting == QuoteStrings) && !quoted && s.Length > 0)
                 {
-                    double num;
-                    if (!double.TryParse(s, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out num))
-                        throw Raise.ValueError(ctx, "could not convert string to float: " + ctx.Values.Str(s).Repr(ctx));
-                    row.Add(ctx.Values.Float(num), ctx);
+                    row.Add(ctx.Values.Float(Builtins.ParseFloat(ctx, s)), ctx);   // float()'s grammar and -0.0
                     return;
                 }
                 row.Add(ctx.Values.Str(s), ctx);
@@ -640,6 +630,7 @@ namespace Outbridge.PyLite.Modules
             private static readonly ScriptTypeInfo DType = new ScriptTypeInfo("csv.DictWriter", BuildWriterSlots());
 
             private readonly ScriptValue _file;
+            private ScriptValue _write;   // the sink's write, looked up on the first row
             private readonly Dialect _d;
             private readonly List<ScriptValue> _fieldnames;   // non-null => DictWriter
             private readonly ScriptValue _restVal;            // filler for keys the row omits
@@ -667,7 +658,7 @@ namespace Outbridge.PyLite.Modules
             // writeheader), which is how a caller counts what it wrote.
             private ScriptValue Emit(EvalContext ctx, string text)
             {
-                ScriptValue write = PyOps.GetAttr(_file, "write", ctx);
+                ScriptValue write = _write ?? (_write = PyOps.GetAttr(_file, "write", ctx));   // once, as CPython's writer (P17)
                 return ctx.CallHook1(write, ctx.Values.Str(text));   // per-row hot path
             }
 
@@ -675,6 +666,8 @@ namespace Outbridge.PyLite.Modules
             {
                 bool isNumber = v.Kind == ValueKind.Int || v.Kind == ValueKind.Float;
                 string s = v.Kind == ValueKind.None ? "" : v.Str(ctx);
+                bool special, hasEscape;
+                Scan(s, out special, out hasEscape);
                 bool mustQuote;
                 switch (_d.Quoting)
                 {
@@ -693,7 +686,7 @@ namespace Outbridge.PyLite.Modules
                 }
                 if (!mustQuote)
                 {
-                    if (NeedsQuoting(s))
+                    if (special || hasEscape)
                     {
                         if (_d.EscapeChar == '\0')
                             throw Raise.Make(ctx, PyExceptionTypes.CsvError, "need to escape, but no escapechar set");
@@ -723,11 +716,22 @@ namespace Outbridge.PyLite.Modules
                 return sb.ToString();
             }
 
-            private bool NeedsQuoting(string s)
+            private const char CR = '\r', LF = '\n', NUL = '\0';
+
+            // One pass over the field (P17): a delimiter, quote, CR or LF makes it special; the escape character
+            // alone only needs escaping.
+            private void Scan(string s, out bool special, out bool hasEscape)
             {
-                return s.IndexOf(_d.Delimiter) >= 0 || s.IndexOf(_d.QuoteChar) >= 0
-                    || s.IndexOf('\r') >= 0 || s.IndexOf('\n') >= 0
-                    || (_d.EscapeChar != '\0' && s.IndexOf(_d.EscapeChar) >= 0);
+                special = hasEscape = false;
+                char delim = _d.Delimiter, quote = _d.QuoteChar, esc = _d.EscapeChar;
+                for (int i = 0; i < s.Length; i++)
+                {
+                    char c = s[i];
+                    if (c == delim || c == quote || c == CR || c == LF)
+                        special = true;
+                    else if (esc != NUL && c == esc)
+                        hasEscape = true;
+                }
             }
 
             private string Escaped(string s)
@@ -800,13 +804,13 @@ namespace Outbridge.PyLite.Modules
             private static IDictionary<string, SlotDescriptor> BuildWriterSlots()
             {
                 var s = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-                s["writerow"] = SlotDescriptor.MakeMethod("writerow", (self, a, kw, ctx) =>
+                s["writerow"] = SlotDescriptor.MakeMethod("writerow", Args.Positional("writerow", 1, 1, (self, a, kw, ctx) =>
                 {
                     CsvWriterValue w = (CsvWriterValue)self;
                     Args.Exactly(ctx, a, "writerow", 1);
                     return w._fieldnames != null ? w.WriteDictRow(ctx, a[0]) : w.WriteRow(ctx, a[0]);
-                });
-                s["writerows"] = SlotDescriptor.MakeMethod("writerows", (self, a, kw, ctx) =>
+                }));
+                s["writerows"] = SlotDescriptor.MakeMethod("writerows", Args.Positional("writerows", 1, 1, (self, a, kw, ctx) =>
                 {
                     CsvWriterValue w = (CsvWriterValue)self;
                     Args.Exactly(ctx, a, "writerows", 1);
@@ -820,8 +824,8 @@ namespace Outbridge.PyLite.Modules
                             w.WriteRow(ctx, row);
                     }
                     return ctx.Values.None;
-                });
-                s["writeheader"] = SlotDescriptor.MakeMethod("writeheader", (self, a, kw, ctx) =>
+                }));
+                s["writeheader"] = SlotDescriptor.MakeMethod("writeheader", Args.Positional("writeheader", 0, 0, (self, a, kw, ctx) =>
                 {
                     CsvWriterValue w = (CsvWriterValue)self;
                     if (w._fieldnames == null)
@@ -830,7 +834,7 @@ namespace Outbridge.PyLite.Modules
                     foreach (ScriptValue f in w._fieldnames)
                         names.Add(f, ctx);
                     return w.WriteRow(ctx, names);
-                });
+                }));
                 s["dialect"] = SlotDescriptor.MakeProperty("dialect", (self, ctx) =>
                     new DialectValue(((CsvWriterValue)self)._d));
                 // The three a DictWriter was built with; a plain writer has none of them, as in CPython.
@@ -863,13 +867,13 @@ namespace Outbridge.PyLite.Modules
         }
     }
 
-    // io: StringIO only — enough for csv writers and text-buffer patterns.
-    public static class IoModule
+    // io: StringIO and BytesIO, the in-memory files; there is no file system to open.
+    internal static class IoModule
     {
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["StringIO"] = ctx.Values.Type("StringIO", (self, a, kw, c) =>
+            m["StringIO"] = ctx.Values.Type("io.StringIO", (self, a, kw, c) =>
             {
                 string initial = "";
                 if (a.Length >= 1 && a[0].Kind != ValueKind.None)
@@ -880,7 +884,24 @@ namespace Outbridge.PyLite.Modules
                     initial = s.Value;
                 }
                 return new StringIOValue(c, initial);
-            }, null, null);
+            }, StringIOValue.StringIOType, null);
+            m["BytesIO"] = ctx.Values.Type("io.BytesIO", (self, a, kw, c) =>
+            {
+                Args.AtMost(c, a, "BytesIO", 1);
+                ScriptValue initial = a.Length == 1 ? a[0] : null;
+                for (int i = 0; i < kw.Count; i++)
+                {
+                    if (kw.NameAt(i) != "initial_bytes")
+                        throw Raise.TypeError(c, "BytesIO() got an unexpected keyword argument '" + kw.NameAt(i) + "'");
+                    if (initial != null)
+                        throw Raise.TypeError(c, "argument for BytesIO() given by name ('initial_bytes') and position (1)");
+                    initial = kw.ValueAt(i);
+                }
+                byte[] data = initial == null || initial.Kind == ValueKind.None
+                    ? Array.Empty<byte>()
+                    : BytesIOValue.RequireBytes(c, initial);
+                return new BytesIOValue(c, data);
+            }, BytesIOValue.BytesIOType, null);
             return ctx.Values.Module("io", m);
         }
     }

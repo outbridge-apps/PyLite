@@ -5,11 +5,11 @@
 An embeddable interpreter of a Python dialect for .NET Framework hosts, written in C#.
 
 PyLite runs scripts written in a modern-syntax Python dialect (f-strings, `match`/`case`, the
-walrus operator, decorators, `@dataclass`) inside a .NET Framework 4.7.2 process, with no native
-code, no AppDomain and no access to the file system, the network or reflection. Every run is
-bounded by resource limits the host sets: steps, wall-clock deadline, allocated memory, data depth
-and call depth. When a limit is crossed the run stops with a typed error and the host keeps its
-process.
+walrus operator, decorators, `@dataclass`, `with`, `super()`, `enum`) inside a .NET Framework 4.7.2
+process, with no native code, no AppDomain and no access to the file system, the network or
+reflection. Every run is bounded by resource limits the host sets: steps, wall-clock deadline,
+allocated memory, data depth and call depth. When a limit is crossed the run stops with a typed
+error and the host keeps its process.
 
 It was built to replace IronPython inside a large business application, where scripts written by
 users and integrators run on a shared server and must not be able to hang it, exhaust it or reach
@@ -26,7 +26,8 @@ design:
 
 - generators (`yield`), `async`/`await`;
 - the full class machinery: classes are record classes with single inheritance and a fixed set of
-  dunder methods (`__init__`, `__eq__`, `__repr__`, and the ones `@dataclass` generates);
+  set of protocol methods (`__init__`, `__eq__`, `__repr__`, `__iter__`, `__enter__`/`__exit__`, ...;
+  see [docs/deviations.md](docs/deviations.md));
 - `import` of arbitrary modules: only the modules the engine ships and the modules the host
   registers are importable;
 - file, network and process access.
@@ -35,11 +36,12 @@ design:
 
 `math`, `decimal`, `fractions`, `statistics`, `random`, `secrets`, `json`, `re`, `datetime`, `time`,
 `calendar`, `zoneinfo`, `collections`, `itertools`, `functools`, `operator`, `copy`, `copyreg`,
-`dataclasses`, `typing`, `string`, `textwrap`, `unicodedata`, `html`, `base64`, `binascii`,
-`hashlib`, `hmac`, `struct`, `zlib`, `gzip`, `csv`, `io`, `uuid`, `bisect`, `heapq`, `urllib.parse`,
-`xml.etree.ElementTree`, `traceback`.
+`dataclasses`, `typing`, `enum`, `contextlib`, `string`, `textwrap`, `unicodedata`, `html`, `base64`,
+`binascii`, `hashlib`, `hmac`, `struct`, `zlib`, `gzip`, `zipfile`, `csv`, `io`, `uuid`, `bisect`,
+`heapq`, `urllib.parse`, `email.utils`, `xml.etree.ElementTree`, `traceback`.
 
-`io` is `StringIO` only, and `zlib`/`gzip` are one-shot; [docs/modules.md](docs/modules.md) lists
+`io` has `StringIO` and `BytesIO`, `zlib`/`gzip` are one-shot, `zipfile` reads and writes archives in
+a `BytesIO`, and `email.utils` has the date helpers only; [docs/modules.md](docs/modules.md) lists
 every name each module exposes.
 
 ## Documentation
@@ -50,8 +52,8 @@ every name each module exposes.
   CPython: UTF-16 strings, the range of `decimal`, record classes, and what a resource limit does
   to your `except`.
 - [docs/performance.md](docs/performance.md) — measured against IronPython 3.4.2: money in
-  `decimal` ×66–91 faster, JSON ×8.5–10.1 faster, a new engine in a warm process ×73–173 faster,
-  `sorted` with a `key` ×2.6–3.3 slower.
+  `decimal` ×59–77 faster, JSON ×8–15 faster, a new engine in a warm process ×196–224 faster,
+  `sorted` with a `key` ×1.4 slower.
 
 ## Using it from C#
 
@@ -88,8 +90,25 @@ dotnet build src/PyLite/PyLite.csproj -c Release
 
 The engine targets .NET Framework 4.7.2 and depends on Newtonsoft.Json 13.0.3 only.
 
+## Tests
+
+All of them are in this repository, and [TESTING.md](TESTING.md) says what each suite proves and how
+to run it:
+
+- `tests/PyLite.Tests`: about 7,000 xUnit tests in five categories (Compatibility, Sandbox,
+  ResourceLimits, Regression, Fuzz);
+- `conformance/`: cases adapted from CPython's `Lib/test`, one script per area;
+- `tools/PyLite.DiffHarness`: scripts run on PyLite and on IronPython 3.4.2, with the results
+  compared;
+- `tools/PyLite.Stress`: adversarial probes, each of which must end on a limit or a Python
+  exception.
+
+`tools/run-gates.ps1` runs all four and writes [docs/test-report.md](docs/test-report.md); each
+release commits the report of its own run. [SECURITY.md](SECURITY.md) maps every sandbox guarantee
+to the tests that hold it, and [examples/limits](examples/limits) shows each resource limit firing.
+The performance figures in [docs/performance.md](docs/performance.md) come from
+`tools/PyLite.PerfBench`.
+
 ## Status
 
-Version 1.0.0. The engine is exercised by an internal suite of more than 6000 tests, a CPython
-conformance corpus, a differential corpus against a reference interpreter and an adversarial
-sandbox corpus; these live outside this repository.
+Version 1.1.0.

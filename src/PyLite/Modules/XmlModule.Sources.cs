@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
     // Reading a document from a source object, QName, and the two list-shaped entry points
     // (closed 2026-09-11). There are no files in the sandbox, so a "source" is anything with a read()
     // method — io.StringIO is the one the engine ships — and a filename is refused rather than guessed at.
-    public static partial class XmlModule
+    internal static partial class XmlModule
     {
         internal static void AddSources(Dictionary<string, ScriptValue> m, EvalContext ctx)
         {
@@ -170,7 +170,7 @@ namespace Outbridge.PyLite.Modules
                 return s.Value;
             BytesValue b = text as BytesValue;   // a UTF-8 document, the only encoding the sandbox decodes
             if (b != null)
-                return new UTF8Encoding(false, true).GetString(b.Data);
+                return BytesCodec.Decode(ctx, b.Data, "utf-8", "strict");
             throw Raise.TypeError(ctx, who + "(): read() must return str or bytes, not " + text.PyTypeName);
         }
 

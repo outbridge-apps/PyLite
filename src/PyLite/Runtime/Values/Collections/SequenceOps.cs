@@ -95,12 +95,37 @@ namespace Outbridge.PyLite.Runtime.Values
         // seq[i] for an int-like index: negative counts from the end; "<type> index out of range" otherwise.
         internal static int NormIndex(ScriptValue index, int count, string typeName, EvalContext ctx)
         {
-            BigInteger i = NumericOps.AsBigInteger(index);
+            int i;
+            if (!TryNormIndex(index, count, out i))
+                throw Raise.IndexError(ctx, typeName + " index out of range");
+            return i;
+        }
+
+        // The one index normalization of list, tuple, str, bytes and deque (each words its own IndexError):
+        // an int or bool index, negative counting from the end; false when it falls outside [0, count). A
+        // machine-size int, the common case, needs no BigInteger.
+        internal static bool TryNormIndex(ScriptValue index, int count, out int pos)
+        {
+            long i;
+            IntValue iv = index as IntValue;
+            if (iv != null && iv.IsSmall)
+            {
+                i = iv.Small;
+            }
+            else
+            {
+                BigInteger b = NumericOps.AsBigInteger(index);
+                if (b < -(long)int.MaxValue || b > int.MaxValue)
+                {
+                    pos = -1;
+                    return false;
+                }
+                i = (long)b;
+            }
             if (i < 0)
                 i += count;
-            if (i < 0 || i >= count)
-                throw Raise.IndexError(ctx, typeName + " index out of range");
-            return (int)i;
+            pos = (int)i;
+            return i >= 0 && i < count;
         }
 
         internal static ScriptException IndexTypeError(ScriptValue index, string typeName, EvalContext ctx)

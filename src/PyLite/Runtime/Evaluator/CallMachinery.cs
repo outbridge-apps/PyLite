@@ -40,6 +40,19 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     return ctx.Values.None;
                 }
 
+                // P3: obj.m() / obj.m(x) on a record instance runs the method with self as the first argument:
+                // no bound method, no argument arrays. The method is looked up before the argument runs.
+                if (self.Kind == ValueKind.RecordInstance && n.Args.Count <= 1
+                    && (n.Args.Count == 0 || n.Args[0].Kind == ArgKind.Positional))
+                {
+                    FunctionValue method = ((RecordInstanceValue)self).FindMethod(at.Attr);
+                    if (method != null)
+                    {
+                        ScriptValue a1 = n.Args.Count == 1 ? EvalExpr(n.Args[0].Value, env, ctx) : null;
+                        return OwnerOf(method.Program, ctx).CallFunctionDirect(method, n.Args.Count + 1, self, a1, ctx);
+                    }
+                }
+
                 // Monomorphic inline cache: one (TypeInfo -> descriptor) pair per call site. A single
                 // object write keeps concurrent readers safe (Slots tables are immutable, TypeInfo
                 // instances are static per value type).
@@ -82,7 +95,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ScriptValue a0 = argc >= 1 ? EvalExpr(n.Args[0].Value, env, ctx) : null;
                 ScriptValue a1 = argc == 2 ? EvalExpr(n.Args[1].Value, env, ctx) : null;
                 FunctionValue dfv = (FunctionValue)callee;
-                return OwnerOf(dfv.Program).CallFunctionDirect(dfv, argc, a0, a1, ctx);
+                return OwnerOf(dfv.Program, ctx).CallFunctionDirect(dfv, argc, a0, a1, ctx);
             }
             KwArgs kw;
             ScriptValue[] args = EvalCallArgs(n, env, ctx, out kw);
@@ -92,18 +105,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         // Same prologue as Call() (depth/probe/step), then the descriptor body — mirrors CallBound.
         private ScriptValue CallDescriptor(SlotDescriptor d, ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            ctx.CallDepth++;
-            if (ctx.CallDepth > ctx.Limits.MaxCallDepth)
-            {
-                ctx.CallDepth--;
-                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, ctx.CallDepth + 1);
-            }
-            StackGuard.Probe(ctx);
-            ctx.Budget.Step(BudgetCost.Call);
-            if (ctx.CallDepth > ctx.Stats.PeakCallDepth)
-            {
-                ctx.Stats.PeakCallDepth = ctx.CallDepth;
-            }
+            EnterCall(ctx);
             try
             {
                 return d.Method(self, args, kw, ctx);
@@ -264,20 +266,37 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             return "<callable>";
         }
 
-        public ScriptValue Call(ScriptValue callee, ScriptValue[] args, KwArgs kw, EvalContext ctx)
+        // The prologue every call path shares (Call, CallDescriptor, the arrayless fast call): the depth cap,
+        // the C# stack probe, the call step and the peak-depth statistic. The caller decrements CallDepth.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static void EnterCall(EvalContext ctx)
         {
-            ctx.CallDepth++;
-            if (ctx.CallDepth > ctx.Limits.MaxCallDepth)
-            {
-                ctx.CallDepth--;
-                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, ctx.CallDepth + 1);
-            }
+            if (++ctx.CallDepth > ctx.Limits.MaxCallDepth)
+                throw DepthAbort(ctx);
             StackGuard.Probe(ctx);
             ctx.Budget.Step(BudgetCost.Call);
             if (ctx.CallDepth > ctx.Stats.PeakCallDepth)
-            {
                 ctx.Stats.PeakCallDepth = ctx.CallDepth;
-            }
+        }
+
+        private static EngineAbort DepthAbort(EvalContext ctx)
+        {
+            ctx.CallDepth--;
+            return ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, ctx.CallDepth + 1);
+        }
+
+        // A plain positional call of a simple signature: no keyword-only, *args or **kwargs parameter, and
+        // every required positional supplied. RunFastBind binds such a call into the slots directly.
+        private static bool CanFastBind(FunctionValue fn, FunctionInfo info, int argc)
+        {
+            int defaults = fn.Defaults != null ? fn.Defaults.Length : 0;
+            return info.KwOnlyCount == 0 && !info.HasStarArg && !info.HasKwArg
+                && argc <= info.PositionalCount && argc >= info.PositionalCount - defaults;
+        }
+
+        public ScriptValue Call(ScriptValue callee, ScriptValue[] args, KwArgs kw, EvalContext ctx)
+        {
+            EnterCall(ctx);
             // The callee's statements advance ctx.CurrentLine; restore the call-site line on the normal
             // return and on the ScriptException unwind (so each frame's traceback entry and any later
             // error in the SAME caller statement report the caller's line). EngineAbort deliberately
@@ -290,7 +309,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 {
                     case ValueKind.Function:
                         FunctionValue fv = (FunctionValue)callee;
-                        r = OwnerOf(fv.Program).CallFunction(fv, args, kw, ctx);
+                        r = OwnerOf(fv.Program, ctx).CallFunction(fv, args, kw, ctx);
                         break;
                     case ValueKind.BuiltinFunction:
                         r = CallBuiltin((BuiltinFunctionValue)callee, args, kw, ctx);
@@ -316,10 +335,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ctx.CurrentLine = callerLine;
                 return r;
             }
-            catch (ScriptException)
+            catch (ScriptException) when (RestoreLine(ctx, callerLine))
             {
-                ctx.CurrentLine = callerLine;
-                throw;
+                throw;   // never taken: the filter restores the line and declines
             }
             catch (System.OverflowException)
             {
@@ -347,9 +365,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 // A host override: fence it so an arbitrary C# exception becomes HostError, not EngineFault.
                 return Outbridge.PyLite.Hosting.HostCallGuard.Invoke(fn.Name, fn.Fn, ctx, args, kw);
             }
-            ctx.Budget.CheckDeadlineNow();
             ScriptValue r = fn.Fn(null, args, kw, ctx);   // free builtin: self == null
-            ctx.Budget.CheckDeadlineNow();
+            ctx.Budget.CheckDeadlineNow();   // after only (P7): the statements before it already checked
             if (ctx.Budget.IsTerminating)
             {
                 throw ctx.Budget.PendingAbort;
@@ -368,7 +385,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             var full = new ScriptValue[args.Length + 1];
             full[0] = m.Self;
             System.Array.Copy(args, 0, full, 1, args.Length);
-            return OwnerOf(m.Func.Program).CallFunction(m.Func, full, kw, ctx);
+            return OwnerOf(m.Func.Program, ctx).CallFunction(m.Func, full, kw, ctx);
         }
 
         private ScriptValue CallType(TypeValue type, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -402,7 +419,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 pooled = true;
                 if (fn.PooledEnvCount > 0)
                 {
-                    ctx.Budget.ChargeAllocation(64 + 8L * (info.LocalSlotCount + closure.Length));
+                    ctx.Budget.ChargeAllocation(Environment.FrameCharge(info.LocalSlotCount, 0, closure.Length));
                     fastEnv = (Environment)fn.PooledEnvs[--fn.PooledEnvCount];
                     fn.PooledEnvs[fn.PooledEnvCount] = null;
                 }
@@ -461,26 +478,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private ScriptValue CallFunctionDirect(FunctionValue fn, int argc, ScriptValue a0, ScriptValue a1, EvalContext ctx)
         {
             FunctionInfo info = fn.Info;
-            int pc = info.PositionalCount;
-            int dl = fn.Defaults != null ? fn.Defaults.Length : 0;
-            if (info.KwOnlyCount != 0 || info.HasStarArg || info.HasKwArg || argc > pc || argc < pc - dl)
+            if (!CanFastBind(fn, info, argc))
             {
                 ScriptValue[] args = argc == 0 ? System.Array.Empty<ScriptValue>()
                     : argc == 1 ? new[] { a0 } : new[] { a0, a1 };
                 return Call(fn, args, KwArgs.Empty, ctx);
             }
-            ctx.CallDepth++;
-            if (ctx.CallDepth > ctx.Limits.MaxCallDepth)
-            {
-                ctx.CallDepth--;
-                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, ctx.CallDepth + 1);
-            }
-            StackGuard.Probe(ctx);
-            ctx.Budget.Step(BudgetCost.Call);
-            if (ctx.CallDepth > ctx.Stats.PeakCallDepth)
-            {
-                ctx.Stats.PeakCallDepth = ctx.CallDepth;
-            }
+            EnterCall(ctx);
             int callerLine = ctx.CurrentLine;
             try
             {
@@ -488,10 +492,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ctx.CurrentLine = callerLine;
                 return r;
             }
-            catch (ScriptException)
+            catch (ScriptException) when (RestoreLine(ctx, callerLine))
             {
-                ctx.CurrentLine = callerLine;
-                throw;
+                throw;   // never taken: the filter restores the line and declines
             }
             finally
             {
@@ -503,60 +506,61 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             FunctionInfo info = fn.Info;
 
-            // P4 fast path: plain positional call of a simple signature (no */**, no kw-only, no keywords,
-            // every required positional supplied) — bind slots directly, skip the bookkeeping arrays.
-            int pc = info.PositionalCount;
-            int dl = fn.Defaults != null ? fn.Defaults.Length : 0;
-            if (kw.Count == 0 && info.KwOnlyCount == 0 && !info.HasStarArg && !info.HasKwArg
-                && args.Length <= pc && args.Length >= pc - dl)
+            // P4 fast path: no keywords and CanFastBind - bind slots directly, skip the bookkeeping arrays.
+            if (kw.Count == 0 && CanFastBind(fn, info, args.Length))
             {
                 return RunFastBind(fn, info, args, args.Length, null, null, ctx);
             }
 
-            string fname = fn.Name;
-            int p = info.PositionalCount;
-            int k = info.KwOnlyCount;
-            int starIdx = info.HasStarArg ? p : -1;
-            int kwStart = p + (info.HasStarArg ? 1 : 0);
-            int kwArgIdx = info.HasKwArg ? kwStart + k : -1;
-            int defLen = fn.Defaults != null ? fn.Defaults.Length : 0;
-
             Environment fenv = Environment.CreateFunction(ctx, info.LocalSlotCount, info.CellVars.Count,
                 fn.Closure ?? System.Array.Empty<Cell>(), (Environment)fn.GlobalsToken, info);
+            var posFilled = new bool[info.PositionalCount];
+            var kwFilled = new bool[info.KwOnlyCount];
+            BindPositionals(fn, fenv, args, posFilled, ctx);
+            BindKeywords(fn, fenv, kw, posFilled, kwFilled, ctx);
+            BindDefaults(fn, fenv, posFilled, kwFilled, ctx);
+            return RunBody(fn, fenv, ctx);
+        }
 
-            // (2) positionals
+        // Positionals fill the leading params; the excess goes to *args or is an error.
+        private void BindPositionals(FunctionValue fn, Environment fenv, ScriptValue[] args, bool[] posFilled,
+            EvalContext ctx)
+        {
+            FunctionInfo info = fn.Info;
+            int p = info.PositionalCount;
             int nPos = args.Length;
             int nToPos = nPos < p ? nPos : p;
-            var posFilled = new bool[p];
             for (int i = 0; i < nToPos; i++)
             {
                 BindByIndex(fenv, info, i, args[i]);
                 posFilled[i] = true;
             }
 
-            // (3) excess positionals -> *args or error
             if (nPos > p)
             {
-                if (starIdx >= 0)
+                if (!info.HasStarArg)
                 {
-                    int extra = nPos - p;
-                    var tail = new ScriptValue[extra];
-                    System.Array.Copy(args, p, tail, 0, extra);
-                    BindByIndex(fenv, info, starIdx, ctx.Values.Tuple(tail));
+                    throw TooManyPositional(ctx, fn.Name, p, fn.Defaults != null ? fn.Defaults.Length : 0, nPos);
                 }
-                else
-                {
-                    throw TooManyPositional(ctx, fname, p, defLen, nPos);
-                }
+                var tail = new ScriptValue[nPos - p];
+                System.Array.Copy(args, p, tail, 0, tail.Length);
+                BindByIndex(fenv, info, p, ctx.Values.Tuple(tail));
             }
-            else if (starIdx >= 0)
+            else if (info.HasStarArg)
             {
-                BindByIndex(fenv, info, starIdx, ctx.Values.Tuple(System.Array.Empty<ScriptValue>()));
+                BindByIndex(fenv, info, p, ctx.Values.Tuple(System.Array.Empty<ScriptValue>()));
             }
+        }
 
-            // (4) keywords -> params / kwonly / **kwargs
-            DictValue kwargsDict = kwArgIdx >= 0 ? ctx.Values.Dict(kw.Count) : null;
-            var kwFilled = new bool[k];
+        // Keywords bind a named param, a keyword-only param, or go to **kwargs.
+        private void BindKeywords(FunctionValue fn, Environment fenv, KwArgs kw, bool[] posFilled, bool[] kwFilled,
+            EvalContext ctx)
+        {
+            FunctionInfo info = fn.Info;
+            int p = info.PositionalCount;
+            int k = info.KwOnlyCount;
+            int kwStart = p + (info.HasStarArg ? 1 : 0);
+            DictValue kwargsDict = info.HasKwArg ? ctx.Values.Dict(kw.Count) : null;
             for (int j = 0; j < kw.Count; j++)
             {
                 string name = kw.NameAt(j);
@@ -567,7 +571,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 {
                     if (posFilled[pIdx])
                     {
-                        throw MultipleValues(ctx, fname, name);
+                        throw MultipleValues(ctx, fn.Name, name);
                     }
                     BindByIndex(fenv, info, pIdx, val);
                     posFilled[pIdx] = true;
@@ -586,21 +590,28 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 else if (IndexOfName(info.ParamNames, name, 0, info.PositionalOnlyCount) >= 0)
                 {
-                    throw Raise.TypeError(ctx, fname
+                    throw Raise.TypeError(ctx, fn.Name
                         + "() got some positional-only arguments passed as keyword arguments: '" + name + "'");
                 }
                 else
                 {
-                    throw UnexpectedKeyword(ctx, fname, name);
+                    throw UnexpectedKeyword(ctx, fn.Name, name);
                 }
             }
-            if (kwArgIdx >= 0)
+            if (kwargsDict != null)
             {
-                BindByIndex(fenv, info, kwArgIdx, kwargsDict);
+                BindByIndex(fenv, info, kwStart + k, kwargsDict);
             }
+        }
 
-            // (5) positional defaults (right-aligned)
-            int firstDefault = p - defLen;
+        // Unfilled params take their defaults (positional ones right-aligned); the rest are reported missing,
+        // positional before keyword-only.
+        private void BindDefaults(FunctionValue fn, Environment fenv, bool[] posFilled, bool[] kwFilled,
+            EvalContext ctx)
+        {
+            FunctionInfo info = fn.Info;
+            int p = info.PositionalCount;
+            int firstDefault = p - (fn.Defaults != null ? fn.Defaults.Length : 0);
             List<string> missing = null;
             for (int i = 0; i < p; i++)
             {
@@ -619,12 +630,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
             if (missing != null)
             {
-                throw MissingRequired(ctx, fname, missing, "positional");
+                throw MissingRequired(ctx, fn.Name, missing, "positional");
             }
 
-            // (6) keyword-only defaults
-            List<string> missingKw = null;
-            for (int i = 0; i < k; i++)
+            int kwStart = p + (info.HasStarArg ? 1 : 0);
+            for (int i = 0; i < kwFilled.Length; i++)
             {
                 if (kwFilled[i])
                 {
@@ -638,16 +648,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 else
                 {
-                    (missingKw ?? (missingKw = new List<string>())).Add(kname);
+                    (missing ?? (missing = new List<string>())).Add(kname);
                 }
             }
-            if (missingKw != null)
+            if (missing != null)
             {
-                throw MissingRequired(ctx, fname, missingKw, "keyword-only");
+                throw MissingRequired(ctx, fn.Name, missing, "keyword-only");
             }
-
-            // (7) execute
-            return RunBody(fn, fenv, ctx);
         }
 
         // The single body-execution point (both binding paths). A ScriptException leaving the body gets
@@ -666,8 +673,20 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     // An expression-whitelist lambda body rides the closure-compiled form (T2.1
                     // machinery; cache on the shared FunctionInfo), skipping per-node dispatch on
                     // every call — filter/map/sort-key predicates are exactly this shape.
-                    CompiledEval bodyFn = GetCompiledExpr(ref fn.Info.CompiledLambdaBody, fn.LambdaBody);
-                    return bodyFn != null ? bodyFn(this, fenv, ctx) : EvalExpr(fn.LambdaBody, fenv, ctx);
+                    CompiledEval bodyFn = GetCompiledExpr(ref fn.Info.CompiledLambdaBody, fn.LambdaBody, ctx);
+                    return EvalCompiledOr(bodyFn, fn.LambdaBody, fenv, ctx);
+                }
+                CompiledEval oneLine = OneLineReturn(fn, ctx);
+                if (oneLine != null)
+                {
+                    // P6: `def f(x): return <expr>` takes the lambda's compiled form. The return statement's
+                    // prologue stays, so a traceback names its line and the budget sees the statement.
+                    if (ctx.Budget.HardStopRequested)
+                        throw ctx.Budget.PendingAbort;
+                    ctx.CurrentLine = fn.Body[fn.Body.Count - 1].Src.Line;
+                    if ((++ctx.NodeCounter & 63) == 0)
+                        ctx.Budget.Step(BudgetCost.NodeBatch);
+                    return oneLine(this, fenv, ctx);
                 }
                 ExecSignal sig = ExecBlock(fn.Body, fenv, ctx);
                 if (sig.Kind == ExecSignalKind.Raised)
@@ -678,10 +697,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 return sig.Kind == ExecSignalKind.Return ? sig.ReturnValue : ctx.Values.None;
             }
-            catch (ScriptException se)
+            catch (ScriptException se) when (AppendFrame(se, fn, ctx))
             {
-                TracebackBuilder.AppendFrame(se.Value, fn.Name, FrameLine(se.Value, fn, ctx));
-                throw;
+                throw;   // never taken: the filter appends this frame and declines
             }
             finally
             {
@@ -689,10 +707,46 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
+        // The compiled `return <expr>` of a def whose body is just that (after an optional docstring), or
+        // null: another body shape, a bare return, or an expression outside the compiler's whitelist.
+        private static CompiledEval OneLineReturn(FunctionValue fn, EvalContext ctx)
+        {
+            if (ctx.InterpretOnly)
+                return null;
+            object c = fn.Info.CompiledReturnBody;
+            if (c != null)
+                return c as CompiledEval;
+            IReadOnlyList<StmtNode> body = fn.Body;
+            ReturnNode ret = body.Count == 1 ? body[0] as ReturnNode
+                : body.Count == 2 && IsDocstring(body[0]) ? body[1] as ReturnNode : null;
+            return Store(ref fn.Info.CompiledReturnBody, ret != null && ret.Value != null ? TryCompileExpr(ret.Value) : null);
+        }
+
+        private static bool IsDocstring(StmtNode s)
+        {
+            ExprStmtNode e = s as ExprStmtNode;
+            LiteralNode lit = e == null ? null : e.Value as LiteralNode;
+            return lit != null && lit.Kind == LiteralKind.Str;
+        }
+
         // The line for a frame being appended: a lambda always reports its body's own line (its
         // expression never updates CurrentLine, and a lambda cannot contain a raise statement); the
         // FIRST frame otherwise uses the recorded raise site (survives a bare re-raise in the same
         // function); every later frame is the line that frame was executing.
+        // Exception filters that always decline (P2): they run on the unwind's first pass in the same
+        // inner-to-outer order the catch-and-rethrow chain had, without a rethrow per frame.
+        private static bool RestoreLine(EvalContext ctx, int line)
+        {
+            ctx.CurrentLine = line;
+            return false;
+        }
+
+        private static bool AppendFrame(ScriptException se, FunctionValue fn, EvalContext ctx)
+        {
+            TracebackBuilder.AppendFrame(se.Value, fn.Name, FrameLine(se.Value, fn, ctx));
+            return false;
+        }
+
         private static int FrameLine(ExceptionValue exc, FunctionValue fn, EvalContext ctx)
         {
             if (fn.Info.Kind == ScopeKind.Lambda)

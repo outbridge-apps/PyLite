@@ -4,20 +4,22 @@ using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
-    // Iterative hashing / equality / ordering engines. Explicit stacks only
-    // no C# recursion over user data except the reentrant key-Equals channel (R3).
+    // Iterative hashing / equality / ordering engines. Explicit stacks only: no C# recursion over user data
+    // except reentry through a hook (a record's __eq__/__hash__, a deque), which threads the depth.
     public static partial class PyOps
     {
         // -------- Hash (tuple engine, CPython tuplehash) --------
 
         public static long Hash(ScriptValue v, EvalContext ctx, int depth)
         {
-            StackProbe(ctx);
             if (depth > ctx.Limits.MaxDataDepth)
                 throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
             if (v.Kind != ValueKind.Tuple)
-                return v.HashLeafCore(ctx, depth);
+                return v.HashLeafCore(ctx, depth);   // a leaf that re-enters script code probes in its own call
+            if (IsFlat((TupleValue)v))
+                return HashFlat((TupleValue)v, ctx, depth);
 
+            StackGuard.ProbeData(ctx);
             var stack = new Stack<HashFrame>();
             stack.Push(new HashFrame((TupleValue)v));
             while (true)
@@ -54,6 +56,38 @@ namespace Outbridge.PyLite.Runtime.Values
             }
         }
 
+        private static bool IsFlat(TupleValue t)
+        {
+            ScriptValue[] items = t.Items;
+            for (int i = 0; i < items.Length; i++)
+            {
+                if (items[i].Kind == ValueKind.Tuple)
+                    return false;
+            }
+            return true;
+        }
+
+        // A tuple without tuple children (P6): the frame engine's arithmetic, steps and leaf depths
+        // (depth + 1) without its stack and frame objects.
+        private static long HashFlat(TupleValue t, EvalContext ctx, int depth)
+        {
+            ScriptValue[] items = t.Items;
+            ulong x = 0x345678UL, mult = 1000003UL;
+            for (int i = 0; i < items.Length; i++)
+            {
+                ctx.Budget.Step();
+                long y = items[i].HashLeafCore(ctx, depth + 1);
+                unchecked
+                {
+                    x = (x ^ (ulong)y) * mult;
+                    mult = mult + (ulong)(82520 + 2 * (items.Length - i - 1));
+                }
+            }
+            ctx.Budget.Step();
+            long r = unchecked((long)(x + 97531UL));
+            return r == -1L ? -2L : r;
+        }
+
         private sealed class HashFrame
         {
             public readonly TupleValue T;
@@ -77,9 +111,21 @@ namespace Outbridge.PyLite.Runtime.Values
 
         public static bool Equals(ScriptValue a, ScriptValue b, EvalContext ctx, int depth)
         {
-            StackProbe(ctx);
             if (depth > ctx.Limits.MaxDataDepth)
                 throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
+            bool simple;
+            if (TrySimpleEquals(a, b, out simple))
+            {
+                ctx.Budget.Step();   // the one step the engine's loop charges a leaf pair
+                return simple;
+            }
+            if (a.Kind == ValueKind.Tuple && b.Kind == ValueKind.Tuple)
+            {
+                int flat = FlatTupleEquals((TupleValue)a, (TupleValue)b, ctx, depth);
+                if (flat >= 0)
+                    return flat == 1;
+            }
+            StackGuard.ProbeData(ctx);
 
             Stack<EqFrame> stack = null;
             ScriptValue x = a, y = b;
@@ -131,7 +177,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 else if (IsSetFamily(x) && IsSetFamily(y))
                 {
                     SetValue sx = (SetValue)x, sy = (SetValue)y;
-                    result = sx.Count == sy.Count && SetOps.AllContained(sx, sy, ctx, depth);
+                    result = sx.Count == sy.Count && SetOps.AllContained(sx.Table, sy.Table, ctx, depth);
                 }
                 else if (x.Kind != y.Kind)
                 {
@@ -182,6 +228,61 @@ namespace Outbridge.PyLite.Runtime.Values
                     result = true; // frame exhausted -> matched
                 }
             }
+        }
+
+        // The pairs the engine settles without a frame or a hook (P6): identity, two machine ints, two strs.
+        private static bool TrySimpleEquals(ScriptValue x, ScriptValue y, out bool equal)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                equal = true;
+                return true;
+            }
+            if (x.Kind == ValueKind.Str && y.Kind == ValueKind.Str)
+            {
+                string sx = ((StrValue)x).Value, sy = ((StrValue)y).Value;
+                equal = sx.Length == sy.Length && string.Equals(sx, sy, StringComparison.Ordinal);
+                return true;
+            }
+            if (x.Kind == ValueKind.Int && y.Kind == ValueKind.Int)
+            {
+                IntValue ix = (IntValue)x, iy = (IntValue)y;
+                if (ix.IsSmall && iy.IsSmall)
+                {
+                    equal = ix.Small == iy.Small;
+                    return true;
+                }
+            }
+            equal = false;
+            return false;
+        }
+
+        // Two equal-length tuples whose pairs are all simple: the engine's steps and frame charge without
+        // the stack and the frame. 1 equal, 0 not, -1 not this shape (the engine takes it).
+        private static int FlatTupleEquals(TupleValue a, TupleValue b, EvalContext ctx, int depth)
+        {
+            ScriptValue[] xs = a.Items, ys = b.Items;
+            if (xs.Length != ys.Length || xs.Length == 0)
+                return -1;
+            bool unused;
+            for (int i = 0; i < xs.Length; i++)
+            {
+                if (!TrySimpleEquals(xs[i], ys[i], out unused))
+                    return -1;
+            }
+            ctx.Budget.Step();   // the tuples' own iteration
+            if (depth >= ctx.Limits.MaxDataDepth)
+                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
+            ctx.Budget.ChargeAllocation(32);
+            for (int i = 0; i < xs.Length; i++)
+            {
+                ctx.Budget.Step();
+                bool eq;
+                TrySimpleEquals(xs[i], ys[i], out eq);
+                if (!eq)
+                    return 0;
+            }
+            return 1;
         }
 
         // A frame yields successive child pairs; TryNext returns false when exhausted, and sets

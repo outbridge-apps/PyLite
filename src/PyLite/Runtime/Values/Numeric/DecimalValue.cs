@@ -534,44 +534,13 @@ namespace Outbridge.PyLite.Runtime.Values
             DecimalValue od = other as DecimalValue;
             if (od != null)
                 return Value == od.Value;
-            FractionValue fr = other as FractionValue;
-            if (fr != null)
-            {
-                BigInteger n, d;
-                ToRational(out n, out d);
-                return Rationals.Compare(n, d, fr.Num, fr.Den) == 0;
-            }
-            return false;
+            int cmp;
+            return other is FractionValue && CompareWith(other, out cmp, ctx) == Rationals.Order.Ordered && cmp == 0;
         }
 
         protected internal override bool TryEqualsAcrossKindCore(ScriptValue other, EvalContext ctx, int depth, out bool equal)
         {
-            BigInteger n, d;
-            IntValue iv = other as IntValue;
-            BoolValue bv = other as BoolValue;
-            if (iv != null || bv != null)
-            {
-                ToRational(out n, out d);
-                BigInteger o = iv != null ? iv.Value : (bv.Value ? BigInteger.One : BigInteger.Zero);
-                equal = Rationals.Compare(n, d, o, BigInteger.One) == 0;
-                return true;
-            }
-            FloatValue fv = other as FloatValue;
-            if (fv != null)
-            {
-                if (double.IsNaN(fv.Value) || double.IsInfinity(fv.Value))
-                {
-                    equal = false;
-                    return true;
-                }
-                ToRational(out n, out d);
-                BigInteger fn, fd;
-                Rationals.FloatToRational(fv.Value, out fn, out fd);
-                equal = Rationals.Compare(n, d, fn, fd) == 0;
-                return true;
-            }
-            equal = false;
-            return false;
+            return Rationals.EqualsAcrossKind(this, other, out equal, ctx);
         }
 
         protected internal override bool TryCompareLeafCore(ScriptValue other, EvalContext ctx, int depth, out int cmp)
@@ -582,44 +551,14 @@ namespace Outbridge.PyLite.Runtime.Values
                 cmp = Value.CompareTo(od.Value);
                 return true;
             }
+            return CompareWith(other, out cmp, ctx) == Rationals.Order.Ordered;
+        }
+
+        internal Rationals.Order CompareWith(ScriptValue other, out int cmp, EvalContext ctx)
+        {
             BigInteger n, d;
-            FractionValue fr = other as FractionValue;
-            if (fr != null)
-            {
-                ToRational(out n, out d);
-                cmp = Rationals.Compare(n, d, fr.Num, fr.Den);
-                return true;
-            }
-            IntValue iv = other as IntValue;
-            BoolValue bv = other as BoolValue;
-            if (iv != null || bv != null)
-            {
-                ToRational(out n, out d);
-                BigInteger o = iv != null ? iv.Value : (bv.Value ? BigInteger.One : BigInteger.Zero);
-                cmp = Rationals.Compare(n, d, o, BigInteger.One);
-                return true;
-            }
-            FloatValue fv = other as FloatValue;
-            if (fv != null)
-            {
-                if (double.IsNaN(fv.Value))
-                {
-                    cmp = 0;
-                    return false;
-                }
-                if (double.IsInfinity(fv.Value))
-                {
-                    cmp = fv.Value > 0 ? -1 : 1;
-                    return true;
-                }
-                ToRational(out n, out d);
-                BigInteger fn, fd;
-                Rationals.FloatToRational(fv.Value, out fn, out fd);
-                cmp = Rationals.Compare(n, d, fn, fd);
-                return true;
-            }
-            cmp = 0;
-            return false;
+            ToRational(out n, out d);
+            return Rationals.CompareWith(n, d, other, out cmp, ctx);
         }
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth)

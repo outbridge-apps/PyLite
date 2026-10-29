@@ -17,22 +17,21 @@ namespace Outbridge.PyLite.Syntax
     {
         private readonly List<KeyValuePair<NameNode, ScopeInfo>> _names = new List<KeyValuePair<NameNode, ScopeInfo>>();
         private ScopeInfo _module;
+        private int _literalCount;
 
         public ResolvedProgram Run(ModuleNode module)
         {
             _module = new ScopeInfo { Kind = ScopeKind.Module, Name = "<module>", Node = null };
-            WalkStmts(module.Body, _module);
+            new ScopeCollector(this).Stmts(module.Body, _module);
 
             Analyze(_module);
-            ValidateControl(module.Body, false, 0);
+            ValidateControl(module.Body);
             ValidateScope(_module, module.Body);
             AssignSlots(_module);
 
-            var scopeInfos = new Dictionary<Node, FunctionInfo>();
-            BuildScopeInfos(_module, scopeInfos);
+            BuildScopeInfos(_module);
             FunctionInfo moduleInfo = MakeFunctionInfo(_module);
 
-            var bindings = new Dictionary<NameNode, NameBinding>();
             var builtinSlots = new Dictionary<string, NameBinding>(System.StringComparer.Ordinal);
             var globalSlots = new Dictionary<string, NameBinding>(System.StringComparer.Ordinal);
             foreach (var kv in _names)
@@ -61,277 +60,113 @@ namespace Outbridge.PyLite.Syntax
                     }
                     b = shared;
                 }
-                bindings[kv.Key] = b;
                 kv.Key.Binding = b;   // baked onto the node — the runtime reads the field, not the dictionary
             }
 
-            var folds = ConstFolder.FoldAll(module);
-            return new ResolvedProgram(module, moduleInfo, scopeInfos, bindings, folds, builtinSlots.Count, globalSlots.Count);
+            return new ResolvedProgram(module, moduleInfo, builtinSlots.Count, globalSlots.Count, _literalCount);
         }
 
         private void Record(NameNode n, ScopeInfo s) { _names.Add(new KeyValuePair<NameNode, ScopeInfo>(n, s)); }
 
         // ---------------- collection walk ----------------
 
-        private void WalkStmts(IReadOnlyList<StmtNode> stmts, ScopeInfo s)
+        // Builds the scope tree: what each scope binds, reads and declares. Every NameNode is recorded with
+        // its scope for the classification pass.
+        private sealed class ScopeCollector : AstWalker<ScopeInfo>
         {
-            foreach (var st in stmts)
-                WalkStmt(st, s);
-        }
+            private readonly ResolverPass _pass;
 
-        private void WalkStmt(StmtNode st, ScopeInfo s)
-        {
-            switch (st)
+            internal ScopeCollector(ResolverPass pass) { _pass = pass; }
+
+            protected override void Name(NameNode n, ScopeInfo s)
             {
-                case ExprStmtNode e: WalkExpr(e.Value, s); break;
-                case AssignNode a: WalkExpr(a.Value, s); foreach (var t in a.Targets)
-                    WalkTarget(t, s); break;
-                case AugAssignNode aug: WalkExpr(aug.Value, s); WalkTarget(aug.Target, s); break;
-                case DelNode d: foreach (var t in d.Targets)
-                    WalkTarget(t, s); break;
-                case IfNode i: WalkExpr(i.Test, s); WalkStmts(i.Body, s); WalkStmts(i.OrElse, s); break;
-                case WhileNode w: WalkExpr(w.Test, s); WalkStmts(w.Body, s); WalkStmts(w.OrElse, s); break;
-                case ForNode f: WalkExpr(f.Iter, s); WalkTarget(f.Target, s); WalkStmts(f.Body, s); WalkStmts(f.OrElse, s); break;
-                case FuncDefNode fd: s.Bind(fd.Name); WalkFuncDef(fd, s); break;
-                case ClassDefNode cd:
-                    s.Bind(cd.Name);
-                    foreach (var d in cd.Decorators)
-                        WalkExpr(d, s);
-                    if (cd.Base != null)
-                        WalkExpr(cd.Base, s);
-                    foreach (var f in cd.Fields)
-                        if (f.Default != null)
-                            WalkExpr(f.Default, s);
-                    foreach (var meth in cd.Methods)   // methods are function scopes parented at s (class scope is not a closure)
-                        WalkFuncDef(meth, s);
-                    break;
-                case ReturnNode r: if (r.Value != null)
-                    WalkExpr(r.Value, s); break;
-                case RaiseNode ra: if (ra.Exc != null)
-                    WalkExpr(ra.Exc, s); if (ra.Cause != null)
-                    WalkExpr(ra.Cause, s); break;
-                case AssertNode asrt: WalkExpr(asrt.Test, s); if (asrt.Msg != null)
-                    WalkExpr(asrt.Msg, s); break;
-                case TryNode t:
-                    WalkStmts(t.Body, s);
-                    foreach (var h in t.Handlers)
-                    {
-                        if (h.Type != null)
-                            WalkExpr(h.Type, s);
-                        if (h.Name != null)
-                            s.Bind(h.Name);
-                        WalkStmts(h.Body, s);
-                    }
-                    WalkStmts(t.OrElse, s);
-                    WalkStmts(t.Finally, s);
-                    break;
-                case GlobalNode g: foreach (var n in g.Names)
+                s.Referenced.Add(n.Id);
+                _pass.Record(n, s);
+            }
+
+            protected override void Bind(string name, ScopeInfo s) { s.Bind(name); }
+
+            // str/float/bytes literals get a per-run cache slot: one value per literal per run (P4).
+            protected override void Expr(ExprNode e, ScopeInfo s)
+            {
+                if (e.NodeKind == NodeKind.Literal)
                 {
-                    s.Globals.Add(n);
-                    _module.Bound.Add(n);
-                } break;
-                case NonlocalNode nl: foreach (var n in nl.Names)
-                    s.Nonlocals.Add(n); break;
-                case ImportNode im: foreach (var al in im.Names)
-                    s.Bind(ImportBoundName(al)); break;
-                case FromImportNode fi: foreach (var al in fi.Names)
-                    s.Bind(al.AsName ?? al.DottedName); break;
-                case MatchNode m:
-                    WalkExpr(m.Subject, s);
-                    foreach (var cs in m.Cases)
-                    {
-                        WalkPattern(cs.Pattern, s);
-                        if (cs.Guard != null)
-                            WalkExpr(cs.Guard, s);
-                        WalkStmts(cs.Body, s);
-                    }
-                    break;
-                default: break;   // Pass/Break/Continue
-            }
-        }
-
-        private static string ImportBoundName(ImportAlias al)
-        {
-            if (al.AsName != null)
-                return al.AsName;
-            int dot = al.DottedName.IndexOf('.');
-            return dot < 0 ? al.DottedName : al.DottedName.Substring(0, dot);
-        }
-
-        // Pattern capture/star/rest/as targets bind in the enclosing scope; value/literal/key exprs are uses.
-        private void WalkPattern(PatternNode p, ScopeInfo s)
-        {
-            switch (p)
-            {
-                case CapturePattern c: if (c.Target != null)
-                    WalkTarget(c.Target, s); break;
-                case StarPattern st: if (st.Target != null)
-                    WalkTarget(st.Target, s); break;
-                case LiteralPattern _: break;
-                case ValuePattern v: WalkExpr(v.Value, s); break;
-                case SequencePattern seq: foreach (var e in seq.Elements)
-                    WalkPattern(e, s); break;
-                case MappingPattern m:
-                    foreach (var k in m.Keys)
-                        WalkExpr(k, s);
-                    foreach (var vp in m.Values)
-                        WalkPattern(vp, s);
-                    if (m.Rest != null)
-                        WalkTarget(m.Rest, s);
-                    break;
-                case OrPattern o: foreach (var alt in o.Alternatives)
-                    WalkPattern(alt, s); break;
-                case AsPattern a: WalkPattern(a.Inner, s); WalkTarget(a.Target, s); break;
-                case ClassPattern cp:
-                    WalkExpr(cp.Cls, s);
-                    foreach (var p2 in cp.Positional)
-                        WalkPattern(p2, s);
-                    foreach (var p2 in cp.KwPatterns)
-                        WalkPattern(p2, s);
-                    break;
-            }
-        }
-
-        private void WalkTarget(ExprNode e, ScopeInfo s)
-        {
-            switch (e)
-            {
-                case NameNode n: s.Bind(n.Id); Record(n, s); break;
-                case TupleNode t: foreach (var elt in t.Elts)
-                    WalkTarget(elt, s); break;
-                case ListNode l: foreach (var elt in l.Elts)
-                    WalkTarget(elt, s); break;
-                case StarredNode st: WalkTarget(st.Value, s); break;
-                case AttributeNode a: WalkExpr(a.Value, s); break;
-                case IndexNode idx: WalkExpr(idx.Value, s); WalkExpr(idx.Index, s); break;
-                default: WalkExpr(e, s); break;
-            }
-        }
-
-        // The parser bounds AST depth (MaxAstDepth), but this walk recurses on the CALLING thread whose
-        // remaining stack is the host's business — probe every entry so a near-exhausted caller gets a
-        // SyntaxError instead of an uncatchable StackOverflow (same conversion as the parser's probe).
-        private static void ProbeStack(ExprNode at)
-        {
-            try
-            {
-                System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack();
-            }
-            catch (System.InsufficientExecutionStackException)
-            {
-                throw new PySyntaxErrorException("SyntaxError", "input too complex to compile", at.Src.Line, at.Src.Col);
-            }
-        }
-
-        private void WalkExpr(ExprNode e, ScopeInfo s)
-        {
-            ProbeStack(e);
-            switch (e)
-            {
-                case NameNode n: s.Referenced.Add(n.Id); Record(n, s); break;
-                case LiteralNode _: break;
-                case BinOpNode b: WalkExpr(b.Left, s); WalkExpr(b.Right, s); break;
-                case UnaryOpNode u: WalkExpr(u.Operand, s); break;
-                case BoolOpNode bo: foreach (var v in bo.Values)
-                    WalkExpr(v, s); break;
-                case CompareChainNode c: WalkExpr(c.Left, s); foreach (var cc in c.Comparators)
-                    WalkExpr(cc, s); break;
-                case IfExpNode ie: WalkExpr(ie.Body, s); WalkExpr(ie.Test, s); WalkExpr(ie.OrElse, s); break;
-                case CallNode call: WalkExpr(call.Func, s); foreach (var arg in call.Args)
-                    WalkExpr(arg.Value, s); break;
-                case AttributeNode at: WalkExpr(at.Value, s); break;
-                case IndexNode idx: WalkExpr(idx.Value, s); WalkExpr(idx.Index, s); break;
-                case SliceNode sl:
-                    if (sl.Lower != null)
-                        WalkExpr(sl.Lower, s);
-                    if (sl.Upper != null)
-                        WalkExpr(sl.Upper, s);
-                    if (sl.Step != null)
-                        WalkExpr(sl.Step, s);
-                    break;
-                case TupleNode t: foreach (var v in t.Elts)
-                    WalkExpr(v, s); break;
-                case ListNode l: foreach (var v in l.Elts)
-                    WalkExpr(v, s); break;
-                case SetNode set: foreach (var v in set.Elts)
-                    WalkExpr(v, s); break;
-                case DictNode d:
-                    for (int i = 0; i < d.Keys.Count; i++)
-                    {
-                        if (d.Keys[i] != null)   // null key => '**' unpacking entry
-                            WalkExpr(d.Keys[i], s);
-                        WalkExpr(d.Values[i], s);
-                    }
-                    break;
-                case StarredNode st: WalkExpr(st.Value, s); break;
-                case NamedExprNode ne: WalkExpr(ne.Value, s); WalkTarget(ne.Target, s); break;
-                case LambdaNode lam: WalkLambda(lam, s); break;
-                case ComprehensionNode comp: WalkComprehension(comp, s); break;
-                case FStringNode fs:
-                    foreach (var p in fs.Parts)
-                    {
-                        if (!p.IsLiteral)
-                            WalkExpr(p.Expr, s);
-                        if (p.FormatSpec != null)
-                            foreach (var fp in p.FormatSpec)
-                                if (!fp.IsLiteral)
-                                    WalkExpr(fp.Expr, s);
-                    }
-                    break;
-                default: break;
-            }
-        }
-
-        private void WalkFuncDef(FuncDefNode fd, ScopeInfo parent)
-        {
-            foreach (var d in fd.Decorators)   // decorators evaluate in the enclosing scope
-                WalkExpr(d, parent);
-            WalkDefaults(fd.Params, parent);
-            var fs = new ScopeInfo { Kind = ScopeKind.Function, Parent = parent, Name = fd.Name, Node = fd };
-            parent.Children.Add(fs);
-            BindParams(fd.Params, fs);
-            WalkStmts(fd.Body, fs);
-        }
-
-        private void WalkLambda(LambdaNode lam, ScopeInfo parent)
-        {
-            WalkDefaults(lam.Params, parent);
-            var ls = new ScopeInfo { Kind = ScopeKind.Lambda, Parent = parent, Name = "<lambda>", Node = lam };
-            parent.Children.Add(ls);
-            BindParams(lam.Params, ls);
-            WalkExpr(lam.Body, ls);
-        }
-
-        private void WalkComprehension(ComprehensionNode comp, ScopeInfo parent)
-        {
-            WalkExpr(comp.Clauses[0].Iter, parent);   // first iterable in the enclosing scope
-            var cs = new ScopeInfo { Kind = ScopeKind.Comprehension, Parent = parent, Name = "<comp>", Node = comp };
-            parent.Children.Add(cs);
-            WalkTarget(comp.Clauses[0].Target, cs);
-            for (int i = 1; i < comp.Clauses.Count; i++)
-            {
-                var cl = comp.Clauses[i];
-                if (cl.IsFor)
-                {
-                    WalkExpr(cl.Iter, cs);
-                    WalkTarget(cl.Target, cs);
+                    LiteralNode lit = (LiteralNode)e;
+                    if (lit.CacheSlot < 0 && (lit.Kind == LiteralKind.Str || lit.Kind == LiteralKind.Float || lit.Kind == LiteralKind.Bytes))
+                        lit.CacheSlot = _pass._literalCount++;
+                    return;
                 }
-                else
-                    WalkExpr(cl.Cond, cs);
+                base.Expr(e, s);
             }
-            WalkExpr(comp.Element, cs);
-            if (comp.ValueElement != null)
-                WalkExpr(comp.ValueElement, cs);
-        }
 
-        private void WalkDefaults(ParamList p, ScopeInfo parent)
-        {
-            foreach (var pp in p.Positional)
-                if (pp.Default != null)
-                    WalkExpr(pp.Default, parent);
-            foreach (var pp in p.KwOnly)
-                if (pp.Default != null)
-                    WalkExpr(pp.Default, parent);
+            protected override void BindName(NameNode n, ScopeInfo s)
+            {
+                s.Bind(n.Id);
+                _pass.Record(n, s);
+            }
+
+            protected override void Stmt(StmtNode st, ScopeInfo s)
+            {
+                switch (st)
+                {
+                    case GlobalNode g:
+                        foreach (var n in g.Names)
+                        {
+                            s.Globals.Add(n);
+                            _pass._module.Bound.Add(n);
+                        }
+                        break;
+                    case NonlocalNode nl:
+                        foreach (var n in nl.Names)
+                            s.Nonlocals.Add(n);
+                        break;
+                    default: base.Stmt(st, s); break;
+                }
+            }
+
+            protected override void FuncDef(FuncDefNode fd, ScopeInfo parent)
+            {
+                base.FuncDef(fd, parent);
+                Stmts(fd.Body, ChildScope(parent, ScopeKind.Function, fd.Name, fd, fd.Params));
+            }
+
+            protected override void Lambda(LambdaNode lam, ScopeInfo parent)
+            {
+                base.Lambda(lam, parent);
+                Expr(lam.Body, ChildScope(parent, ScopeKind.Lambda, "<lambda>", lam, lam.Params));
+            }
+
+            protected override void Comprehension(ComprehensionNode comp, ScopeInfo parent)
+            {
+                base.Comprehension(comp, parent);
+                ScopeInfo cs = ChildScope(parent, ScopeKind.Comprehension, "<comp>", comp, null);
+                Target(comp.Clauses[0].Target, cs);
+                for (int i = 1; i < comp.Clauses.Count; i++)
+                {
+                    var cl = comp.Clauses[i];
+                    if (cl.IsFor)
+                    {
+                        Expr(cl.Iter, cs);
+                        Target(cl.Target, cs);
+                    }
+                    else
+                    {
+                        Expr(cl.Cond, cs);
+                    }
+                }
+                Expr(comp.Element, cs);
+                if (comp.ValueElement != null)
+                    Expr(comp.ValueElement, cs);
+            }
+
+            private static ScopeInfo ChildScope(ScopeInfo parent, ScopeKind kind, string name, Node node, ParamList ps)
+            {
+                var s = new ScopeInfo { Kind = kind, Parent = parent, Name = name, Node = node };
+                parent.Children.Add(s);
+                if (ps != null)
+                    BindParams(ps, s);
+                return s;
+            }
         }
 
         private static void BindParams(ParamList p, ScopeInfo s)
@@ -444,16 +279,12 @@ namespace Outbridge.PyLite.Syntax
 
         // ---------------- FunctionInfo + classification ----------------
 
-        private void BuildScopeInfos(ScopeInfo s, Dictionary<Node, FunctionInfo> map)
+        private void BuildScopeInfos(ScopeInfo s)
         {
             if (s.Node != null)
-            {
-                FunctionInfo fi = MakeFunctionInfo(s);
-                map[s.Node] = fi;
-                s.Node.ScopeInfo = fi;   // baked onto the node (see NameNode.Binding)
-            }
+                s.Node.ScopeInfo = MakeFunctionInfo(s);   // baked onto the node (see NameNode.Binding)
             foreach (var child in s.Children)
-                BuildScopeInfos(child, map);
+                BuildScopeInfos(child);
         }
 
         private FunctionInfo MakeFunctionInfo(ScopeInfo s)

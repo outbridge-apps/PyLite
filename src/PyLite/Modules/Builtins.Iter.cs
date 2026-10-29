@@ -14,21 +14,17 @@ namespace Outbridge.PyLite.Modules
         {
             AddType(d, "enumerate", (self, args, kw, c) => EnumerateBuiltin(c, args, kw));
             AddType(d, "zip", (self, args, kw, c) => ZipBuiltin(c, args, kw));
-            AddType(d, "map", (self, args, kw, c) => MapBuiltin(c, args));
-            AddType(d, "filter", (self, args, kw, c) => FilterBuiltin(c, args));
-            Add(d, "reversed", (self, args, kw, c) => ReversedBuiltin(c, args));
+            AddType(d, "map", 0, int.MaxValue, (self, args, kw, c) => MapBuiltin(c, args));   // MapBuiltin words the arity error
+            AddType(d, "filter", 2, 2, (self, args, kw, c) => FilterBuiltin(c, args));
+            Add(d, "reversed", 1, 1, (self, args, kw, c) => ReversedBuiltin(c, args));
         }
 
         private static ScriptValue EnumerateBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
+            args = StrMethods.WithKw(c, args, kw, "enumerate", "iterable", "start");   // start twice is an error, an unknown keyword too
             if (args.Length < 1 || args.Length > 2)
                 throw Raise.TypeError(c, "enumerate expected 1 to 2 arguments, got " + args.Length);
-            BigInteger start = BigInteger.Zero;
-            if (args.Length == 2)
-                start = Coerce.ToIndex(c, args[1], "enumerate");
-            ScriptValue startKw;
-            if (kw.TryGet("start", out startKw))
-                start = Coerce.ToIndex(c, startKw, "enumerate");
+            BigInteger start = args.Length == 2 ? Coerce.ToIndex(c, args[1], "enumerate") : BigInteger.Zero;
             IScriptIterator src = PyOps.GetIterator(args[0], c);
             return c.Values.Iterator(new EnumerateIterator(src, start), "enumerate");
         }
@@ -57,8 +53,6 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue FilterBuiltin(EvalContext c, ScriptValue[] args)
         {
-            if (args.Length != 2)
-                throw Raise.TypeError(c, "filter expected 2 arguments, got " + args.Length);
             ScriptValue fn = args[0].Kind == ValueKind.None ? null : args[0];
             IScriptIterator src = PyOps.GetIterator(args[1], c);
             return c.Values.Iterator(new FilterIterator(fn, src), "filter");
@@ -72,21 +66,10 @@ namespace Outbridge.PyLite.Modules
             if (x.Kind == ValueKind.Tuple)
                 return c.Values.Iterator(new ReversedArrayIterator(((TupleValue)x).Items), "tuple_reverseiterator");
             if (x.Kind == ValueKind.Str)
-            {
-                string s = ((StrValue)x).Value;
-                var arr = new ScriptValue[s.Length];
-                for (int i = 0; i < s.Length; i++)
-                    arr[i] = c.Values.StrFromChar(s[i]);
-                return c.Values.Iterator(new ReversedArrayIterator(arr), "reversed");
-            }
+                return c.Values.Iterator(new StrIterator((StrValue)x, reverse: true), "reversed");
             BytesValue bytes = x as BytesValue;
             if (bytes != null)
-            {
-                var arr = new ScriptValue[bytes.Data.Length];
-                for (int i = 0; i < arr.Length; i++)
-                    arr[i] = c.Values.Int(bytes.Data[i]);
-                return c.Values.Iterator(new ReversedArrayIterator(arr), "reversed");
-            }
+                return c.Values.Iterator(new BytesIterator(bytes, reverse: true), "reversed");
             if (x.Kind == ValueKind.Range)
             {
                 RangeValue r = (RangeValue)x;

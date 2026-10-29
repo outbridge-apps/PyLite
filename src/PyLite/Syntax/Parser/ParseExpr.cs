@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Syntax
             EnterExpr();
             try
             {
-                if (_cur.Kind == TokenKind.Name && Peek2().Kind == TokenKind.ColonEqual)
+                if (_pendingAtom == null && _cur.Kind == TokenKind.Name && Peek2().Kind == TokenKind.ColonEqual)
                 {
                     Token nm = Take();
                     Take();   // ':='
@@ -63,7 +63,7 @@ namespace Outbridge.PyLite.Syntax
 
         private ExprNode ParseNotTest()
         {
-            if (_cur.Kind == TokenKind.KwNot && Peek2().Kind != TokenKind.KwIn)
+            if (_pendingAtom == null && _cur.Kind == TokenKind.KwNot && Peek2().Kind != TokenKind.KwIn)
             {
                 EnterExpr();
                 try
@@ -196,7 +196,7 @@ namespace Outbridge.PyLite.Syntax
 
         private ExprNode ParseFactor()
         {
-            if (_cur.Kind == TokenKind.Plus || _cur.Kind == TokenKind.Minus || _cur.Kind == TokenKind.Tilde)
+            if (_pendingAtom == null && (_cur.Kind == TokenKind.Plus || _cur.Kind == TokenKind.Minus || _cur.Kind == TokenKind.Tilde))
             {
                 EnterExpr();
                 try

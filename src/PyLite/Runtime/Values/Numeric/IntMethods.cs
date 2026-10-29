@@ -14,8 +14,8 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-            d["bit_length"] = SlotDescriptor.MakeMethod("bit_length", (self, a, kw, c) => c.Values.Int(BitLength(Val(self))));
-            d["bit_count"] = SlotDescriptor.MakeMethod("bit_count", (self, a, kw, c) => c.Values.Int(BitCount(Val(self))));
+            d["bit_length"] = SlotDescriptor.MakeMethod("bit_length", Args.Positional("bit_length", 0, 0, (self, a, kw, c) => c.Values.Int(BitLength(self))));
+            d["bit_count"] = SlotDescriptor.MakeMethod("bit_count", Args.Positional("bit_count", 0, 0, (self, a, kw, c) => c.Values.Int(BitCount(Val(self)))));
             d["to_bytes"] = SlotDescriptor.MakeMethod("to_bytes", (self, a, kw, c) => ToBytes(c, Val(self), a, kw));
             d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio",
                 (self, a, kw, c) => c.Values.Tuple(new[] { AsInt(self, c), (ScriptValue)c.Values.Int(BigInteger.One) }));
@@ -46,24 +46,34 @@ namespace Outbridge.PyLite.Runtime.Values
             return self is IntValue ? self : c.Values.Int(Val(self));
         }
 
-        private static int BitLength(BigInteger v)
+        // The value's cached bit length: a bit-at-a-time shift loop is quadratic on a big int.
+        private static long BitLength(ScriptValue self)
         {
-            v = BigInteger.Abs(v);
-            int n = 0;
-            while (v > 0) { v >>= 1; n++; }
+            IntValue iv = self as IntValue;
+            return iv != null ? iv.BitLength() : (((BoolValue)self).Value ? 1 : 0);
+        }
+
+        // Popcount of |v| (3.10), one pass over the magnitude's bytes.
+        private static long BitCount(BigInteger v)
+        {
+            if (v >= long.MinValue && v <= long.MaxValue)
+            {
+                long l = (long)v;
+                return PopCount(l < 0 ? (ulong)(-(l + 1)) + 1 : (ulong)l);   // |long.MinValue| fits a ulong
+            }
+            long n = 0;
+            foreach (byte b in BigInteger.Abs(v).ToByteArray())
+                n += PopCount(b);
             return n;
         }
 
-        // Popcount of |v| (3.10).
-        private static int BitCount(BigInteger v)
+        private static int PopCount(ulong x)
         {
-            v = BigInteger.Abs(v);
             int n = 0;
-            while (v > 0)
+            while (x != 0)
             {
-                if (!(v & BigInteger.One).IsZero)
-                    n++;
-                v >>= 1;
+                x &= x - 1;
+                n++;
             }
             return n;
         }
@@ -83,6 +93,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 BigInteger lenB = NumericOps.AsBigInteger(lenArg);
                 if (lenB < 0)
                     throw Raise.ValueError(c, "length argument must be non-negative");
+                c.Values.CheckStrLen(lenB > long.MaxValue ? long.MaxValue : (long)lenB);   // the bytes cap, before the buffer
                 c.Values.PreCharge(lenB > int.MaxValue ? int.MaxValue : (long)lenB);
                 if (lenB > int.MaxValue)   // budget-approved but still not a valid .NET array length
                     throw Raise.Overflow(c, "Python int too large to convert to C ssize_t");
@@ -93,22 +104,23 @@ namespace Outbridge.PyLite.Runtime.Values
 
             if (v < 0 && !signed)
                 throw Raise.Make(c, PyExceptionTypes.OverflowError, "can't convert negative int to unsigned");
-            BigInteger lo = signed && length > 0 ? -(BigInteger.One << (8 * length - 1)) : BigInteger.Zero;
-            BigInteger hi = length == 0 ? BigInteger.Zero
-                : signed ? (BigInteger.One << (8 * length - 1)) - 1 : (BigInteger.One << (8 * length)) - 1;
-            if (v < lo || v > hi)
+            // In range by bit length, in long arithmetic: unsigned needs bits(v) <= 8*length, signed needs
+            // bits(v) or bits(-v-1) <= 8*length-1 (2^(8*length) is never built, and 8*length may pass int).
+            long room = 8L * length - (signed ? 1 : 0);
+            long need = length == 0 ? (v.IsZero ? 0 : 1) : NumericOps.BitLength(v.Sign < 0 ? -v - 1 : v);
+            if (need > Math.Max(room, 0))
                 throw Raise.Make(c, PyExceptionTypes.OverflowError, "int too big to convert");
 
-            BigInteger work = v < 0 ? v + (BigInteger.One << (8 * length)) : v;
-            var big = new byte[length];
-            for (int i = length - 1; i >= 0; i--)
-            {
-                big[i] = (byte)(work & 0xFF);
-                work >>= 8;
-            }
-            if (order == "little")
-                Array.Reverse(big);
-            return c.Values.Bytes(big);
+            // The range check above guarantees v fits: its two's-complement bytes, sign-extended to length,
+            // in one pass (a byte-at-a-time shift loop was quadratic).
+            byte[] raw = v.ToByteArray();
+            byte fill = v.Sign < 0 ? (byte)0xFF : (byte)0;
+            var bytes = new byte[length];
+            for (int i = 0; i < length; i++)
+                bytes[i] = i < raw.Length ? raw[i] : fill;
+            if (order == "big")
+                Array.Reverse(bytes);
+            return c.Values.Bytes(bytes);
         }
 
         // from_bytes(bytes, byteorder='big', *, signed=False) — 3.11 byteorder default, keyword allowed.
@@ -119,35 +131,24 @@ namespace Outbridge.PyLite.Runtime.Values
             ScriptValue orderArg = a.Length >= 2 ? a[1] : KwGet(kw, "byteorder");
             string order = orderArg == null ? "big" : ByteOrder(c, orderArg);
             bool signed = KwBool(c, kw, "signed");
-            byte[] big = (byte[])data.Clone();
+            // One linear pass: BigInteger reads little-endian two's complement, and a trailing zero byte
+            // keeps an unsigned value positive (a byte-at-a-time shift loop was quadratic). Values.Int
+            // then applies MaxIntBits.
+            c.Budget.ChargeLinear(data.Length);
+            byte[] le = new byte[data.Length + (signed ? 0 : 1)];
             if (order == "little")
-                Array.Reverse(big);
-            BigInteger v = BigInteger.Zero;
-            for (int i = 0; i < big.Length; i++)
-                v = (v << 8) | big[i];
-            if (signed && big.Length > 0 && (big[0] & 0x80) != 0)
-                v -= BigInteger.One << (8 * big.Length);
-            return c.Values.Int(v);
+                Array.Copy(data, le, data.Length);
+            else
+            {
+                for (int i = 0; i < data.Length; i++)
+                    le[i] = data[data.Length - 1 - i];
+            }
+            return c.Values.Int(new BigInteger(le));
         }
 
         private static byte[] AsByteSeq(EvalContext c, ScriptValue v)
         {
-            BytesValue b = v as BytesValue;
-            if (b != null)
-                return b.Data;
-            var list = new List<byte>();
-            IScriptIterator it = PyOps.GetIterator(v, c);
-            ScriptValue e;
-            while (it.MoveNext(c, out e))
-            {
-                if (e.Kind != ValueKind.Int && e.Kind != ValueKind.Bool)
-                    throw Raise.TypeError(c, "'" + e.PyTypeName + "' object cannot be interpreted as an integer");
-                BigInteger n = NumericOps.AsBigInteger(e);
-                if (n < 0 || n > 255)
-                    throw Raise.ValueError(c, "bytes must be in range(0, 256)");
-                list.Add((byte)n);
-            }
-            return list.ToArray();
+            return Modules.Support.Iter.ToByteArray(c, v);
         }
 
         private static string ByteOrder(EvalContext c, ScriptValue v)

@@ -9,7 +9,7 @@ using Outbridge.PyLite.Runtime.Values;
 namespace Outbridge.PyLite.Modules
 {
     // The math module. A thin wrapper over System.Math + BigInteger with CPython's
-    // errno-as-exception domain/range semantics. Immutable, sharable. Reference: Modules/mathmodule.c.
+    // errno-as-exception domain/range semantics; no state, built per importing run. Reference: Modules/mathmodule.c.
     internal static partial class MathModule
     {
         public static ModuleValue Create(EvalContext ctx)
@@ -20,29 +20,29 @@ namespace Outbridge.PyLite.Modules
                 ["pi"] = ctx.Values.Float(Math.PI),
                 ["e"] = ctx.Values.Float(Math.E),
 
-                ["ceil"] = Fn("ceil", (c, a) => RoundToInt(c, a, RoundMode.Ceil)),
-                ["floor"] = Fn("floor", (c, a) => RoundToInt(c, a, RoundMode.Floor)),
-                ["trunc"] = Fn("trunc", (c, a) => RoundToInt(c, a, RoundMode.Trunc)),
+                ["ceil"] = Fn("ceil", 1, 1, (c, a) => RoundToInt(c, a, RoundMode.Ceil)),
+                ["floor"] = Fn("floor", 1, 1, (c, a) => RoundToInt(c, a, RoundMode.Floor)),
+                ["trunc"] = Fn("trunc", 1, 1, (c, a) => RoundToInt(c, a, RoundMode.Trunc)),
 
-                ["fabs"] = Fn("fabs", (c, a) => c.Values.Float(Math.Abs(AsDouble(c, Arg(c, a, 0), "fabs")))),
-                ["copysign"] = Fn("copysign", (c, a) => c.Values.Float(FloatMath.CopySign(AsDouble(c, Arg(c, a, 0), "copysign"), AsDouble(c, Arg(c, a, 1), "copysign")))),
-                ["fmod"] = Fn("fmod", (c, a) => Fmod(c, a)),
-                ["modf"] = Fn("modf", (c, a) => Modf(c, a)),
-                ["frexp"] = Fn("frexp", (c, a) => Frexp(c, a)),
-                ["ldexp"] = Fn("ldexp", (c, a) => Ldexp(c, a)),
-                ["degrees"] = Fn("degrees", (c, a) => c.Values.Float(AsDouble(c, Arg(c, a, 0), "degrees") * (180.0 / Math.PI))),
-                ["radians"] = Fn("radians", (c, a) => c.Values.Float(AsDouble(c, Arg(c, a, 0), "radians") * (Math.PI / 180.0))),
+                ["fabs"] = Fn("fabs", 1, 1, (c, a) => c.Values.Float(Math.Abs(AsDouble(c, Arg(c, a, 0))))),
+                ["copysign"] = Fn("copysign", 2, 2, (c, a) => c.Values.Float(FloatMath.CopySign(AsDouble(c, Arg(c, a, 0)), AsDouble(c, Arg(c, a, 1))))),
+                ["fmod"] = Fn("fmod", 2, 2, (c, a) => Fmod(c, a)),
+                ["modf"] = Fn("modf", 1, 1, (c, a) => Modf(c, a)),
+                ["frexp"] = Fn("frexp", 1, 1, (c, a) => Frexp(c, a)),
+                ["ldexp"] = Fn("ldexp", 2, 2, (c, a) => Ldexp(c, a)),
+                ["degrees"] = Fn("degrees", 1, 1, (c, a) => c.Values.Float(AsDouble(c, Arg(c, a, 0)) * (180.0 / Math.PI))),
+                ["radians"] = Fn("radians", 1, 1, (c, a) => c.Values.Float(AsDouble(c, Arg(c, a, 0)) * (Math.PI / 180.0))),
 
                 ["exp"] = Wrap("exp", Math.Exp),
                 ["expm1"] = Wrap("expm1", FloatMath.Expm1),
-                ["sqrt"] = Fn("sqrt", (c, a) => Sqrt(c, a)),
+                ["sqrt"] = Fn("sqrt", 1, 1, (c, a) => Sqrt(c, a)),
                 ["sin"] = Wrap("sin", Math.Sin),
                 ["cos"] = Wrap("cos", Math.Cos),
                 ["tan"] = Wrap("tan", Math.Tan),
                 ["asin"] = Wrap("asin", Math.Asin),
                 ["acos"] = Wrap("acos", Math.Acos),
                 ["atan"] = Wrap("atan", Math.Atan),
-                ["atan2"] = Fn("atan2", (c, a) => c.Values.Float(Math.Atan2(AsDouble(c, Arg(c, a, 0), "atan2"), AsDouble(c, Arg(c, a, 1), "atan2")))),
+                ["atan2"] = Fn("atan2", 2, 2, (c, a) => c.Values.Float(Math.Atan2(AsDouble(c, Arg(c, a, 0)), AsDouble(c, Arg(c, a, 1))))),
                 ["sinh"] = Wrap("sinh", Math.Sinh),
                 ["cosh"] = Wrap("cosh", Math.Cosh),
                 ["tanh"] = Wrap("tanh", Math.Tanh),
@@ -50,17 +50,17 @@ namespace Outbridge.PyLite.Modules
                 ["acosh"] = Wrap("acosh", FloatMath.Acosh),
                 ["atanh"] = Wrap("atanh", FloatMath.Atanh),
 
-                ["isfinite"] = Fn("isfinite", (c, a) => Predicate(c, a, PredKind.Finite)),
-                ["isinf"] = Fn("isinf", (c, a) => Predicate(c, a, PredKind.Inf)),
-                ["isnan"] = Fn("isnan", (c, a) => Predicate(c, a, PredKind.Nan)),
+                ["isfinite"] = Fn("isfinite", 1, 1, (c, a) => Predicate(c, a, PredKind.Finite)),
+                ["isinf"] = Fn("isinf", 1, 1, (c, a) => Predicate(c, a, PredKind.Inf)),
+                ["isnan"] = Fn("isnan", 1, 1, (c, a) => Predicate(c, a, PredKind.Nan)),
 
-                ["pow"] = Fn("pow", (c, a) => Pow(c, a)),
-                ["hypot"] = Fn("hypot", (c, a) => c.Values.Float(FloatMath.Hypot(AsDouble(c, Arg(c, a, 0), "hypot"), AsDouble(c, Arg(c, a, 1), "hypot")))),
+                ["pow"] = Fn("pow", 2, 2, (c, a) => Pow(c, a)),
+                ["hypot"] = Fn("hypot", 0, int.MaxValue, (c, a) => c.Values.Float(FloatMath.Hypot(AsDouble(c, Arg(c, a, 0)), AsDouble(c, Arg(c, a, 1))))),
 
-                ["log"] = Fn("log", (c, a) => Log(c, a)),
-                ["log2"] = Fn("log2", (c, a) => Log2(c, a)),
-                ["log10"] = Fn("log10", (c, a) => LogHelper(c, Arg(c, a, 0), Math.Log10)),
-                ["log1p"] = Fn("log1p", (c, a) => Log1p(c, a)),
+                ["log"] = Fn("log", 1, 2, (c, a) => Log(c, a)),
+                ["log2"] = Fn("log2", 1, 1, (c, a) => Log2(c, a)),
+                ["log10"] = Fn("log10", 1, 1, (c, a) => LogHelper(c, Arg(c, a, 0), Math.Log10)),
+                ["log1p"] = Fn("log1p", 1, 1, (c, a) => Log1p(c, a)),
             };
             AddSummationAndFactorial(ctx, m);
             AddModern(ctx, m);
@@ -69,16 +69,23 @@ namespace Outbridge.PyLite.Modules
 
         // ---- helpers ----
 
-        private static BuiltinFunctionValue Fn(string name, Func<EvalContext, ScriptValue[], ScriptValue> f)
+        // math functions are positional-only C functions: min..max arguments, no keywords (sqrt(4, 5) used to
+        // be sqrt(4)).
+        private static BuiltinFunctionValue Fn(string name, int min, int max, Func<EvalContext, ScriptValue[], ScriptValue> f)
         {
-            return BuiltinFunctionValue.Make(name, (self, args, kw, c) => f(c, args));
+            return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
+            {
+                Args.NoKw(c, kw, name);
+                Args.CheckPositional(c, args, name, min, max);
+                return f(c, args);
+            });
         }
 
         // A single-argument function through the domain/range wrapper.
         // log1p's domain is x > -1; the pole at -1 is a domain error (CPython m_log1p, no overflow path).
         private static ScriptValue Log1p(EvalContext c, ScriptValue[] a)
         {
-            double x = AsDouble(c, Arg(c, a, 0), "log1p");
+            double x = AsDouble(c, Arg(c, a, 0));
             if (x <= -1.0)
                 throw Raise.ValueError(c, "math domain error");
             return c.Values.Float(Math1(c, FloatMath.Log1p(x), x));
@@ -88,7 +95,7 @@ namespace Outbridge.PyLite.Modules
         {
             return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
             {
-                double x = AsDouble(c, Arg(c, args, 0), name);
+                double x = AsDouble(c, Args.One(c, args, kw, name));
                 return c.Values.Float(Math1(c, func(x), x));
             });
         }
@@ -101,7 +108,7 @@ namespace Outbridge.PyLite.Modules
         }
 
         // numeric reader; math's non-number text is "a float is required".
-        internal static double AsDouble(EvalContext ctx, ScriptValue v, string func)
+        internal static double AsDouble(EvalContext ctx, ScriptValue v)
         {
             BoolValue bv = v as BoolValue;
             if (bv != null)
@@ -170,8 +177,8 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Fmod(EvalContext ctx, ScriptValue[] a)
         {
-            double fx = AsDouble(ctx, Arg(ctx, a, 0), "fmod");
-            double fy = AsDouble(ctx, Arg(ctx, a, 1), "fmod");
+            double fx = AsDouble(ctx, Arg(ctx, a, 0));
+            double fy = AsDouble(ctx, Arg(ctx, a, 1));
             if (fy == 0.0)
                 throw Raise.ValueError(ctx, "math domain error");
             double r = FloatMath.Fmod(fx, fy);
@@ -182,7 +189,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Modf(EvalContext ctx, ScriptValue[] a)
         {
-            double fx = AsDouble(ctx, Arg(ctx, a, 0), "modf");
+            double fx = AsDouble(ctx, Arg(ctx, a, 0));
             double frac, ipart;
             if (double.IsInfinity(fx))
             {
@@ -204,7 +211,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Frexp(EvalContext ctx, ScriptValue[] a)
         {
-            double x = AsDouble(ctx, Arg(ctx, a, 0), "frexp");
+            double x = AsDouble(ctx, Arg(ctx, a, 0));
             double m;
             int e;
             FloatMath.Frexp(x, out m, out e);
@@ -213,7 +220,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Ldexp(EvalContext ctx, ScriptValue[] a)
         {
-            double fx = AsDouble(ctx, Arg(ctx, a, 0), "ldexp");
+            double fx = AsDouble(ctx, Arg(ctx, a, 0));
             ScriptValue expArg = Arg(ctx, a, 1);
             BigInteger bi;
             IntValue iv = expArg as IntValue;
@@ -233,7 +240,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Sqrt(EvalContext ctx, ScriptValue[] a)
         {
-            double fx = AsDouble(ctx, Arg(ctx, a, 0), "sqrt");
+            double fx = AsDouble(ctx, Arg(ctx, a, 0));
             if (fx == 0.0)
                 return ctx.Values.Float(fx);   // sqrt(-0.0) = -0.0, no error
             if (fx < 0.0)

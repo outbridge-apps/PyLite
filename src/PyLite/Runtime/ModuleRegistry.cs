@@ -90,6 +90,11 @@ namespace Outbridge.PyLite.Runtime
             return _factories.ContainsKey(name);
         }
 
+        internal IEnumerable<string> Names
+        {
+            get { return _factories.Keys; }
+        }
+
         public ModuleValue Import(string name, EvalContext ctx)
         {
             ModuleValue cached;

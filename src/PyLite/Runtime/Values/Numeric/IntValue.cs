@@ -53,17 +53,6 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static IntValue Cached(long v) { return SmallCache[(int)v - CacheLow]; }
 
-        internal static bool TryGetCached(BigInteger v, out IntValue cached)
-        {
-            if (v >= CacheLow && v <= CacheHigh)
-            {
-                cached = SmallCache[(int)v - CacheLow];
-                return true;
-            }
-            cached = null;
-            return false;
-        }
-
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
         internal override ValueKind Kind { get { return ValueKind.Int; } }
 
@@ -117,6 +106,28 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
+            EnumMemberValue member;
+            if (ctx != null && ctx.EnumValues != null && ctx.EnumValues.TryGetValue(this, out member))
+            {
+                member.AppendRepr(sb, ctx, depth);   // <Num.ONE: 1>
+                return;
+            }
+            AppendDigits(sb, ctx);
+        }
+
+        protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
+        {
+            EnumMemberValue member;
+            if (ctx != null && ctx.EnumValues != null && ctx.EnumValues.TryGetValue(this, out member) && member.HasOwnStr)
+            {
+                sb.Append(member.StrText(ctx));   // an IntEnum member whose class wrote __str__
+                return;
+            }
+            AppendDigits(sb, ctx);
+        }
+
+        private void AppendDigits(BudgetStringBuilder sb, EvalContext ctx)
+        {
             if (IsSmall)
             {
                 NumericOps.ChargeIntToStr(Small, ctx);
@@ -124,7 +135,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 return;
             }
             NumericOps.ChargeIntToStr(_big, ctx);
-            sb.Append(_big.ToString(CultureInfo.InvariantCulture));
+            sb.Append(BigOps.ToDecimalString(ctx, _big));
         }
     }
 }

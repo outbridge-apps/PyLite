@@ -12,16 +12,16 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             var s = new Slots(v => ((DictValue)v).Count);
-            s.Method("get", (self, a, kw, c) => Get(c, D(self), a));
-            s.Method("pop", (self, a, kw, c) => Pop(c, D(self), a));
-            s.Method("popitem", (self, a, kw, c) => PopItem(c, D(self)));
-            s.Method("setdefault", (self, a, kw, c) => SetDefault(c, D(self), a));
+            s.Method("get", 1, 2, (self, a, kw, c) => Get(c, D(self), a));
+            s.Method("pop", 1, 2, (self, a, kw, c) => Pop(c, D(self), a));
+            s.Method("popitem", 0, 0, (self, a, kw, c) => PopItem(c, D(self)));
+            s.Method("setdefault", 1, 2, (self, a, kw, c) => SetDefault(c, D(self), a));
             s.Method("update", (self, a, kw, c) => Update(c, D(self), a, kw));
-            s.Method("clear", (self, a, kw, c) => { D(self).Table.Clear(c); return c.Values.None; });
-            s.Linear("copy", (self, a, kw, c) => CopyDict(c, D(self)));
-            s.Method("keys", (self, a, kw, c) => D(self).KeysView(c));
-            s.Method("values", (self, a, kw, c) => D(self).ValuesView(c));
-            s.Method("items", (self, a, kw, c) => D(self).ItemsView(c));
+            s.Method("clear", 0, 0, (self, a, kw, c) => { D(self).Table.Clear(c); return c.Values.None; });
+            s.Linear("copy", 0, 0, (self, a, kw, c) => CopyDict(c, D(self)));
+            s.Method("keys", 0, 0, (self, a, kw, c) => D(self).KeysView(c));
+            s.Method("values", 0, 0, (self, a, kw, c) => D(self).ValuesView(c));
+            s.Method("items", 0, 0, (self, a, kw, c) => D(self).ItemsView(c));
             return s.Table;
         }
 
@@ -29,7 +29,7 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static IDictionary<string, SlotDescriptor> BuildViewSlots()
         {
             var s = new Slots(v => ((DictViewValue)v).Owner.Count);
-            s.Method("isdisjoint", (self, a, kw, c) => c.Values.Bool(IsDisjoint(c, self, a)));
+            s.Method("isdisjoint", 1, 1, (self, a, kw, c) => c.Values.Bool(IsDisjoint(c, self, a)));
             return s.Table;
         }
 
@@ -48,8 +48,6 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Get(EvalContext c, DictValue d, ScriptValue[] a)
         {
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(c, "get expected at most 2 arguments, got " + a.Length);
             ScriptValue v;
             if (d.TryGet(a[0], c, out v))
                 return v;
@@ -58,8 +56,6 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Pop(EvalContext c, DictValue d, ScriptValue[] a)
         {
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(c, "pop expected at most 2 arguments, got " + a.Length);
             ScriptValue v;
             if (d.TryGet(a[0], c, out v))
             {
@@ -74,23 +70,20 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue PopItem(EvalContext c, DictValue d)
         {
             OrderedTable t = d.Table;
-            for (int p = t.EntriesUsed - 1; p >= 0; p--)
+            int p = t.FindLastLive();
+            if (p >= 0)
             {
                 long h;
                 ScriptValue k, v;
-                if (t.TryGetEntryAt(p, out h, out k, out v))
-                {
-                    t.Delete(k, h, c, 0);
-                    return c.Values.Tuple(new[] { k, v });
-                }
+                t.TryGetEntryAt(p, out h, out k, out v);
+                t.Delete(k, h, c, 0);
+                return c.Values.Tuple(new[] { k, v });
             }
             throw Raise.Make(c, PyExceptionTypes.KeyError, "popitem(): dictionary is empty");
         }
 
         private static ScriptValue SetDefault(EvalContext c, DictValue d, ScriptValue[] a)
         {
-            if (a.Length < 1 || a.Length > 2)
-                throw Raise.TypeError(c, "setdefault expected at most 2 arguments, got " + a.Length);
             ScriptValue v;
             if (d.TryGet(a[0], c, out v))
                 return v;
@@ -101,8 +94,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue Update(EvalContext c, DictValue d, ScriptValue[] a, KwArgs kw)
         {
-            if (a.Length > 1)
-                throw Raise.TypeError(c, "update expected at most 1 arguments, got " + a.Length);
+            Args.Unpack(c, a, "update", 0, 1);
             if (a.Length == 1)
                 Merge(c, d, a[0]);
             for (int j = 0; j < kw.Count; j++)
@@ -112,9 +104,27 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue CopyDict(EvalContext c, DictValue d)
         {
-            DictValue r = c.Values.Dict(d.Count);
-            Merge(c, r, d);
-            return r;
+            return c.Values.CopyDict(d);
+        }
+
+        // dict(source, **kw) and the collections subtypes' constructors: the positional mapping or pairs, then
+        // the keywords as str keys.
+        internal static void InitFrom(EvalContext c, DictValue d, ScriptValue source, KwArgs kw)
+        {
+            if (source != null)
+                Merge(c, d, source);
+            for (int j = 0; j < kw.Count; j++)
+                d.SetItem(c.Values.Str(kw.NameAt(j)), kw.ValueAt(j), c);
+        }
+
+        // dict.fromkeys(iterable[, value]) into d: every key maps to the same value object.
+        internal static DictValue FillFromKeys(EvalContext c, DictValue d, ScriptValue keys, ScriptValue value)
+        {
+            IScriptIterator it = PyOps.GetIterator(keys, c);
+            ScriptValue key;
+            while (it.MoveNext(c, out key))
+                d.SetItem(key, value, c);
+            return d;
         }
 
         // Shared dict-population semantics (mapping copy or 2-sequence iterable); reused by dict() ctor.

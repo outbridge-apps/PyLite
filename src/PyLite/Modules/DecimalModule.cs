@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
@@ -15,11 +16,11 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["Decimal"] = DecimalType(ctx),
-                ["DecimalException"] = ExcType(ctx, "DecimalException", PyExceptionTypes.DecimalException),
-                ["InvalidOperation"] = ExcType(ctx, "InvalidOperation", PyExceptionTypes.DecimalInvalidOperation),
-                ["DivisionByZero"] = ExcType(ctx, "DivisionByZero", PyExceptionTypes.DecimalDivisionByZero),
-                ["Overflow"] = ExcType(ctx, "Overflow", PyExceptionTypes.DecimalOverflow),
-                ["Underflow"] = ExcType(ctx, "Underflow", PyExceptionTypes.DecimalUnderflow),
+                ["DecimalException"] = ModuleKit.ExceptionClass(PyExceptionTypes.DecimalException),
+                ["InvalidOperation"] = ModuleKit.ExceptionClass(PyExceptionTypes.DecimalInvalidOperation),
+                ["DivisionByZero"] = ModuleKit.ExceptionClass(PyExceptionTypes.DecimalDivisionByZero),
+                ["Overflow"] = ModuleKit.ExceptionClass(PyExceptionTypes.DecimalOverflow),
+                ["Underflow"] = ModuleKit.ExceptionClass(PyExceptionTypes.DecimalUnderflow),
                 ["ROUND_CEILING"] = ctx.Values.Str("ROUND_CEILING"),
                 ["ROUND_FLOOR"] = ctx.Values.Str("ROUND_FLOOR"),
                 ["ROUND_UP"] = ctx.Values.Str("ROUND_UP"),
@@ -37,7 +38,7 @@ namespace Outbridge.PyLite.Modules
         {
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["from_float"] = BuiltinFunctionValue.Make("from_float", (self, args, kw, c) => DecFromFloat(c, args)),
+                ["from_float"] = BuiltinFunctionValue.Make("from_float", Args.Positional("from_float", 1, 1, (self, args, kw, c) => DecFromFloat(c, args))),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => DecimalValue.Construct(c, args, kw);
             return ctx.Values.Type("decimal.Decimal", ctor, null, slots);
@@ -54,12 +55,6 @@ namespace Outbridge.PyLite.Modules
             if (iv != null)
                 return DecimalValue.FromDecimal(ctx, DecimalValue.IntToDecimal(ctx, iv.Value));
             throw Raise.TypeError(ctx, "argument must be int or float.");
-        }
-
-        private static TypeValue ExcType(EvalContext ctx, string name, PyExceptionType pt)
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(pt, args);
-            return ctx.Values.Type(name, ctor, null, null, pt);
         }
     }
 }

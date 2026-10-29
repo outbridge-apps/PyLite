@@ -26,7 +26,7 @@ namespace Outbridge.PyLite.Runtime.Values
             d["start"] = SlotDescriptor.MakeProperty("start", (self, ctx) => ((SliceValue)self).StartObj);
             d["stop"] = SlotDescriptor.MakeProperty("stop", (self, ctx) => ((SliceValue)self).StopObj);
             d["step"] = SlotDescriptor.MakeProperty("step", (self, ctx) => ((SliceValue)self).StepObj);
-            d["indices"] = SlotDescriptor.MakeMethod("indices", (self, a, kw, ctx) => ((SliceValue)self).IndicesMethod(a, ctx));
+            d["indices"] = SlotDescriptor.MakeMethod("indices", Args.Positional("indices", 1, 1, (self, a, kw, ctx) => ((SliceValue)self).IndicesMethod(a, ctx)));
             return d;
         }
 

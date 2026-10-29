@@ -11,7 +11,6 @@ namespace Outbridge.PyLite.Modules.Support
     internal sealed class RegexCache
     {
         internal const int MaxEntries = 512;
-        internal const int PerOpTimeoutMs = 250;
 
         private readonly Dictionary<Key, PatternValue> _map = new Dictionary<Key, PatternValue>();
 
@@ -30,7 +29,7 @@ namespace Outbridge.PyLite.Modules.Support
             Regex net;
             try
             {
-                net = new Regex(tr.NetPattern, tr.Options, TimeSpan.FromMilliseconds(PerOpTimeoutMs));
+                net = new Regex(tr.NetPattern, tr.Options, TimeSpan.FromMilliseconds(ctx.Limits.RegexPerOpTimeoutMs));
             }
             catch (ArgumentException ex)
             {
@@ -44,6 +43,7 @@ namespace Outbridge.PyLite.Modules.Support
                     ctx.Limits.MaxAllocBytes, ctx.Limits.MaxAllocBytes);
             }
 
+            tr.Groups.Bind(net);
             pv = new PatternValue(net, tr.Groups, tr.EffectiveFlags, pattern);
             if (_map.Count >= MaxEntries)
                 _map.Clear();

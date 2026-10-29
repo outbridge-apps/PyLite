@@ -20,23 +20,24 @@ namespace Outbridge.PyLite.Modules
             };
             var bytesStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["fromhex"] = BuiltinFunctionValue.Make("fromhex", (s, args, kw, c) => BytesFromHex(c, args)),
-                ["maketrans"] = BuiltinFunctionValue.Make("maketrans", (s, args, kw, c) => BytesMethods.MakeTrans(c, args)),
+                ["fromhex"] = BuiltinFunctionValue.Make("fromhex", Args.Positional("fromhex", 1, 1, (s, args, kw, c) => BytesFromHex(c, args))),
+                ["maketrans"] = BuiltinFunctionValue.Make("maketrans", Args.Positional("maketrans", 0, int.MaxValue, (s, args, kw, c) => BytesMethods.MakeTrans(c, args))),
             };
             var strStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["maketrans"] = BuiltinFunctionValue.Make("maketrans", (s, args, kw, c) => StrMakeTrans(c, args)),
+                ["maketrans"] = BuiltinFunctionValue.Make("maketrans", Args.Positional("maketrans", 0, int.MaxValue, (s, args, kw, c) => StrMakeTrans(c, args))),
             };
             var floatStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["fromhex"] = BuiltinFunctionValue.Make("fromhex", (s, args, kw, c) => FloatMethods.FromHex(c, args)),
+                ["fromhex"] = BuiltinFunctionValue.Make("fromhex", Args.Positional("fromhex", 1, 1, (s, args, kw, c) => FloatMethods.FromHex(c, args))),
             };
             AddType(d, "int", (self, args, kw, c) => IntBuiltin(c, args, kw), intStatics, IntValue.IntType);
             AddType(d, "float", (self, args, kw, c) => FloatBuiltin(c, args, kw), floatStatics, FloatValue.FloatType);
             AddType(d, "str", (self, args, kw, c) => StrBuiltin(c, args, kw), strStatics, StrValue.StrType);
             // bool inherits int's classmethod in CPython, and it answers with an int there too
             AddType(d, "bool", (self, args, kw, c) => BoolBuiltin(c, args, kw), intStatics);
-            AddType(d, "bytes", (self, args, kw, c) => BytesBuiltin(c, args), bytesStatics, BytesValue.BytesType);
+            AddType(d, "bytes", (self, args, kw, c) => BytesBuiltin(c, StrMethods.WithKw(c, args, kw, "bytes", "source", "encoding", "errors")),
+                bytesStatics, BytesValue.BytesType);
         }
 
         // str.maketrans(x[, y[, z]]) -> {ordinal: str|int|None}. One arg: a dict whose str keys must be
@@ -126,22 +127,14 @@ namespace Outbridge.PyLite.Modules
                     i++;
                     continue;
                 }
-                int hi = HexNibble(hex[i]);
-                int lo = i + 1 < hex.Length ? HexNibble(hex[i + 1]) : -1;
+                int hi = Support.Hex.Nibble(hex[i]);
+                int lo = i + 1 < hex.Length ? Support.Hex.Nibble(hex[i + 1]) : -1;
                 if (hi < 0 || lo < 0)
                     throw Raise.ValueError(c, "non-hexadecimal number found in fromhex() arg at position " + i);
                 outB.Add((byte)(hi * 16 + lo));
                 i += 2;
             }
             return c.Values.Bytes(outB.ToArray());
-        }
-
-        private static int HexNibble(char ch)
-        {
-            if (ch >= '0' && ch <= '9') return ch - '0';
-            if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
-            if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
-            return -1;
         }
 
         // bytes()  bytes(n)->zeros  bytes(iterable of 0..255)  bytes(str, encoding[, errors])  bytes(bytes)
@@ -171,19 +164,7 @@ namespace Outbridge.PyLite.Modules
                         n > long.MaxValue ? long.MaxValue : (long)n);   // report clamped: (long)10**100 would overflow
                 return c.Values.Bytes(new byte[(int)n]);
             }
-            var list = new List<byte>();
-            IScriptIterator it = PyOps.GetIterator(src, c);
-            ScriptValue e;
-            while (it.MoveNext(c, out e))
-            {
-                if (e.Kind != ValueKind.Int && e.Kind != ValueKind.Bool)
-                    throw Raise.TypeError(c, "'" + e.PyTypeName + "' object cannot be interpreted as an integer");
-                BigInteger v = NumericOps.AsBigInteger(e);
-                if (v < 0 || v > 255)
-                    throw Raise.ValueError(c, "bytes must be in range(0, 256)");
-                list.Add((byte)v);
-            }
-            return c.Values.Bytes(list.ToArray());
+            return c.Values.Bytes(Support.Iter.ToByteArray(c, src));
         }
 
         private static ScriptValue IntBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
@@ -218,7 +199,7 @@ namespace Outbridge.PyLite.Modules
 
             IntValue iv = xArg as IntValue;
             if (iv != null)
-                return xArg;
+                return c.EnumValues != null && c.EnumValues.ContainsKey(iv) ? c.Values.Int(iv.Value) : xArg;   // int(IntEnum member) is a plain int
             BoolValue bv = xArg as BoolValue;
             if (bv != null)
                 return c.Values.Int(bv.Value ? 1 : 0);
@@ -230,7 +211,7 @@ namespace Outbridge.PyLite.Modules
                 return c.Values.Int(IntParser.Parse(c, sv.Value, 10));
             FractionValue fr = xArg as FractionValue;   // __int__ truncates toward zero
             if (fr != null)
-                return c.Values.Int(BigInteger.Divide(fr.Num, fr.Den));
+                return c.Values.Int(BigOps.Divide(c, fr.Num, fr.Den));
             DecimalValue dv = xArg as DecimalValue;
             if (dv != null)
                 return c.Values.Int(new BigInteger(Math.Truncate(dv.Value)));
@@ -266,8 +247,7 @@ namespace Outbridge.PyLite.Modules
         {
             if (kw.Count > 0)
                 throw Raise.TypeError(c, "float() takes no keyword arguments");
-            if (args.Length > 1)
-                throw Raise.TypeError(c, "float expected at most 1 argument, got " + args.Length);
+            Args.Unpack(c, args, "float", 0, 1);
             if (args.Length == 0)
                 return c.Values.Float(0.0);
             ScriptValue x = args[0];
@@ -300,7 +280,7 @@ namespace Outbridge.PyLite.Modules
             return d;
         }
 
-        private static double ParseFloat(EvalContext c, string original)
+        internal static double ParseFloat(EvalContext c, string original)
         {
             int start = 0, end = original.Length;
             while (start < end && PyUnicode.IsPythonSpace(original[start]))
@@ -327,8 +307,9 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.ValueError(c, "could not convert string to float: " + c.Values.Str(Truncate200(original)).Repr(c));
             try
             {
-                double d = double.Parse((sign < 0 ? "-" : "") + rest.Replace("_", ""), NumberStyles.Float, CultureInfo.InvariantCulture);
-                return d;
+                // The sign is applied after parsing: net472's double.Parse("-0.0") answers +0.0.
+                double d = double.Parse(rest.Replace("_", ""), NumberStyles.Float, CultureInfo.InvariantCulture);
+                return sign < 0 ? -d : d;
             }
             catch (OverflowException)
             {
@@ -381,9 +362,11 @@ namespace Outbridge.PyLite.Modules
             return digits;
         }
 
+        private static readonly string[] StrNames = { "object", "encoding", "errors" };   // built once (P8)
+
         private static ScriptValue StrBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
-            args = StrMethods.WithKw(c, args, kw, "str", "object", "encoding", "errors");
+            args = StrMethods.WithKw(c, args, kw, "str", StrNames);
             Args.AtMost(c, args, "str", 3);
             if (args.Length == 0)
                 return c.Values.Str("");
@@ -404,8 +387,8 @@ namespace Outbridge.PyLite.Modules
                 }
                 return c.Values.Str(BytesCodec.Decode(c, data.Data, enc, errors));
             }
-            if (x.Kind == ValueKind.Str)
-                return x;   // the same object, no copy
+            if (x.Kind == ValueKind.Str && (c.EnumValues == null || !c.EnumValues.ContainsKey(x)))
+                return x;   // the same object, no copy (a StrEnum member gives its plain value or __str__)
             return c.Values.Str(x.Str(c));
         }
 
@@ -413,8 +396,7 @@ namespace Outbridge.PyLite.Modules
         {
             if (kw.Count > 0)
                 throw Raise.TypeError(c, "bool() takes no keyword arguments");
-            if (args.Length > 1)
-                throw Raise.TypeError(c, "bool expected at most 1 argument, got " + args.Length);
+            Args.Unpack(c, args, "bool", 0, 1);
             if (args.Length == 0)
                 return c.Values.Bool(false);
             return c.Values.Bool(args[0].IsTruthy(c));

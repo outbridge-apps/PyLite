@@ -107,12 +107,10 @@ namespace Outbridge.PyLite.Runtime.Values
                 return SliceOf((SliceValue)index, ctx);
             if (index.Kind == ValueKind.Int || index.Kind == ValueKind.Bool)
             {
-                BigInteger i = NumericOps.AsBigInteger(index);
-                if (i < 0)
-                    i += Value.Length;
-                if (i < 0 || i >= Value.Length)
+                int i;
+                if (!SequenceOps.TryNormIndex(index, Value.Length, out i))
                     throw Raise.IndexError(ctx, "string index out of range");
-                return ctx.Values.StrFromChar(Value[(int)i]);
+                return ctx.Values.StrFromChar(Value[i]);
             }
             throw Raise.TypeError(ctx, "string indices must be integers");
         }
@@ -162,11 +160,26 @@ namespace Outbridge.PyLite.Runtime.Values
             return ctx.Values.Str(sb.ToString());
         }
 
-        protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth) { sb.Append(Value); }
+        protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
+        {
+            EnumMemberValue m;
+            if (ctx != null && ctx.EnumValues != null && ctx.EnumValues.TryGetValue(this, out m) && m.HasOwnStr)
+            {
+                sb.Append(m.StrText(ctx));   // a StrEnum member whose class wrote __str__
+                return;
+            }
+            sb.Append(Value);
+        }
 
         // Port of Objects/unicodeobject.c::unicode_repr, over UTF-16 code units.
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
+            EnumMemberValue member;
+            if (ctx != null && ctx.EnumValues != null && ctx.EnumValues.TryGetValue(this, out member))
+            {
+                member.AppendRepr(sb, ctx, depth);   // <Fruit.APPLE: 'apple'>
+                return;
+            }
             string s = Value;
             char quote = '\'';
             if (s.IndexOf('\'') >= 0 && s.IndexOf('"') < 0)
@@ -283,15 +296,32 @@ namespace Outbridge.PyLite.Runtime.Values
     }
 
     // Iterates by UTF-16 code units; each element is a length-1 string (ASCII cache when possible).
+    // reversed(str) walks the same string backwards (lazily: no array of the whole length).
     internal sealed class StrIterator : ScriptIteratorBase
     {
         private readonly StrValue _s;
-        private int _pos;
+        private readonly bool _reverse;
+        private int _pos;   // forward: the next index; reverse: the count still to yield
 
-        internal StrIterator(StrValue s) { _s = s; }
+        internal StrIterator(StrValue s, bool reverse = false)
+        {
+            _s = s;
+            _reverse = reverse;
+            _pos = reverse ? s.Value.Length : 0;
+        }
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
+            if (_reverse)
+            {
+                if (_pos > 0)
+                {
+                    value = ctx.Values.StrFromChar(_s.Value[--_pos]);
+                    return true;
+                }
+                value = null;
+                return false;
+            }
             if (_pos < _s.Value.Length)
             {
                 value = ctx.Values.StrFromChar(_s.Value[_pos]);

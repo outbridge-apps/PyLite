@@ -86,6 +86,23 @@ namespace Outbridge.PyLite.Runtime.Values
         // — the caller redoes the op on the exact path, which raises/charges canonically. Callers
         // that bypass IntOpSmall (the fused comprehension delegates) must gate on MaxIntBits >= 128
         // themselves so the estimate-based aborts of the big path stay reachable.
+        // a * b in a long, false on overflow without the cost of a thrown OverflowException (P1): operands
+        // both within ±2^31 cannot overflow; otherwise the product is checked by dividing back.
+        internal static bool TryMulLong(long a, long b, out long r)
+        {
+            r = unchecked(a * b);
+            if ((ulong)(a + 0x80000000L) <= 0xFFFFFFFFUL && (ulong)(b + 0x80000000L) <= 0xFFFFFFFFUL)
+                return true;
+            if (a == 0)
+                return true;
+            if ((a == -1 && b == long.MinValue) || (b == -1 && a == long.MinValue) || r / a != b)
+            {
+                r = 0;
+                return false;
+            }
+            return true;
+        }
+
         internal static bool TryLongBinOp(PyBinOp op, long a, long b, out long r)
         {
             switch (op)
@@ -97,16 +114,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     r = unchecked(a - b);
                     return ((a ^ b) & (a ^ r)) >= 0;
                 case PyBinOp.Mul:
-                    try
-                    {
-                        r = checked(a * b);
-                        return true;
-                    }
-                    catch (OverflowException)
-                    {
-                        r = 0;
-                        return false;
-                    }
+                    return TryMulLong(a, b, out r);
                 case PyBinOp.FloorDiv:
                 case PyBinOp.Mod:
                 {
@@ -238,11 +246,11 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyBinOp.FloorDiv:
                     if (b.IsZero)
                         throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
-                    { BigInteger r; return ctx.Values.Int(FloorDiv(a, b, out r)); }
+                    { BigInteger r; return ctx.Values.Int(FloorDiv(a, b, out r, ctx)); }
                 case PyBinOp.Mod:
                     if (b.IsZero)
                         throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
-                    { BigInteger r; FloorDiv(a, b, out r); return ctx.Values.Int(r); }
+                    { BigInteger r; FloorDiv(a, b, out r, ctx); return ctx.Values.Int(r); }
                 case PyBinOp.Pow: return PowIntOrFloat(a, b, ctx);
                 case PyBinOp.LShift: return LShiftInt(a, b, ctx);
                 case PyBinOp.RShift: return RShiftInt(a, b, ctx);
@@ -259,8 +267,10 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue MulIntCached(IntValue a, IntValue b, EvalContext ctx)
         {
             long bitsA = a.BitLength(), bitsB = b.BitLength();
-            if (bitsA + bitsB > ctx.Limits.MaxIntBits)
+            if (bitsA + bitsB - 1 > ctx.Limits.MaxIntBits)   // a product has bitsA+bitsB-1 or bitsA+bitsB bits
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits, bitsA + bitsB);
+            if ((bitsA / 64 + 1) * (bitsB / 64 + 1) > BigOps.LongWork)
+                return ctx.Values.Int(BigOps.MultiplyLong(ctx, a.Value, b.Value));
             bool big = bitsA > 4096 || bitsB > 4096;
             if (big)
                 ctx.Budget.CheckDeadlineNow();
@@ -272,22 +282,37 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptValue MulInt(BigInteger a, BigInteger b, EvalContext ctx)
         {
+            return ctx.Values.Int(Multiply(a, b, ctx));
+        }
+
+        // a * b gated on MaxIntBits before the product is built, with deadline checks around a big one (a long
+        // one runs under BigOps): the int product, and every product an engine type builds from ints (Fraction).
+        internal static BigInteger Multiply(BigInteger a, BigInteger b, EvalContext ctx)
+        {
             long bitsA = BitLength(a), bitsB = BitLength(b);
-            if (bitsA + bitsB > ctx.Limits.MaxIntBits)
+            if (bitsA + bitsB - 1 > ctx.Limits.MaxIntBits)
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits, bitsA + bitsB);
+            if ((bitsA / 64 + 1) * (bitsB / 64 + 1) > BigOps.LongWork)
+                return BigOps.MultiplyLong(ctx, a, b);
             bool big = bitsA > 4096 || bitsB > 4096;
             if (big)
                 ctx.Budget.CheckDeadlineNow();
             BigInteger r = a * b;
             if (big)
                 ctx.Budget.CheckDeadlineNow();
-            return ctx.Values.Int(r);
+            return r;
         }
 
         // Floor division with remainder (single point for //, %, divmod).
         internal static BigInteger FloorDiv(BigInteger a, BigInteger b, out BigInteger r)
         {
-            BigInteger q = BigInteger.DivRem(a, b, out r);
+            return FloorDiv(a, b, out r, null);
+        }
+
+        // ctx set: a long division runs under BigOps (deadline-bounded).
+        internal static BigInteger FloorDiv(BigInteger a, BigInteger b, out BigInteger r, EvalContext ctx)
+        {
+            BigInteger q = ctx == null ? BigInteger.DivRem(a, b, out r) : BigOps.DivRem(ctx, a, b, out r);
             if (!r.IsZero && r.Sign != b.Sign)
             {
                 q -= 1;
@@ -314,13 +339,14 @@ namespace Outbridge.PyLite.Runtime.Values
                     return ctx.Values.Int(1);
                 return ctx.Values.Int(n.IsEven ? 1 : -1); // (-1)^n
             }
-            long bitsA = BitLength(a);
-            BigInteger totalBits = (BigInteger)bitsA * n;
-            if (totalBits > ctx.Limits.MaxIntBits)
+            // The result has floor(n * log2|a|) + 1 bits: refuse what surely passes MaxIntBits; the
+            // borderline is computed and checked exactly by Values.Int.
+            double estBits = (double)n * BigInteger.Log(abs, 2);
+            if (estBits > ctx.Limits.MaxIntBits + 1.0)
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits,
-                    totalBits > long.MaxValue ? long.MaxValue : (long)totalBits);
+                    estBits >= long.MaxValue ? long.MaxValue : (long)estBits);
             ctx.Budget.CheckDeadlineNow();
-            BigInteger r = BigInteger.Pow(a, (int)n);
+            BigInteger r = BigOps.Pow(ctx, a, (int)n, estBits);
             ctx.Budget.CheckDeadlineNow();
             return ctx.Values.Int(r);
         }
@@ -435,11 +461,14 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyBinOp.FloorDiv:
                     if (y == 0.0)
                         throw Raise.ZeroDivision(ctx, "float divmod()");
-                    return ctx.Values.Float(Math.Floor(x / y));
+                    double ignored;
+                    return ctx.Values.Float(FloatDivMod(x, y, out ignored));
                 case PyBinOp.Mod:
                     if (y == 0.0)
                         throw Raise.ZeroDivision(ctx, "float modulo");
-                    return ctx.Values.Float(FloatMod(x, y));
+                    double mod;
+                    FloatDivMod(x, y, out mod);
+                    return ctx.Values.Float(mod);
                 case PyBinOp.Pow:
                     return ctx.Values.Float(PowFloat(x, y, ctx));
                 default:
@@ -447,12 +476,30 @@ namespace Outbridge.PyLite.Runtime.Values
             }
         }
 
-        private static double FloatMod(double x, double y)
+        // Port of floatobject.c::_float_div_mod, shared by //, % and divmod so the three agree with each other
+        // and with CPython (1 // 0.1 == 9.0, not floor(1 / 0.1) == 10.0; -6.0 % 3 == 0.0, not -0.0). y != 0.
+        internal static double FloatDivMod(double x, double y, out double mod)
         {
-            double r = x % y;   // C# % keeps the sign of x
-            if (r != 0.0 && (r < 0) != (y < 0))
-                r += y;
-            return r;
+            mod = x % y;   // C# % on doubles is C's fmod
+            double div = (x - mod) / y;
+            if (mod != 0.0)
+            {
+                if ((y < 0.0) != (mod < 0.0))
+                {
+                    mod += y;
+                    div -= 1.0;
+                }
+            }
+            else
+            {
+                mod = y < 0.0 ? -0.0 : 0.0;
+            }
+            if (div == 0.0)
+                return BitConverter.DoubleToInt64Bits(x / y) < 0 ? -0.0 : 0.0;
+            double floordiv = Math.Floor(div);
+            if (div - floordiv > 0.5)
+                floordiv += 1.0;
+            return floordiv;
         }
 
         // Port of Objects/floatobject.c::float_pow, with the complex result replaced by ValueError.

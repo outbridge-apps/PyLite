@@ -12,7 +12,7 @@ namespace Outbridge.PyLite.Modules
 {
     // textwrap: a port of Lib/textwrap.py's functions (wrap/fill/shorten with TextWrapper's keyword
     // options, dedent, indent). The TextWrapper class itself is absent (nothing to subclass here).
-    public static class TextwrapModule
+    internal static class TextwrapModule
     {
         private const string Whitespace = "\t\n\x0b\x0c\r ";
 
@@ -105,17 +105,10 @@ namespace Outbridge.PyLite.Modules
         {
             if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
                 throw Raise.TypeError(ctx, "'" + name + "' must be int, not " + v.PyTypeName);
-            System.Numerics.BigInteger b = NumericOps.AsBigInteger(v);   // pure Python takes any int: clamp
-            return b > int.MaxValue ? int.MaxValue : b < int.MinValue ? int.MinValue : (int)b;
+            return Coerce.Clamp32(NumericOps.AsBigInteger(v));   // pure Python takes any int: clamp
         }
 
-        private static string StrOf(EvalContext ctx, ScriptValue v, string name)
-        {
-            StrValue s = v as StrValue;
-            if (s == null)
-                throw Raise.TypeError(ctx, "'" + name + "' must be str, not " + v.PyTypeName);
-            return s.Value;
-        }
+        private static string StrOf(EvalContext ctx, ScriptValue v, string name) { return Coerce.ToStr(ctx, v, "'" + name + "'"); }
 
         private static ScriptValue WrapFn(EvalContext ctx, ScriptValue[] a, KwArgs kw, string fn, bool join)
         {
@@ -412,11 +405,13 @@ namespace Outbridge.PyLite.Modules
                 else
                     take = ctx.CallHook(predV, new ScriptValue[] { ctx.Values.Str(line) }, KwArgs.Empty).IsTruthy(ctx);
                 if (take)
+                {
+                    ctx.Values.CheckStrLen((long)sb.Length + prefix.Length);   // a large prefix on many lines
                     sb.Append(prefix);
+                }
                 sb.Append(line);
                 start = i;
             }
-            ctx.Values.EnsureStrLen(sb.Length);
             return ctx.Values.Str(sb.ToString());
         }
 

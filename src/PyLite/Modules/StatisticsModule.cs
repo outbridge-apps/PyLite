@@ -9,7 +9,7 @@ using Outbridge.PyLite.Runtime.Values;
 namespace Outbridge.PyLite.Modules
 {
     // The statistics module. Exact summation runs in Fraction (mean([1e16,1,1,-1e16])
-    // == 0.5), NOT float. Immutable, sharable. Reference: Lib/statistics.py 3.4 (mode modernized to 3.8+).
+    // == 0.5), NOT float; no state, built per importing run. Reference: Lib/statistics.py (mode as in 3.8+).
     internal static partial class StatisticsModule
     {
         public static ModuleValue Create(EvalContext ctx)
@@ -26,7 +26,7 @@ namespace Outbridge.PyLite.Modules
                 ["median_high"] = Fn("median_high", (c, a) => MedianLowHigh(c, Arg(c, a, 0), true)),
                 ["median_grouped"] = KwFn("median_grouped", "interval", (c, a) => MedianGrouped(c, Arg(c, a, 0), Opt(a, 1))),
                 ["mode"] = Fn("mode", (c, a) => Mode(c, Arg(c, a, 0))),
-                ["StatisticsError"] = ExcType(ctx),
+                ["StatisticsError"] = ModuleKit.ExceptionClass(PyExceptionTypes.StatisticsError),
             };
             AddModern(ctx, m);
             return ctx.Values.Module("statistics", m);
@@ -55,12 +55,6 @@ namespace Outbridge.PyLite.Modules
             return a[i];
         }
 
-        private static TypeValue ExcType(EvalContext ctx)
-        {
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(PyExceptionTypes.StatisticsError, args);
-            return ctx.Values.Type("StatisticsError", ctor, null, null, PyExceptionTypes.StatisticsError);
-        }
-
         // ---- exact summation ----
 
         private struct SumInfo
@@ -84,34 +78,72 @@ namespace Outbridge.PyLite.Modules
                 + (info.SawFloat ? "float" : "Fraction") + " and Decimal");
         }
 
+        // CPython's _sum (P14): numerators accumulate per denominator, so an element costs an integer add, not
+        // a Fraction with its gcd; the few partials become one Fraction at the end. Exact, like the old way.
         private static SumInfo Sum(EvalContext ctx, List<ScriptValue> data)
         {
-            var info = new SumInfo { Total = FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One), NonFinite = 0.0 };
+            var info = new SumInfo { NonFinite = 0.0 };
+            var partials = new Dictionary<BigInteger, BigInteger>();
             foreach (ScriptValue x in data)
             {
                 ctx.Budget.Step();
-                FractionValue fr;
-                if (ExactRatio(ctx, x, out fr, ref info))
-                    info.Total = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, info.Total, fr, ctx);
+                BigInteger n, d;
+                if (ExactPair(ctx, x, out n, out d, ref info))
+                    AddPartial(partials, d, n);
                 info.N++;
             }
+            info.Total = FromPartials(ctx, partials, false);
             return info;
+        }
+
+        private static void AddPartial(Dictionary<BigInteger, BigInteger> partials, BigInteger den, BigInteger num)
+        {
+            BigInteger acc;
+            partials.TryGetValue(den, out acc);
+            partials[den] = acc + num;
+        }
+
+        // Σ num/den over the partials (den squared for a sum of squares).
+        private static FractionValue FromPartials(EvalContext ctx, Dictionary<BigInteger, BigInteger> partials, bool squaredDen)
+        {
+            FractionValue total = FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);
+            foreach (KeyValuePair<BigInteger, BigInteger> kv in partials)
+            {
+                FractionValue part = FractionValue.Create(ctx, kv.Value, squaredDen ? kv.Key * kv.Key : kv.Key);
+                total = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, total, part, ctx);
+            }
+            return total;
         }
 
         // Exact representation of a value as a Fraction; nan/inf -> dirty. Returns false when non-finite.
         private static bool ExactRatio(EvalContext ctx, ScriptValue x, out FractionValue fr, ref SumInfo info)
         {
-            fr = null;
+            FractionValue given = x as FractionValue;
+            BigInteger n, d;
+            if (!ExactPair(ctx, x, out n, out d, ref info))
+            {
+                fr = null;
+                return false;
+            }
+            fr = given ?? FractionValue.Create(ctx, n, d);
+            return true;
+        }
+
+        // The value as numerator/denominator (den > 0, not necessarily reduced); nan/inf -> dirty, false.
+        private static bool ExactPair(EvalContext ctx, ScriptValue x, out BigInteger num, out BigInteger den, ref SumInfo info)
+        {
+            num = BigInteger.Zero;
+            den = BigInteger.One;
             IntValue iv = x as IntValue;
             if (iv != null)
             {
-                fr = FractionValue.Create(ctx, iv.Value, BigInteger.One);
+                num = iv.Value;
                 return true;
             }
             BoolValue bv = x as BoolValue;
             if (bv != null)
             {
-                fr = FractionValue.Create(ctx, bv.Value ? 1 : 0, BigInteger.One);
+                num = bv.Value ? BigInteger.One : BigInteger.Zero;
                 return true;
             }
             FractionValue f = x as FractionValue;
@@ -119,7 +151,8 @@ namespace Outbridge.PyLite.Modules
             {
                 info.SawFraction = true;
                 CheckMix(ctx, ref info);
-                fr = f;
+                num = f.Num;
+                den = f.Den;
                 return true;
             }
             // A Decimal IS a rational: coefficient over a power of ten, so the exact summation below
@@ -129,7 +162,15 @@ namespace Outbridge.PyLite.Modules
             {
                 info.SawDecimal = true;
                 CheckMix(ctx, ref info);
-                fr = AsFraction(ctx, dv);
+                int exp;
+                bool neg;
+                dv.Coeff(out num, out exp, out neg);
+                if (neg)
+                    num = -num;
+                if (exp >= 0)
+                    num *= BigInteger.Pow(10, exp);
+                else
+                    den = BigInteger.Pow(10, -exp);
                 return true;
             }
             FloatValue fl = x as FloatValue;
@@ -143,25 +184,10 @@ namespace Outbridge.PyLite.Modules
                     info.NonFinite += fl.Value;
                     return false;
                 }
-                BigInteger n, d;
-                Rationals.FloatToRational(fl.Value, out n, out d);
-                fr = FractionValue.Create(ctx, n, d);
+                Rationals.FloatToRational(fl.Value, out num, out den);
                 return true;
             }
             throw Raise.TypeError(ctx, "can't convert type '" + x.PyTypeName + "' to numerator/denominator");
-        }
-
-        private static FractionValue AsFraction(EvalContext ctx, DecimalValue d)
-        {
-            BigInteger coeff;
-            int exp;
-            bool neg;
-            d.Coeff(out coeff, out exp, out neg);
-            if (neg)
-                coeff = -coeff;
-            return exp >= 0
-                ? FractionValue.Create(ctx, coeff * BigInteger.Pow(10, exp), BigInteger.One)
-                : FractionValue.Create(ctx, coeff, BigInteger.Pow(10, -exp));
         }
 
         private static ScriptValue Dec(EvalContext ctx, BigInteger v)
@@ -245,15 +271,26 @@ namespace Outbridge.PyLite.Modules
             }
             else
             {
-                SumInfo si = Sum(ctx, lst);
-                flags.SawFloat = si.SawFloat;
-                flags.SawFraction = si.SawFraction;
-                if (si.Dirty)
+                // CPython 3.12's _ss (P14): one pass of value and square partials per denominator; then
+                // (n*sxx - sx*sx)/n, which is the sum of squared deviations from the mean exactly.
+                var sx = new Dictionary<BigInteger, BigInteger>();
+                var sxx = new Dictionary<BigInteger, BigInteger>();
+                foreach (ScriptValue x in lst)
                 {
-                    flags.Dirty = true;
-                    return FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);
+                    ctx.Budget.Step();
+                    BigInteger num, den;
+                    if (!ExactPair(ctx, x, out num, out den, ref flags))
+                        continue;   // non-finite: Dirty is set, the rest still type-checks
+                    AddPartial(sx, den, num);
+                    AddPartial(sxx, den, num * num);
                 }
-                c = (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, si.Total, ctx.Values.Int(lst.Count), ctx);
+                if (flags.Dirty)
+                    return FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);
+                ScriptValue count = ctx.Values.Int(lst.Count);
+                FractionValue s1 = FromPartials(ctx, sx, false), s2 = FromPartials(ctx, sxx, true);
+                ScriptValue spread = PyOps.BinaryOp(PyBinOp.Sub, PyOps.BinaryOp(PyBinOp.Mul, count, s2, ctx),
+                    PyOps.BinaryOp(PyBinOp.Mul, s1, s1, ctx), ctx);
+                return (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, spread, count, ctx);
             }
 
             FractionValue total2 = FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);
@@ -328,18 +365,9 @@ namespace Outbridge.PyLite.Modules
 
         private static double NumToDouble(EvalContext ctx, ScriptValue v)
         {
-            IntValue iv = v as IntValue;
-            if (iv != null)
-                return (double)iv.Value;
-            BoolValue bv = v as BoolValue;
-            if (bv != null)
-                return bv.Value ? 1.0 : 0.0;
-            FloatValue fl = v as FloatValue;
-            if (fl != null)
-                return fl.Value;
-            FractionValue fr = v as FractionValue;
-            if (fr != null)
-                return fr.AsDouble(ctx);
+            double d;
+            if (Coerce.TryToReal(ctx, v, true, out d))
+                return d;
             throw Raise.TypeError(ctx, "can't convert type '" + v.PyTypeName + "' to a number");
         }
 
@@ -383,17 +411,11 @@ namespace Outbridge.PyLite.Modules
 
         // ---- materialization / sort ----
 
+        // Charged and capped like every materialization (a step per item alone let mean(repeat(1, 9 * 10**7))
+        // build a gigabyte the budget never saw).
         private static List<ScriptValue> Materialize(EvalContext ctx, ScriptValue data)
         {
-            var lst = new List<ScriptValue>();
-            IScriptIterator it = PyOps.GetIterator(data, ctx);
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-            {
-                ctx.Budget.Step();
-                lst.Add(v);
-            }
-            return lst;
+            return new List<ScriptValue>(Iter.ToArray(ctx, data));
         }
 
         private static ScriptValue[] SortedArray(EvalContext ctx, ScriptValue data)
