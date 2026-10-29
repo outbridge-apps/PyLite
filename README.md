@@ -1,6 +1,7 @@
 # PyLite
 
 [![build](https://github.com/outbridge-apps/PyLite/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/outbridge-apps/PyLite/actions/workflows/build.yml)
+[![NuGet](https://img.shields.io/nuget/v/PyLite.svg)](https://www.nuget.org/packages/PyLite)
 
 An embeddable interpreter of a Python dialect for .NET Framework hosts, written in C#.
 
@@ -8,8 +9,13 @@ PyLite runs scripts written in a modern-syntax Python dialect (f-strings, `match
 walrus operator, decorators, `@dataclass`, `with`, `super()`, `enum`) inside a .NET Framework 4.7.2
 process, with no native code, no AppDomain and no access to the file system, the network or
 reflection. Every run is bounded by resource limits the host sets: steps, wall-clock deadline,
-allocated memory, data depth and call depth. When a limit is crossed the run stops with a typed
-error and the host keeps its process.
+allocated memory, call and data depth, string, collection and integer size, output, regex time and
+total sleep; the engine also caps how many runs go at once and the memory they may hold together.
+When a limit is crossed the run stops with a typed error and the host keeps its process.
+
+```
+dotnet add package PyLite
+```
 
 It was built to replace IronPython inside a large business application, where scripts written by
 users and integrators run on a shared server and must not be able to hang it, exhaust it or reach
@@ -26,7 +32,7 @@ design:
 
 - generators (`yield`), `async`/`await`;
 - the full class machinery: classes are record classes with single inheritance and a fixed set of
-  set of protocol methods (`__init__`, `__eq__`, `__repr__`, `__iter__`, `__enter__`/`__exit__`, ...;
+  protocol methods (`__init__`, `__eq__`, `__repr__`, `__iter__`, `__enter__`/`__exit__`, ...;
   see [docs/deviations.md](docs/deviations.md));
 - `import` of arbitrary modules: only the modules the engine ships and the modules the host
   registers are importable;
@@ -112,4 +118,5 @@ The performance figures in [docs/performance.md](docs/performance.md) come from
 
 ## Status
 
-Version 1.1.0.
+Version 1.1.0: what changed is in the
+[release notes](https://github.com/outbridge-apps/PyLite/releases/tag/v1.1.0).
