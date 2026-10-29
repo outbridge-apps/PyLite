@@ -1,2 +1,11 @@
 * text=auto eol=lf
 *.md text eol=lf
+
+# The language bar shows the engine: the Python files outside src are scripts the engine runs as
+# tests, probes and examples, and the shell/PowerShell files are tooling.
+conformance/**/*.py linguist-detectable=false
+tools/**/*.py linguist-detectable=false
+examples/**/*.py linguist-detectable=false
+tests/**/*.py linguist-detectable=false
+*.ps1 linguist-detectable=false
+*.sh linguist-detectable=false
