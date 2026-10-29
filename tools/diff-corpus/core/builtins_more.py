@@ -1,0 +1,23 @@
+out = []
+people = [('ann', 31), ('bob', 25), ('cid', 31), ('dee', 22)]
+out.append(sorted(people, key=lambda p: p[1]))
+out.append(sorted(people, key=lambda p: p[1], reverse=True))
+out.append(sorted(people, key=lambda p: (-p[1], p[0])))
+out.append((min(people, key=lambda p: p[1]), max([], default='none'), max(3, 7, 5), min('bca')))
+out.append(list(enumerate('abc', start=1)))
+out.append(list(zip('ab', [1, 2, 3])))
+out.append(list(map(lambda a, b: a * b, [1, 2, 3], [4, 5])))
+out.append(list(filter(None, [0, 1, '', 'a', None, [], [0]])))
+out.append([divmod(7, 2), divmod(-7, 2), divmod(7, -2), divmod(-7.5, 2)])
+out.append([round(0.5), round(1.5), round(2.5), round(-0.5), round(0.125, 2), round(1234, -2), round(1250, -2)])
+out.append([int('ff', 16), int('0x1f', 0), int('  42  '), int('-0b101', 0), int('7', 8), int('z', 36)])
+out.append([bin(10), oct(-8), hex(255), format(10, '08b'), chr(9731), ord('€')])
+out.append((abs(-3), abs(-2.5), sum([1, 2, 3], 10), sum([0.1, 0.2]), pow(3, 4, 5), pow(2, -1)))
+out.append((any([]), all([]), any([0, 0.0, '']), all([1, 'x'])))
+out.append((float('1e3'), float('-inf'), float(' 1.5 '), int(3.99), int(-3.99), str(1e15), str(0.001), repr(0.1 + 0.2)))
+out.append((bool([]), bool('0'), len({1: 2}), list(reversed([1, 2, 3])), list(range(10, 0, -3))))
+out.append((isinstance(True, int), issubclass(bool, int), type(1.0).__name__, callable(len)))
+out.append((hash(1) == hash(1.0), 1 == 1.0, 0.1 + 0.2 == 0.3, 10 ** 20 // 3, -(10 ** 20) // 7))
+out.append((5 // 2, -5 // 2, 5 % -3, 2 ** -2, 7 / 2, 1e308 * 10))
+out.append(([1, 2] < [1, 3], (1, 'a') < (1, 'b'), 'abc' < 'abd', [] == [], None is None))
+result = out

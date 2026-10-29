@@ -119,7 +119,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("s = StringIO()\ncsv.writer(s, quoting=csv.QUOTE_NONE, escapechar='\\\\').writerow(['a,b'])\nr = s.getvalue()",
             "'a\\\\,b\\r\\n'")]
         [InlineData("s = StringIO()\ncsv.writer(s, doublequote=False, escapechar='\\\\').writerow(['a\"b'])\nr = s.getvalue()",
-            "'\"a\\\\\"b\"\\r\\n'")]
+            "'a\\\\\"b\\r\\n'")]   // escaped, not quoted: CPython's test_csv test_write_escape
         [InlineData("s = StringIO()\ncsv.DictWriter(s, ['a'], extrasaction='ignore').writerow({'a': 1, 'b': 2})\nr = s.getvalue()",
             "'1\\r\\n'")]
         [InlineData("s = StringIO()\ncsv.DictWriter(s, ['a', 'b'], restval='-').writerow({'a': 1})\nr = s.getvalue()",
@@ -184,6 +184,29 @@ namespace Outbridge.PyLite.Tests.Modules
         public void ReaderLineNumAndDialect(string body, string expected)
         {
             Assert.Equal(expected, Body(body));
+        }
+
+        // _csv.c join_append_data: with doublequote=False a quote is escaped, not quoted; the escape character
+        // is escaped inside quotes too; a line-terminator character quotes the field (or is escaped).
+        [Theory]
+        [InlineData("doublequote=False, escapechar='\\\\'", "['x\"y']", "'x\\\\\"y|'")]
+        [InlineData("doublequote=False, escapechar='\\\\'", "['x\"y,z']", "'\"x\\\\\"y,z\"|'")]
+        [InlineData("escapechar='\\\\'", "['a\\\\b']", "'a\\\\\\\\b|'")]
+        [InlineData("escapechar='\\\\'", "['a\\\\b,c']", "'\"a\\\\\\\\b,c\"|'")]
+        [InlineData("", "['x\"y']", "'\"x\"\"y\"|'")]
+        [InlineData("", "['a|b']", "'\"a|b\"|'")]
+        [InlineData("quoting=csv.QUOTE_NONE, escapechar='\\\\'", "['a|b']", "'a\\\\|b|'")]
+        public void WriterQuotesAsCPython(string opts, string row, string expected)
+        {
+            string sep = opts.Length > 0 ? ", " : "";
+            Assert.Equal(expected, Body("b = StringIO()\ncsv.writer(b, lineterminator='|'" + sep + opts + ").writerow(" + row + ")\nr = b.getvalue()\n"));
+        }
+
+        [Fact]
+        public void DoublequoteFalseWithoutEscapecharRaises()
+        {
+            var ex = Raises("csv.writer(StringIO(), doublequote=False).writerow(['x\"y'])");
+            Assert.Equal("Error", ex.Value.ExcType.Name);
         }
     }
 }

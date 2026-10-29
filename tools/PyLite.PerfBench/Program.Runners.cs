@@ -89,6 +89,9 @@ namespace Outbridge.PyLite.PerfBench
             public string Name;
             public double MedianMs, P95Ms, MinMs, MaxMs;
             public int Iterations;
+            public double[] SamplesMs;        // in run order
+            public long AllocBytesPerRun;     // the whole AppDomain, runner threads included
+            public int Gen0, Gen2;            // collections during the measured runs
         }
 
         private static BenchResult Measure(string name, Action action, int? warmup = null, int? measured = null)
@@ -100,6 +103,8 @@ namespace Outbridge.PyLite.PerfBench
             GC.WaitForPendingFinalizers();
             var times = new double[m];
             var sw = new Stopwatch();
+            long alloc0 = AppDomain.CurrentDomain.MonitoringTotalAllocatedMemorySize;
+            int gen0 = GC.CollectionCount(0), gen2 = GC.CollectionCount(2);
             for (int i = 0; i < m; i++)
             {
                 sw.Restart();
@@ -107,15 +112,21 @@ namespace Outbridge.PyLite.PerfBench
                 sw.Stop();
                 times[i] = sw.Elapsed.TotalMilliseconds;
             }
-            Array.Sort(times);
+            long alloc = AppDomain.CurrentDomain.MonitoringTotalAllocatedMemorySize - alloc0;
+            var sorted = (double[])times.Clone();
+            Array.Sort(sorted);
             return new BenchResult
             {
                 Name = name,
-                MinMs = times[0],
-                MedianMs = times[m / 2],
-                MaxMs = times[m - 1],
-                P95Ms = times[Math.Min(m - 1, (int)Math.Ceiling(m * 0.95) - 1)],
+                MinMs = sorted[0],
+                MedianMs = sorted[m / 2],
+                MaxMs = sorted[m - 1],
+                P95Ms = sorted[Math.Min(m - 1, (int)Math.Ceiling(m * 0.95) - 1)],
                 Iterations = m,
+                SamplesMs = times,
+                AllocBytesPerRun = alloc / m,
+                Gen0 = GC.CollectionCount(0) - gen0,
+                Gen2 = GC.CollectionCount(2) - gen2,
             };
         }
     }

@@ -668,52 +668,68 @@ namespace Outbridge.PyLite.Modules
                 string s = v.Kind == ValueKind.None ? "" : v.Str(ctx);
                 bool special, hasEscape;
                 Scan(s, out special, out hasEscape);
-                bool mustQuote;
+                bool quoted;
                 switch (_d.Quoting)
                 {
-                    case 1: mustQuote = true; break;                                    // QUOTE_ALL
+                    case 1: quoted = true; break;                                       // QUOTE_ALL
                     // QUOTE_NONNUMERIC quotes anything PyNumber_Check refuses, None included: _csv.c computes
                     // quoted = !PyNumber_Check(field) BEFORE the None branch, and 3.12 added QUOTE_NOTNULL
                     // precisely because this one does not leave a None bare.
-                    case 2: mustQuote = !isNumber; break;                               // QUOTE_NONNUMERIC
-                    case 3: mustQuote = false; break;                                   // QUOTE_NONE
-                    case 4: mustQuote = v.Kind == ValueKind.Str; break;                 // QUOTE_STRINGS (3.12)
-                    case 5: mustQuote = v.Kind != ValueKind.None; break;                // QUOTE_NOTNULL (3.12)
-                    default:
-                        mustQuote = s.IndexOf(_d.Delimiter) >= 0 || s.IndexOf(_d.QuoteChar) >= 0
-                            || s.IndexOf('\r') >= 0 || s.IndexOf('\n') >= 0;
-                        break;
-                }
-                if (!mustQuote)
-                {
-                    if (special || hasEscape)
-                    {
+                    case 2: quoted = !isNumber; break;                                  // QUOTE_NONNUMERIC
+                    case 3:                                                             // QUOTE_NONE
+                        if (!special && !hasEscape && !HasTerminatorChar(s))
+                            return s;
                         if (_d.EscapeChar == '\0')
                             throw Raise.Make(ctx, PyExceptionTypes.CsvError, "need to escape, but no escapechar set");
-                        return Escaped(s);   // QUOTE_NONE with an escapechar: escape instead of quoting
-                    }
-                    return s;
+                        return Escaped(s);
+                    case 4: quoted = v.Kind == ValueKind.Str; break;                    // QUOTE_STRINGS (3.12)
+                    case 5: quoted = v.Kind != ValueKind.None; break;                   // QUOTE_NOTNULL (3.12)
+                    default: quoted = false; break;                                     // QUOTE_MINIMAL
                 }
-                var sb = new StringBuilder(s.Length + 2);
-                sb.Append(_d.QuoteChar);
+                if (!quoted && !special && !hasEscape && !HasTerminatorChar(s))
+                    return s;
+                // _csv.c join_append_data: a delimiter, CR, LF or line-terminator character makes the field
+                // quoted; a quote is doubled (which quotes it too) or, with doublequote=False, escaped, and the
+                // escape character is escaped, quoted field or not.
+                var sb = new StringBuilder(s.Length + 4);
                 foreach (char c in s)
                 {
                     if (c == _d.QuoteChar)
                     {
-                        // doublequote=False needs an escapechar to protect the quote
-                        if (!_d.DoubleQuote)
+                        if (_d.DoubleQuote)
                         {
-                            if (_d.EscapeChar == '\0')
-                                throw Raise.Make(ctx, PyExceptionTypes.CsvError, "need to escape, but no escapechar set");
-                            sb.Append(_d.EscapeChar);
+                            sb.Append(c);
+                            quoted = true;
                         }
                         else
-                            sb.Append(_d.QuoteChar);
+                            sb.Append(EscapeCharOrThrow(ctx));
                     }
+                    else if (c == _d.EscapeChar && c != NUL)
+                        sb.Append(c);
+                    else if (c == _d.Delimiter || c == CR || c == LF || _d.LineTerminator.IndexOf(c) >= 0)
+                        quoted = true;
                     sb.Append(c);
                 }
-                sb.Append(_d.QuoteChar);
-                return sb.ToString();
+                return quoted ? _d.QuoteChar + sb.ToString() + _d.QuoteChar : sb.ToString();
+            }
+
+            private char EscapeCharOrThrow(EvalContext ctx)
+            {
+                if (_d.EscapeChar == NUL)
+                    throw Raise.Make(ctx, PyExceptionTypes.CsvError, "need to escape, but no escapechar set");
+                return _d.EscapeChar;
+            }
+
+            // A line terminator other than CR/LF ("\r\n", "\n" are the usual ones) quotes its characters too.
+            private bool HasTerminatorChar(string s)
+            {
+                string t = _d.LineTerminator;
+                for (int i = 0; i < t.Length; i++)
+                {
+                    if (t[i] != CR && t[i] != LF && s.IndexOf(t[i]) >= 0)
+                        return true;
+                }
+                return false;
             }
 
             private const char CR = '\r', LF = '\n', NUL = '\0';
@@ -739,7 +755,8 @@ namespace Outbridge.PyLite.Modules
                 var sb = new StringBuilder(s.Length + 4);
                 foreach (char c in s)
                 {
-                    if (c == _d.Delimiter || c == _d.QuoteChar || c == _d.EscapeChar || c == '\r' || c == '\n')
+                    if (c == _d.Delimiter || c == _d.QuoteChar || c == _d.EscapeChar || c == '\r' || c == '\n'
+                        || _d.LineTerminator.IndexOf(c) >= 0)
                         sb.Append(_d.EscapeChar);
                     sb.Append(c);
                 }

@@ -27,6 +27,11 @@ namespace Outbridge.PyLite.PerfBench
         private static int Main(string[] args)
         {
             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+            AppDomain.MonitoringIsEnabled = true;   // allocations per run, for the --json pass record
+            // --summarize <dir>: the pass-*.json of benchmarks/run.ps1 into <dir>/summary.md; runs nothing.
+            int sumIdx = Array.IndexOf(args, "--summarize");
+            if (sumIdx >= 0 && sumIdx + 1 < args.Length)
+                return Summarize(args[sumIdx + 1]);
             bool focus = Array.IndexOf(args, "--focus") >= 0;
             if (focus || Array.IndexOf(args, "--matrix") >= 0)
             {
@@ -71,6 +76,15 @@ namespace Outbridge.PyLite.PerfBench
                 results.Add(new Row { Name = b.Name, Kind = b.Kind, Gated = true, Py = py, Iron = iron });
             }
 
+            // --json <path>: this pass as data (benchmarks/); no report file and no baseline gate.
+            int jsonIdx = Array.IndexOf(args, "--json");
+            if (jsonIdx >= 0 && jsonIdx + 1 < args.Length)
+            {
+                WriteJson(args[jsonIdx + 1], results, scale);
+                Console.WriteLine("\npass -> " + args[jsonIdx + 1]);
+                return 0;
+            }
+
             string report = BuildReport(results, scale);
             string outPath = Path.Combine(RepoRoot(), "docs", "PERF-REPORT.md");
             File.WriteAllText(outPath, report, new UTF8Encoding(false));
@@ -95,7 +109,7 @@ namespace Outbridge.PyLite.PerfBench
         private static string RepoRoot()
         {
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
-            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "PLAN.md")))
+            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "PyLite.sln")))
                 dir = dir.Parent;
             return dir != null ? dir.FullName : Environment.CurrentDirectory;
         }

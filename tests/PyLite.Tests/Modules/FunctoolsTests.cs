@@ -97,5 +97,21 @@ namespace Outbridge.PyLite.Tests.Modules
         {
             Assert.Equal(expected, Body(body + "\n"));
         }
+
+        // typed=True keys on the argument types too; maxsize=0 (or below) caches nothing, unhashable arguments
+        // included, as in CPython.
+        [Theory]
+        [InlineData("typed=True", "[1, 1.0, 1]", "['int', 'float', 'int'] [1, 1.0]")]
+        [InlineData("typed=False", "[1, 1.0, 1]", "['int', 'int', 'int'] [1]")]
+        [InlineData("maxsize=0", "[1, 1, 1]", "['int', 'int', 'int'] [1, 1, 1]")]
+        [InlineData("maxsize=-5", "[1, 1]", "['int', 'int'] [1, 1]")]
+        [InlineData("maxsize=0", "[[1], [1]]", "['list', 'list'] [[1], [1]]")]
+        [InlineData("None, True", "[2, 2.0]", "['int', 'float'] [2, 2.0]")]
+        public void LruCacheTypedAndMaxsizeZero(string opts, string calls, string expected)
+        {
+            string body = "import functools\nseen = []\n@functools.lru_cache(" + opts + ")\ndef f(x):\n"
+                + "    seen.append(x)\n    return type(x).__name__\nr = str([f(x) for x in " + calls + "]) + ' ' + str(seen)\n";
+            Assert.Equal("\"" + expected + "\"", Body(body));
+        }
     }
 }

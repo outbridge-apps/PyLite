@@ -233,6 +233,22 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // ---- arithmetic ----
 
+        // An exactly zero sum takes the addends' sign when they agree, else + (- under ROUND_FLOOR), as the
+        // decimal spec says; the backend's zero sign follows its internal path (1.30 - 1.3 came out -0.00).
+        private static decimal ZeroSign(EvalContext ctx, decimal sum, decimal a, decimal b)
+        {
+            if (sum != 0m)
+                return sum;
+            bool na = IsNeg(a), nb = IsNeg(b);
+            bool neg = na == nb ? na : ctx.DecimalCtx.Mode == RoundingMode.Floor;
+            return neg == IsNeg(sum) ? sum : -sum;
+        }
+
+        private static bool IsNeg(decimal d)
+        {
+            return (decimal.GetBits(d)[3] & int.MinValue) != 0;
+        }
+
         // Every arithmetic result is rounded to the context precision with the context mode, as in CPython.
         // The backend computes at its own 28-29 digits first, so a lower prec rounds twice; the two can
         // disagree only when the 28-digit intermediate lands exactly on the prec boundary.
@@ -378,9 +394,9 @@ namespace Outbridge.PyLite.Runtime.Values
                 switch (op)
                 {
                     case PyBinOp.Add:
-                        return Rounded(ctx, x + y, Math.Min(ex, ey));
+                        return Rounded(ctx, ZeroSign(ctx, x + y, x, y), Math.Min(ex, ey));
                     case PyBinOp.Sub:
-                        return Rounded(ctx, x - y, Math.Min(ex, ey));
+                        return Rounded(ctx, ZeroSign(ctx, x - y, x, -y), Math.Min(ex, ey));
                     case PyBinOp.Mul:
                         return Rounded(ctx, Prod(ctx, x, y), ex + ey);
                     case PyBinOp.TrueDiv:

@@ -31,17 +31,20 @@ by prefix in its README.
 | **No stack overflow.** Deep recursion ends the run on `MaxCallDepth`; deep data raises `RecursionError` at `MaxDataDepth`; the C# stack is probed on every recursive descent, at compile time as well, so a script cannot take the process down with `StackOverflowException`. | `Runtime/StackGuardTests`, `Syntax/CompileStackSafetyTests`, `Syntax/SyntaxLimitsTests`, `Stress/ValueModelStressTests`, probes `d` and `l1`-`l4` |
 | **No engine fault from script content.** Whatever the script does, the host receives a typed result (`RuntimeError`, `SyntaxError`, `BudgetExceeded`, `HostError`), never an exception. | `Hosting/HostBoundaryTests` (a hostile corpus through `Run` and `TryCompile`), `Hosting/RunnerThreadTests`, `Runtime/OverflowNetTests`, `Modules/ArgumentFaultTests`, `Modules/ModuleBoundaryTests`, the `Fuzz` category |
 | **The memory of a stopped run is given back.** | `Hosting/ResourceBoundTests` (`AbortedMemoryBombGraphIsCollected`), `Hosting/MemoryHygieneTests` |
-| **Concurrency is bounded.** At most `MaxConcurrentRuns` runs at once (8 by default, 32 at most), and the `MaxAllocBytes` of the running runs together stay under `GlobalMemoryCeilingBytes` (1 GB by default). A run past either is refused at once (`BudgetExceeded`, `MaxConcurrentRuns` or `GlobalMemoryCeiling`), never queued. | `Hosting/ScriptEngineGateTests`, `Hosting/RunGateTests` |
+| **Concurrency is bounded.** At most `MaxConcurrentRuns` runs at once (8 by default, 32 at most), and the `MaxAllocBytes` of the running runs together stay under `GlobalMemoryCeilingBytes` (1 GB by default). A run past either is refused at once (`BudgetExceeded`, `MaxConcurrentRuns` or `GlobalMemoryCeiling`), never queued. | `Hosting/ScriptEngineGateTests`, `Hosting/RunGateTests`, `Hosting/EngineLifecycleTests` (twenty callers on four slots, three runs filling the ceiling) |
 
 ## What can outlive a run, stated exactly
 
 - **Script code always stops at a budget check.** `Run` returns at about `DeadlineMs`, plus a terminating
-  grace of 250 ms in which `finally` blocks may run but cannot un-fail the run.
+  grace of 250 ms in which `finally` blocks may run but cannot un-fail the run. A run cancelled through
+  `RunRequest.CancellationToken` stops the same way: its runner thread exits and no script code runs
+  after `Run` returns (`Hosting/EngineLifecycleTests`, `ACancelledRunLeavesNothingRunning`).
 - **A host function that blocks** is the one thing that can keep a run's thread past deadline + grace +
   5 s. `Run` then returns a `HostError`, the runner thread is leaked (its gate slot and its memory stay held
   until the host function returns), the engine raises a `ThreadLeaked` event, and once
   `CircuitBreakerLeakedThreads` threads (4 by default) are leaked, the circuit breaker opens: every `Run` is
-  refused until they finish. Held by `Hosting/RunGateWatchdogTests` and `Hosting/RunnerThreadTests`.
+  refused until they finish. Held by `Hosting/RunGateWatchdogTests` and `Hosting/RunnerThreadTests`, and end to end
+  through `Run` by `Hosting/EngineLifecycleTests` (`ALeakedThreadHoldsItsSlotUntilItReturns`).
 - **A long big-int operation** (a multiply, division, gcd, power, `pow(b, e, m)` or decimal conversion that
   would take more than about 10 ms) runs on a helper thread while the run's thread polls the deadline. A
   stopped run returns on time; that one call then finishes on its own: seconds of CPU at the default

@@ -64,13 +64,17 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue LruCache(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             if (args.Length == 1 && kw.Count == 0 && args[0].IsCallable)
-                return MakeCachedWrapper(ctx, args[0], 128);
+                return MakeCachedWrapper(ctx, args[0], 128, false);
             int maxsize = ResolveMaxsize(args, kw);
+            ScriptValue t;
+            if (!kw.TryGet("typed", out t))
+                t = args.Length >= 2 ? args[1] : null;
+            bool typed = t != null && PyOps.Truth(t, ctx);
             return BuiltinFunctionValue.Make("lru_cache", Args.Positional("lru_cache", 1, 1, (s2, a2, k2, c2) =>
             {
                 if (a2.Length != 1 || !a2[0].IsCallable)
                     throw Raise.TypeError(c2, "the first argument to lru_cache must be a callable");
-                return MakeCachedWrapper(c2, a2[0], maxsize);
+                return MakeCachedWrapper(c2, a2[0], maxsize, typed);
             }));
         }
 
@@ -78,17 +82,19 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue Cache(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             if (args.Length == 1 && kw.Count == 0 && args[0].IsCallable)
-                return MakeCachedWrapper(ctx, args[0], MaxCacheSize);
+                return MakeCachedWrapper(ctx, args[0], MaxCacheSize, false);
             throw Raise.TypeError(ctx, "cache expected a callable");
         }
 
-        private static ScriptValue MakeCachedWrapper(EvalContext ctx, ScriptValue fn, int maxsize)
+        private static ScriptValue MakeCachedWrapper(EvalContext ctx, ScriptValue fn, int maxsize, bool typed)
         {
-            int cap = maxsize <= 0 || maxsize > MaxCacheSize ? MaxCacheSize : maxsize;
+            if (maxsize == 0)   // CPython: no caching at all, and the arguments need not be hashable
+                return BuiltinFunctionValue.Make("lru_cache_wrapper", (s, a, k, c) => c.CallHook(fn, a, k));
+            int cap = maxsize;
             DictValue cache = ctx.Values.Dict(8);   // one cache per decorated function, LRU by insertion order
             return BuiltinFunctionValue.Make("lru_cache_wrapper", (s, a, k, c) =>
             {
-                ScriptValue key = MakeKey(c, a, k);   // hashing an unhashable arg raises here (parity)
+                ScriptValue key = MakeKey(c, a, k, typed);   // hashing an unhashable arg raises here (parity)
                 ScriptValue hit;
                 if (cache.TryGet(key, c, out hit))
                 {
@@ -104,17 +110,25 @@ namespace Outbridge.PyLite.Modules
             });
         }
 
-        private static ScriptValue MakeKey(EvalContext ctx, ScriptValue[] args, KwArgs kw)
+        private static ScriptValue MakeKey(EvalContext ctx, ScriptValue[] args, KwArgs kw, bool typed)
         {
-            if (kw.Count == 0)
+            if (kw.Count == 0 && !typed)
                 return ctx.Values.Tuple((ScriptValue[])args.Clone());
             var parts = new List<ScriptValue>(args.Length + 1 + kw.Count * 2);
             parts.AddRange(args);
-            parts.Add(KwMark.Instance);   // CPython's kwd_mark: a private object no argument can equal
+            if (kw.Count > 0)
+                parts.Add(KwMark.Instance);   // CPython's kwd_mark: a private object no argument can equal
             for (int i = 0; i < kw.Count; i++)
             {
                 parts.Add(ctx.Values.Str(kw.NameAt(i)));
                 parts.Add(kw.ValueAt(i));
+            }
+            if (typed)   // CPython's _make_key appends the type of every argument: f(1) and f(1.0) differ
+            {
+                foreach (ScriptValue v in args)
+                    parts.Add(ctx.Values.Str(v.PyTypeName));
+                for (int i = 0; i < kw.Count; i++)
+                    parts.Add(ctx.Values.Str(kw.ValueAt(i).PyTypeName));
             }
             return ctx.Values.Tuple(parts.ToArray());
         }
@@ -138,7 +152,7 @@ namespace Outbridge.PyLite.Modules
             if (iv == null)
                 return MaxCacheSize;
             if (iv.Value <= 0)
-                return MaxCacheSize;
+                return 0;   // CPython: a negative maxsize is 0, and 0 caches nothing
             return iv.Value >= MaxCacheSize ? MaxCacheSize : (int)iv.Value;
         }
 

@@ -105,9 +105,10 @@ to run it:
 
 `tools/run-gates.ps1` runs all four and writes [docs/test-report.md](docs/test-report.md); each
 release commits the report of its own run. [SECURITY.md](SECURITY.md) maps every sandbox guarantee
-to the tests that hold it, and [examples/limits](examples/limits) shows each resource limit firing.
+to the tests that hold it, [examples/limits](examples/limits) shows each resource limit firing, and
+[docs/fixes.md](docs/fixes.md) lists every defect fixed since 1.0.0 with the test that keeps it fixed.
 The performance figures in [docs/performance.md](docs/performance.md) come from
-`tools/PyLite.PerfBench`.
+`tools/PyLite.PerfBench`; [benchmarks/](benchmarks) runs it pass after pass and keeps the samples.
 
 ## Status
 

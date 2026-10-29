@@ -3,3 +3,39 @@
 # Example: html/|value   (html.unescape differs on obscure entities, RFC-002)
 # IronPython 3.4's float // is floor(x / y); CPython's _float_div_mod (and PyLite) give 1 // 0.1 == 9.0.
 float_floordiv_iron|value
+# iron34/: one script per place where IronPython 3.4.2 behaves as Python 3.4 (or as no CPython ever did)
+# and PyLite follows current CPython. Each script's header says which side is which.
+# timedelta repr names its fields since CPython 3.7.
+iron34/timedelta_repr|value
+# aware == naive datetime is False since CPython 3.3; IronPython raises TypeError.
+iron34/aware_naive_eq|outcome
+# re.sub with a group the pattern lacks is re.error in CPython; IronPython accepts it.
+iron34/re_sub_bad_group|value
+# Empty matches next to a match are replaced and split on since CPython 3.7.
+iron34/re_empty_matches|value
+# re.escape escapes only metacharacters since CPython 3.7.
+iron34/re_escape|value
+# Match.lastgroup is a name or None in CPython; IronPython answers the group number.
+iron34/re_lastgroup|value
+# json.JSONDecodeError exists since CPython 3.5.
+iron34/json_decode_error|value
+# statistics.mode answers the first of several modes since CPython 3.8.
+iron34/statistics_mode_tie|value
+# round() and str() of floats: IronPython rounds the decimal text and prints 17 digits.
+iron34/float_text|value
+# struct '<f': IronPython does not narrow to float32.
+iron34/struct_float32|value
+# urllib.parse.quote leaves '~' unquoted since CPython 3.7.
+iron34/url_quote_tilde|value
+# textwrap's hyphenated-word rule changed in CPython 3.7.
+iron34/textwrap_hyphens|value
+# str(KeyError('k')) is the key's repr in CPython; IronPython prints the bare key.
+iron34/keyerror_str|value
+# An unknown rounding mode: TypeError from CPython's C decimal, KeyError from _pydecimal in IronPython.
+iron34/decimal_bad_rounding|value
+# str.isnumeric reads the Unicode numeric property in CPython; IronPython answers False for fractions and CJK numerals.
+iron34/str_isnumeric|value
+# math.log10 of a power of ten is exact in CPython; IronPython divides natural logs.
+iron34/math_log10|value
+# Unicode titlecase digraphs and special lowercase: CPython follows the Unicode tables, IronPython .NET's.
+iron34/unicode_case|value

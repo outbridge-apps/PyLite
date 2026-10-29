@@ -232,7 +232,7 @@ def _dw(fn, *args, **kw):
     return b.getvalue()
 
 assert _w(lambda x: x.writerow(['a,b']), quoting=csv.QUOTE_NONE, escapechar='\\') == 'a\\,b\r\n'
-assert _w(lambda x: x.writerow(['a"b']), doublequote=False, escapechar='\\') == '"a\\"b"\r\n'
+assert _w(lambda x: x.writerow(['a"b']), doublequote=False, escapechar='\\') == 'a\\"b\r\n'   # escaped, not quoted
 assert _w(lambda x: x.writerow(['a', 'b,c', 'd"e'])) == 'a,"b,c","d""e"\r\n'
 try:
     _w(lambda x: x.writerow(['a,b']), quoting=csv.QUOTE_NONE)

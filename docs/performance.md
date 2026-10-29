@@ -29,7 +29,8 @@ The harness is `tools/PyLite.PerfBench` in this repository, and the scripts it r
 dotnet run --project tools/PyLite.PerfBench -c Release -- --full
 ```
 
-IronPython 3.4.2 comes from NuGet. Your milliseconds will be your machine's; the ratios should
+`benchmarks/run.ps1` runs several passes in fresh processes and keeps every sample, the allocations per
+run and a summary ([benchmarks/](../benchmarks)). IronPython 3.4.2 comes from NuGet. Your milliseconds will be your machine's; the ratios should
 land near these. Before a decision that depends on them, measure your own workload.
 
 ## Startup

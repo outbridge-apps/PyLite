@@ -101,7 +101,48 @@ namespace Outbridge.PyLite.DiffHarness
                 return SetEqual(SplitPairs(a), SplitPairs(b));
             if (IsSet(a) && IsSet(b))
                 return SetEqual(SplitElems(a), SplitElems(b));
-            return false;
+            return string.Equals(FloatsByValue(a), FloatsByValue(b), StringComparison.Ordinal);
+        }
+
+        // IronPython 3.4 prints some floats with 17 significant digits (3.7000000000000002 for 3.7): a float
+        // literal outside a string literal is replaced by its bits, so only a different value differs.
+        private static string FloatsByValue(string s)
+        {
+            var sb = new StringBuilder();
+            int i = 0;
+            while (i < s.Length)
+            {
+                char c = s[i];
+                if (c == '\'' || c == '"')
+                {
+                    int j = i + 1;
+                    while (j < s.Length && s[j] != c)
+                        j += s[j] == '\\' ? 2 : 1;
+                    j = Math.Min(j + 1, s.Length);
+                    sb.Append(s, i, j - i);
+                    i = j;
+                    continue;
+                }
+                if (char.IsDigit(c) && (i == 0 || !(char.IsLetterOrDigit(s[i - 1]) || s[i - 1] == '_')))
+                {
+                    int j = i;
+                    while (j < s.Length && (char.IsDigit(s[j]) || s[j] == '.' || s[j] == 'e' || s[j] == 'E'
+                        || ((s[j] == '+' || s[j] == '-') && (s[j - 1] == 'e' || s[j - 1] == 'E'))))
+                        j++;
+                    string token = s.Substring(i, j - i);
+                    double d;
+                    if (token.IndexOfAny(new[] { '.', 'e', 'E' }) >= 0
+                        && double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out d))
+                        sb.Append("<f").Append(BitConverter.DoubleToInt64Bits(d)).Append('>');
+                    else
+                        sb.Append(token);
+                    i = j;
+                    continue;
+                }
+                sb.Append(c);
+                i++;
+            }
+            return sb.ToString();
         }
 
         private static bool TryFloat(string s, out double d)

@@ -12,9 +12,9 @@ xUnit and IronPython 3.4.2 come from NuGet.
 
 | suite | where | size | what it shows |
 |---|---|---|---|
-| unit and behaviour tests (xUnit) | `tests/PyLite.Tests` | 6,972 tests | the language, the values, the builtins and the modules behave as Python's; the host API, the sandbox and every resource limit hold; defects found earlier stay fixed |
-| conformance | `conformance/` | 173 cases | CPython's own tests (`Lib/test`), adapted case by case, module by module |
-| differential | `tools/PyLite.DiffHarness`, `tools/diff-corpus` | 25 scripts | the same script gives the same result under PyLite and under IronPython 3.4.2 |
+| unit and behaviour tests (xUnit) | `tests/PyLite.Tests` | 7,007 tests | the language, the values, the builtins and the modules behave as Python's; the host API, the sandbox and every resource limit hold; defects found earlier stay fixed |
+| conformance | `conformance/` | 174 cases | CPython's own tests (`Lib/test`), adapted case by case, module by module |
+| differential | `tools/PyLite.DiffHarness`, `tools/diff-corpus` | 87 scripts | the same script gives the same result under PyLite and under IronPython 3.4.2 |
 | adversarial | `tools/PyLite.Stress` | 130 probes | hostile one-operation scripts (endless loops, recursion, huge numbers, regex backtracking, memory, deep nesting, zip bombs, the limits audit): each must end on a budget, never hang the host or crash it |
 | benchmarks | `tools/PyLite.PerfBench`, `tools/perf-baseline.json` | 14 corpus benchmarks, 165 matrix rows | speed against IronPython 3.4.2, and a ×1.5 regression gate against the baseline |
 
@@ -46,10 +46,10 @@ on a class that does not):
 
 | category | tests | what it covers |
 |---|---:|---|
-| `Compatibility` | 5,752 | syntax, evaluation, values, builtins, modules, the spec files: the dialect behaves as Python |
-| `Sandbox` | 465 | the host boundary: the hosting API, engine reuse, the concurrency gate, runner threads and a leaked thread, the error contract, the host function table; nothing of the host reachable from a script, by any of the classic introspection escapes |
+| `Compatibility` | 5,775 | syntax, evaluation, values, builtins, modules, the spec files: the dialect behaves as Python |
+| `Sandbox` | 476 | the host boundary: the hosting API, engine reuse, the concurrency gate, runner threads and a leaked thread, the error contract, the host function table; nothing of the host reachable from a script, by any of the classic introspection escapes |
 | `ResourceLimits` | 321 | steps, deadline, memory, call and data depth, sizes, output, regex time, sleep, with one script per limit in [`examples/limits`](examples/limits); the stack guards, the compile-time limits, the big-int helper that keeps a long operation inside the deadline |
-| `Regression` | 417 | defects found by reviews and fuzzing, kept fixed (arguments that once reached the host as engine faults, module boundary cases, wrong XML answers); fast paths that must change no result; the public API surface, so it cannot drift unnoticed |
+| `Regression` | 418 | defects found by reviews and fuzzing, kept fixed (arguments that once reached the host as engine faults, module boundary cases, wrong XML answers); fast paths that must change no result; the public API surface, so it cannot drift unnoticed |
 | `Fuzz` | 17 | seeded grammar, lexer and parser fuzzers: no foreign exception, no hang |
 
 `MachineSensitive` comes on top of a category for 175 tests in seven classes that compare wall-clock time
@@ -65,6 +65,12 @@ and anyone can repeat it. IronPython follows Python 3.4, so what came later (`ma
 PEP 515 underscores in `Decimal` and `Fraction`, ...) is covered by the conformance cases and the xUnit
 tests only. Known differences are listed with their reason in
 `tools/PyLite.DiffHarness/known-differences.txt`.
+
+The corpus has a folder per module (`re/`, `datetime/`, `collections/`, `csv/`, `xml/`, ...); error paths are
+compared by exception class inside the script (`type(e).__name__` goes into `result`). Where IronPython
+3.4.2 answers as Python 3.4 did, or as no CPython ever did, and PyLite follows current CPython, the case
+sits alone in `iron34/` with a header saying which side is which, so a known difference never hides
+anything else. A float that IronPython prints with 17 digits (`3.7000000000000002`) is compared by value.
 
 ## What stays internal
 

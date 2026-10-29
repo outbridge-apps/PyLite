@@ -1,0 +1,23 @@
+out = []
+s = 'Hello, World'
+out.append((s.partition(', '), s.rpartition('o'), s.partition('#')))
+out.append(('42'.zfill(5), '-42'.zfill(5), 'ab'.center(7, '*'), 'ab'.ljust(4, '.'), 'ab'.rjust(4)))
+out.append('a\tbc\td'.expandtabs(4))
+out.append('one\ntwo\r\nthree\r'.splitlines())
+out.append('one\ntwo\r\n'.splitlines(True))
+out.append(("they're bill's friends".title(), 'hELLO'.swapcase(), 'ǅ'.lower()))
+out.append('hello'.translate(str.maketrans('el', 'ip')))
+out.append('hello'.translate(str.maketrans({'h': 'J', 'o': None})))
+out.append(' a b  c '.split())
+out.append('a,b,,c'.split(','))
+out.append('a b c'.split(None, 1))
+out.append('a b c'.rsplit(' ', 1))
+out.append(('  x  '.strip(), 'xxhixx'.strip('x'), '..a..'.lstrip('.'), '..a..'.rstrip('.')))
+out.append(('abc'.startswith(('x', 'a')), 'abc'.endswith('bc', 1), 'abcabc'.find('c', 3), 'abc'.rfind('z')))
+out.append(('abcabc'.count('bc'), 'aaa'.count('aa'), 'abc'.index('c'), 'ab'.isalpha(), '12'.isdigit(), '12'.isnumeric()))
+out.append(('x'.join(['a', 'b', 'c']), 'abc'[::-1], 'abcdef'[1:5:2], 'abc' * 2))
+out.append(('%5.2f|%-6s|%03d|%x|%e' % (3.14159, 'ab', 7, 255, 12345.678)))
+out.append('{:>8}|{:<8}|{:^8}|{:08.3f}|{:+d}|{:,}'.format('r', 'l', 'c', 3.14159, 5, 1234567))
+out.append('{0[a]} {1.real}'.format({'a': 'A'}, 3))
+out.append(('Ǆ'.upper(), 'ǆ'.upper(), 'é'.upper()))
+result = out

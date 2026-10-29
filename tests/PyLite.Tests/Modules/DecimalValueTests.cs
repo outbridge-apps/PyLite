@@ -120,5 +120,28 @@ namespace Outbridge.PyLite.Tests.Modules
             string src = Prelude + "caught = 0\ntry:\n    Decimal(1) / 0\nexcept ArithmeticError:\n    caught = 1\n";
             Assert.Equal("1", Ev.Run(src).Repr("caught"));
         }
+
+        // An exactly zero sum takes the addends' sign when they agree, else +, and - only under ROUND_FLOOR.
+        [Theory]
+        [InlineData("Decimal('1.30') - Decimal('1.3')", "Decimal('0.00')")]
+        [InlineData("Decimal('-1') + Decimal('1')", "Decimal('0')")]
+        [InlineData("Decimal('1') + Decimal('-1')", "Decimal('0')")]
+        [InlineData("sum([Decimal('0.10'), Decimal('-0.1')])", "Decimal('0.00')")]
+        [InlineData("Decimal('-0') + Decimal('-0')", "Decimal('-0')")]
+        [InlineData("Decimal('-0') - Decimal('0')", "Decimal('-0')")]
+        [InlineData("Decimal('0') - Decimal('-0')", "Decimal('0')")]
+        [InlineData("Decimal(0) * -1", "Decimal('-0')")]
+        public void ZeroSumSign(string expr, string expected)
+        {
+            Assert.Equal(expected, R(expr));
+        }
+
+        [Fact]
+        public void ZeroSumIsNegativeUnderRoundFloor()
+        {
+            string src = Prelude + "from decimal import localcontext, ROUND_FLOOR\nwith localcontext() as c:\n"
+                + "    c.rounding = ROUND_FLOOR\n    r = (Decimal('1.30') - Decimal('1.3'), Decimal('-1') + Decimal('1'))\n";
+            Assert.Equal("(Decimal('-0.00'), Decimal('-0'))", Ev.Run(src).Repr("r"));
+        }
     }
 }
