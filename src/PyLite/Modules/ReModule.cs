@@ -33,6 +33,7 @@ namespace Outbridge.PyLite.Modules
                 ["escape"] = BuiltinFunctionValue.Make("escape", Args.Positional("escape", 1, 1, (s, a, kw, c) => ReEscape(c, a))),
                 ["purge"] = BuiltinFunctionValue.Make("purge", Args.Positional("purge", 0, 0, (s, a, kw, c) => Purge(c))),
                 ["error"] = ModuleKit.ExceptionClass(PyExceptionTypes.ReError),
+                ["PatternError"] = ModuleKit.ExceptionClass(PyExceptionTypes.ReError),
                 ["I"] = ctx.Values.Int(ReFlags.I), ["IGNORECASE"] = ctx.Values.Int(ReFlags.I),
                 ["M"] = ctx.Values.Int(ReFlags.M), ["MULTILINE"] = ctx.Values.Int(ReFlags.M),
                 ["S"] = ctx.Values.Int(ReFlags.S), ["DOTALL"] = ctx.Values.Int(ReFlags.S),
@@ -72,6 +73,8 @@ namespace Outbridge.PyLite.Modules
                 return existing;
             }
             StrValue s = patternArg as StrValue;
+            if (patternArg is BytesValue)
+                throw Raise.TypeError(ctx, "bytes patterns are not supported in this dialect");   // CPython's text named another error
             if (s == null)
                 throw Raise.TypeError(ctx, "first argument must be string or compiled pattern");
             return Cache(ctx).GetOrCompile(ctx, s.Value, flags);
@@ -98,7 +101,7 @@ namespace Outbridge.PyLite.Modules
                 case ReOp.Match: return MatchAt(c, pat, subj, pos, endpos);
                 case ReOp.FullMatch: return FullMatch(c, pat, subj, pos, endpos);
                 case ReOp.Findall: return Findall(c, pat, subj, pos, endpos);
-                default: return c.Values.Iterator(new ReFindIterator(pat, subj, pos, endpos), "callable_iterator");
+                default: return c.Values.EngineIterator(new ReFindIterator(pat, subj, pos, endpos), "callable_iterator");
             }
         }
 
@@ -116,6 +119,15 @@ namespace Outbridge.PyLite.Modules
             StrValue subj = AsSubject(c, a, 0);
             int pos = ClampPos(a, 1, 0, subj.Value.Length, c);
             int endpos = ClampPos(a, 2, subj.Value.Length, subj.Value.Length, c);
+            if (pos > endpos)
+            {
+                // an empty window past its own end: nothing matches, as in CPython (.NET threw: an engine fault)
+                if (op == ReOp.Findall)
+                    return c.Values.List(0);
+                if (op == ReOp.Finditer)
+                    return c.Values.EngineIterator(PyOps.GetIterator(c.Values.List(0), c), "callable_iterator");
+                return c.Values.None;
+            }
             return Run(c, op, pat, subj, pos, endpos);
         }
 
@@ -158,17 +170,42 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue ReEscape(EvalContext c, ScriptValue[] a)
         {
             StrValue s = AsSubject(c, a, 0);
-            const string special = "()[]{}?*+-|^$\\.&~# \t\n\r\v\f";
             string v = s.Value;
-            var sb = new System.Text.StringBuilder(v.Length + 8);
+            c.Budget.ChargeLinear(v.Length);
+            int capacity = v.Length + 8;
+            if (2L * v.Length > c.Limits.MaxStrChars)
+            {
+                // the worst case could pass the cap, so the exact length comes first (16M dots became 32M
+                // chars before the cap refused them); the cap only, as Str() below charges the result
+                c.Budget.ChargeLinear(v.Length);
+                long len = v.Length;
+                for (int i = 0; i < v.Length; i++)
+                {
+                    if (v[i] < 128 && EscapeSpecial[v[i]])
+                        len++;
+                }
+                c.Values.CheckStrLen(len);
+                capacity = (int)len;
+            }
+            var sb = new System.Text.StringBuilder(capacity);
             for (int i = 0; i < v.Length; i++)
             {
                 char ch = v[i];
-                if (special.IndexOf(ch) >= 0)
+                if (ch < 128 && EscapeSpecial[ch])
                     sb.Append('\\');
                 sb.Append(ch);
             }
             return c.Values.Str(sb.ToString());
+        }
+
+        private static readonly bool[] EscapeSpecial = EscapeTable("()[]{}?*+-|^$\\.&~# \t\n\r\v\f");
+
+        private static bool[] EscapeTable(string special)
+        {
+            var t = new bool[128];
+            foreach (char ch in special)
+                t[ch] = true;
+            return t;
         }
 
         private static ScriptValue Purge(EvalContext c)
@@ -247,6 +284,7 @@ namespace Outbridge.PyLite.Modules
                 else
                 {
                     template = ParseTemplate(c, replStr.Value, pat);
+                    c.Values.PreCharge(32L * template.Count);   // kept on the pattern: a reference and a boxed group number per piece
                     pat.CachedReplText = replStr.Value;
                     pat.CachedReplTemplate = template;
                 }
@@ -254,11 +292,12 @@ namespace Outbridge.PyLite.Modules
 
             var sb = new System.Text.StringBuilder(end + 16);
             int last = 0, p = 0, n = 0;
+            Regex re = pat.Plain(c, input);   // once: a callable repl may run the pattern on other subjects
             while (p <= end)
             {
                 if (count != 0 && n >= count)
                     break;
-                Match m = RunMatch(c, pat.Net, input, p, end - p);
+                Match m = RunMatch(c, pat, re, input, p, end - p);
                 if (!m.Success)
                     break;
                 int b = m.Index, e = m.Index + m.Length;
@@ -294,11 +333,12 @@ namespace Outbridge.PyLite.Modules
             int end = input.Length;
             ListValue result = c.Values.List(8);
             int last = 0, p = 0, n = 0;
+            Regex re = pat.Plain(c, input);
             while (p <= end)
             {
                 if (maxsplit != 0 && n >= maxsplit)
                     break;
-                Match m = RunMatch(c, pat.Net, input, p, end - p);
+                Match m = RunMatch(c, pat, re, input, p, end - p);
                 if (!m.Success)
                     break;
                 int b = m.Index, e = m.Index + m.Length;
@@ -320,11 +360,14 @@ namespace Outbridge.PyLite.Modules
 
         private static List<object> ParseTemplate(EvalContext c, string repl, PatternValue pat)
         {
+            c.Budget.ChargeLinear(repl.Length);
             var segs = new List<object>();
             var lit = new System.Text.StringBuilder();
             int i = 0, n = repl.Length;
             while (i < n)
             {
+                if ((i & 0xFFFE) == 0xFFFE)   // i steps by 1 or 2: one of the two is hit in every 64K, never index 0
+                    c.Budget.CheckDeadlineAfterCall();
                 char ch = repl[i];
                 if (ch != '\\')
                 {
@@ -335,18 +378,35 @@ namespace Outbridge.PyLite.Modules
                 if (i + 1 >= n)
                     throw Raise.Make(c, PyExceptionTypes.ReError, "bad escape (end of pattern)");
                 char c2 = repl[i + 1];
-                if (c2 >= '0' && c2 <= '9')
+                if (c2 == '0')
                 {
-                    int j = i + 1, num = 0, digits = 0;
-                    while (j < n && repl[j] >= '0' && repl[j] <= '9' && digits < 2)
+                    // CPython's parse_template: \0 and up to two more octal digits are a character, never group 0
+                    int j = i + 2, code = 0;
+                    while (j < n && j < i + 4 && IsOctal(repl[j]))
+                        code = code * 8 + (repl[j++] - '0');
+                    lit.Append((char)code);
+                    i = j;
+                    continue;
+                }
+                if (c2 >= '1' && c2 <= '9')
+                {
+                    // three octal digits are a character; otherwise one or two digits are a group
+                    if (i + 3 < n && IsOctal(c2) && IsOctal(repl[i + 2]) && IsOctal(repl[i + 3]))
                     {
-                        num = num * 10 + (repl[j] - '0');
-                        j++;
-                        digits++;
+                        int code = (c2 - '0') * 64 + (repl[i + 2] - '0') * 8 + (repl[i + 3] - '0');
+                        if (code > 0xFF)
+                            throw Raise.Make(c, PyExceptionTypes.ReError,
+                                "octal escape value \\" + repl.Substring(i + 1, 3) + " outside of range 0-0o377");
+                        lit.Append((char)code);
+                        i += 4;
+                        continue;
                     }
+                    int num = c2 - '0', j2 = i + 2;
+                    if (j2 < n && repl[j2] >= '0' && repl[j2] <= '9')
+                        num = num * 10 + (repl[j2++] - '0');
                     FlushLit(segs, lit);
                     segs.Add(GroupRef(c, num, pat));
-                    i = j;
+                    i = j2;
                     continue;
                 }
                 if (c2 == 'g')
@@ -396,11 +456,20 @@ namespace Outbridge.PyLite.Modules
             else
             {
                 if (!pat.Groups.NameIndex.TryGetValue(name, out gi))
-                    throw Raise.Make(c, PyExceptionTypes.ReError, "unknown group name '" + name + "'");
+                {
+                    // CPython: a well-formed name the pattern lacks is an IndexError, not a pattern error
+                    throw Raise.Make(c, StrMethods.IsIdentifier(name) ? PyExceptionTypes.IndexError : PyExceptionTypes.ReError,
+                        "unknown group name '" + name + "'");
+                }
                 FlushLit(segs, lit);
                 segs.Add(gi);
             }
             return j + 1;
+        }
+
+        private static bool IsOctal(char ch)
+        {
+            return ch >= '0' && ch <= '7';
         }
 
         private static int GroupRef(EvalContext c, int num, PatternValue pat)
@@ -463,6 +532,7 @@ namespace Outbridge.PyLite.Modules
         {
             for (int k = 0; k < segs.Count; k++)
             {
+                c.Budget.Step();   // a template of 1M group references is 1M pieces
                 object seg = segs[k];
                 string s = seg as string;
                 if (s == null)
@@ -498,11 +568,12 @@ namespace Outbridge.PyLite.Modules
         internal static ScriptValue Findall(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
             ListValue result = c.Values.List(8);
-            string input = Truncated(subj.Value, endpos);
+            string input = Truncated(c, subj.Value, endpos);
             int p = pos;
+            Regex re = pat.Plain(c, input);
             while (p <= endpos)
             {
-                Match m = RunMatch(c, pat.Net, input, p, endpos - p);
+                Match m = RunMatch(c, pat, re, input, p, endpos - p);
                 if (!m.Success)
                     break;
                 result.Add(FindallElement(c, pat, m), c);
@@ -552,19 +623,19 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Search(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
-            Match m = RunMatch(c, pat.Net, subj.Value, pos, endpos - pos);
+            Match m = RunMatch(c, pat, pat.Plain(c, subj.Value), subj.Value, pos, endpos - pos);
             return m.Success ? (ScriptValue)MakeMatch(c, m, pat, subj, pos, endpos) : c.Values.None;
         }
 
         private static ScriptValue MatchAt(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
-            Match m = RunMatch(c, pat.AnchoredRegex, subj.Value, pos, endpos - pos);   // CPython's match is anchored at pos
+            Match m = RunMatch(c, pat, pat.Anchored(c, subj.Value), subj.Value, pos, endpos - pos);   // CPython's match is anchored at pos
             return m.Success && m.Index == pos ? (ScriptValue)MakeMatch(c, m, pat, subj, pos, endpos) : c.Values.None;
         }
 
         private static ScriptValue FullMatch(EvalContext c, PatternValue pat, StrValue subj, int pos, int endpos)
         {
-            Match m = RunMatch(c, pat.FullRegex, subj.Value, pos, endpos - pos);
+            Match m = RunMatch(c, pat, pat.Full(c, subj.Value), subj.Value, pos, endpos - pos);
             return m.Success && m.Index == pos && m.Index + m.Length == endpos
                 ? (ScriptValue)MakeMatch(c, m, pat, subj, pos, endpos)
                 : c.Values.None;
@@ -575,25 +646,80 @@ namespace Outbridge.PyLite.Modules
         // a Stopwatch object on every call (this runs once per match, and N times per sub/findall).
         private static readonly double SwToTimeSpanTicks = TimeSpan.TicksPerSecond / (double)Stopwatch.Frequency;
 
-        // The subject cut at endpos once per operation (P13): RunMatch then scans it whole, no copy per match.
-        internal static string Truncated(string input, int endpos)
+        // CPython's endpos ends the subject, but pos is no string boundary: \b, lookbehind and ^ still see the text
+        // before it. Regex.Run, the callee of Match(s, startat), scans the text [0, end) from startat: that window with
+        // no copy of s[:endpos], which a lexer's match(buf, pos, line_end) made per line (2.4 GB over a 100 KB buffer).
+        private static readonly Func<Regex, bool, int, string, int, int, int, Match> WindowRun = FindWindowRun();
+
+        private static Func<Regex, bool, int, string, int, int, int, Match> FindWindowRun()
         {
-            return endpos == input.Length ? input : input.Substring(0, endpos);
+            try
+            {
+                System.Reflection.MethodInfo run = typeof(Regex).GetMethod("Run",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null,
+                    new[] { typeof(bool), typeof(int), typeof(string), typeof(int), typeof(int), typeof(int) }, null);
+                if (run == null || run.ReturnType != typeof(Match))
+                    return null;
+                return (Func<Regex, bool, int, string, int, int, int, Match>)Delegate.CreateDelegate(
+                    typeof(Func<Regex, bool, int, string, int, int, int, Match>), run, false);
+            }
+            catch (Exception)
+            {
+                return null;   // a runtime that hides it: the charged copy below stands in, the type must not fail
+            }
+        }
+
+        // The subject findall and finditer scan for endpos: the whole one when RunMatch can window it, else the copy,
+        // once per operation and charged (a finditer keeps it: sixty kept iterators held 487 MB).
+        internal static string Truncated(EvalContext ctx, string input, int endpos)
+        {
+            if (endpos == input.Length || WindowRun != null)
+                return input;
+            ctx.Values.PreCharge(24 + 2L * endpos);
+            return input.Substring(0, endpos);
+        }
+
+        // A pattern that loops a group without a small bound keeps a backtracking stack as long as the longest
+        // subject it ran on, inside the .NET Regex the run holds (40 cached ones over 500K chars kept 446 MB):
+        // charged once per new longest subject, for each regex the pattern runs. A bounded loop ({1,10} in {1,10}:
+        // 100 passes) stops at its passes (charged per subject char, 12 such rules over a 3.6 MB document were
+        // refused). `(?:INFO|WARN)?` and other patterns keep a small stack.
+        internal static Match RunMatch(EvalContext ctx, PatternValue pat, Regex re, string input, int beginning, int length)
+        {
+            int reach = (int)System.Math.Min(beginning + (long)length, pat.Groups.LoopPasses);
+            int slot = pat.RunSlot(ctx, re);
+            if (pat.Groups.LongLoop && reach > pat.StackReach(slot))
+            {
+                ctx.Budget.ChargeAllocation(16L * (reach - pat.StackReach(slot)));
+                pat.SetStackReach(slot, reach);
+            }
+            return RunMatch(ctx, re, input, beginning, length);
         }
 
         internal static Match RunMatch(EvalContext ctx, Regex re, string input, int beginning, int length)
         {
+            // Matches pay steps: re.sub('', '', s) over 4M chars made 4M matches on 94 steps.
+            ctx.Budget.StepMatch();
             ctx.Budget.CheckDeadlineNow();
             long t0 = Stopwatch.GetTimestamp();
             Match m;
             try
             {
-                // CPython semantics: endpos truncates the subject, but pos is NOT a string boundary — \b,
-                // lookbehind and ^ still see the text before it. .NET's (beginning, length) overload treats
-                // the window edges as the string edges, so scan with a start offset on a truncated string.
+                // .NET's (beginning, length) overload treats both window edges as string edges: see WindowRun
                 int end = beginning + length;
-                string subject = end == input.Length ? input : input.Substring(0, end);
-                m = re.Match(subject, beginning);
+                if (end == input.Length)
+                {
+                    m = re.Match(input, beginning);
+                }
+                else if (WindowRun != null)
+                {
+                    m = WindowRun(re, false, -1, input, 0, end, beginning);
+                }
+                else
+                {
+                    ctx.Budget.ChargeAllocation(2L * end);   // the copy lives as long as the match: 400 kept cost 800 MB
+                    m = re.Match(input.Substring(0, end), beginning);
+                }
             }
             catch (RegexMatchTimeoutException)
             {
@@ -614,9 +740,17 @@ namespace Outbridge.PyLite.Modules
             return m;
         }
 
+        // A .NET Match keeps an array per group and, for a group under a quantifier, every capture it made:
+        // 4000 matches of 2000 groups, or 100 of (a)* over 500K chars, took 360-550 MB charged as nothing.
         internal static MatchValue MakeMatch(EvalContext c, Match m, PatternValue pat, StrValue subj, int pos, int endpos)
         {
-            c.Values.PreCharge(64);
+            long bytes = 64 + 32L * pat.Groups.Count;
+            if (pat.Groups.Repeated)
+            {
+                for (int g = 1; g <= pat.Groups.Count; g++)
+                    bytes += 8L * pat.Groups.Of(m, g).Captures.Count;
+            }
+            c.Values.PreCharge(bytes);
             return new MatchValue(m, pat.Groups, pat, subj, pos, endpos);
         }
 

@@ -1,4 +1,3 @@
-using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -23,6 +22,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static void AddTable(OrderedTable t, OrderedTable src, EvalContext ctx)
         {
+            ctx.Budget.ChargeLinear(src.EntriesUsed);   // one table walk, a lookup per entry
             if (ReferenceEquals(src, t))
                 return;
             for (int p = 0; p < src.EntriesUsed; p++)
@@ -50,12 +50,53 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static OrderedTable Keep(OrderedTable a, OrderedTable m, bool keepFound, EvalContext ctx)
         {
-            var t = new OrderedTable(ctx, a.Count);
+            if (keepFound && m.EntriesUsed < a.EntriesUsed)
+                return KeepSmall(a, m, ctx);
+            return KeepWalk(a, m, keepFound, ctx);
+        }
+
+        private static OrderedTable KeepWalk(OrderedTable a, OrderedTable m, bool keepFound, EvalContext ctx)
+        {
+            ctx.Budget.ChargeLinear(a.EntriesUsed);
+            var t = new OrderedTable(ctx, keepFound ? System.Math.Min(a.Count, m.Count) : a.Count);
             for (int p = 0; p < a.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, unused;
                 if (a.TryGetEntryAt(p, out h, out k, out unused) && m.ContainsKey(k, h, ctx, 0) == keepFound)
+                    t.InsertOrUpdate(k, h, null, ctx, 0);
+            }
+            return t;
+        }
+
+        // big & small walks the small side, as CPython does, and keeps the left table's order: the positions found in
+        // `a` are sorted, so the cost is O(m log m) for m = len(small) instead of O(len(big)).
+        private static OrderedTable KeepSmall(OrderedTable a, OrderedTable m, EvalContext ctx)
+        {
+            ctx.Budget.ChargeLinear(m.EntriesUsed);
+            ulong version = a.Version;
+            var found = new System.Collections.Generic.List<int>(m.Count);
+            for (int p = 0; p < m.EntriesUsed; p++)
+            {
+                long h;
+                ScriptValue k, unused;
+                if (!m.TryGetEntryAt(p, out h, out k, out unused))
+                    continue;
+                int at = a.IndexOf(k, h, ctx, 0);
+                if (at >= 0)
+                    found.Add(at);
+            }
+            if (a.Version != version)
+                return KeepWalk(a, m, true, ctx);   // an __eq__ changed `a`: the positions are stale, walk it as before
+            found.Sort();
+            var t = new OrderedTable(ctx, found.Count);
+            foreach (int at in found)
+            {
+                if (a.Version != version)
+                    return KeepWalk(a, m, true, ctx);   // the inserts below can call __eq__ too
+                long h;
+                ScriptValue k, unused;
+                if (a.TryGetEntryAt(at, out h, out k, out unused))
                     t.InsertOrUpdate(k, h, null, ctx, 0);
             }
             return t;
@@ -74,6 +115,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             OrderedTable m = Membership(b, ctx);
             OrderedTable t = Keep(a, m, false, ctx);
+            ctx.Budget.ChargeLinear(m.EntriesUsed);
             for (int p = 0; p < m.EntriesUsed; p++)
             {
                 long h;
@@ -87,6 +129,7 @@ namespace Outbridge.PyLite.Runtime.Values
         // Every element of a is in b; stops at the first miss.
         internal static bool AllContained(OrderedTable a, OrderedTable b, EvalContext ctx, int depth)
         {
+            ctx.Budget.ChargeLinear(a.EntriesUsed);
             for (int p = 0; p < a.EntriesUsed; p++)
             {
                 long h;
@@ -99,6 +142,9 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static bool Disjoint(OrderedTable a, ScriptValue b, EvalContext ctx)
         {
+            SetValue bs = b as SetValue;
+            if (bs != null && bs.Table.EntriesUsed > a.EntriesUsed)
+                return !AnyContained(a, bs.Table, ctx);   // the smaller side is walked, as in CPython
             IScriptIterator it = PyOps.GetIterator(b, ctx);
             ScriptValue v;
             while (it.MoveNext(ctx, out v))
@@ -107,6 +153,19 @@ namespace Outbridge.PyLite.Runtime.Values
                     return false;
             }
             return true;
+        }
+
+        private static bool AnyContained(OrderedTable small, OrderedTable big, EvalContext ctx)
+        {
+            ctx.Budget.ChargeLinear(small.EntriesUsed);
+            for (int p = 0; p < small.EntriesUsed; p++)
+            {
+                long h;
+                ScriptValue k, unused;
+                if (small.TryGetEntryAt(p, out h, out k, out unused) && big.ContainsKey(k, h, ctx, 0))
+                    return true;
+            }
+            return false;
         }
 
         // A set's own table, or a fresh table of any other iterable's elements.

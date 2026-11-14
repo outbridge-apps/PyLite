@@ -40,8 +40,8 @@ namespace Outbridge.PyLite.Modules
             {
                 ["from_float"] = BuiltinFunctionValue.Make("from_float", Args.Positional("from_float", 1, 1, (self, args, kw, c) => DecFromFloat(c, args))),
             };
-            BuiltinDelegate ctor = (self, args, kw, c) => DecimalValue.Construct(c, args, kw);
-            return ctx.Values.Type("decimal.Decimal", ctor, null, slots);
+            BuiltinDelegate ctor = Args.LeadKeywords("Decimal", (self, args, kw, c) => DecimalValue.Construct(c, args, kw), 1, "value", "context");
+            return ctx.Values.EngineType("decimal.Decimal", ctor, null, slots);
         }
 
         private static ScriptValue DecFromFloat(EvalContext ctx, ScriptValue[] args)

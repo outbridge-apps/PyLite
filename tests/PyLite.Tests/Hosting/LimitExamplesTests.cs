@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Outbridge.PyLite.Hosting;
+using Outbridge.PyLite.Tests.Infra;
 using Xunit;
 
 namespace Outbridge.PyLite.Tests.Hosting
@@ -17,14 +18,14 @@ namespace Outbridge.PyLite.Tests.Hosting
 
         public static IEnumerable<object[]> Examples()
         {
-            return Directory.GetFiles(ExamplesDir(), "*.py").OrderBy(p => p, StringComparer.Ordinal)
+            return Directory.GetFiles(RepoPaths.Combine("examples", "limits"), "*.py").OrderBy(p => p, StringComparer.Ordinal)
                 .Select(p => new object[] { Path.GetFileName(p) });
         }
 
         [Fact]
         public void EveryLimitHasAnExample()
         {
-            string all = string.Join("\n", Directory.GetFiles(ExamplesDir(), "*.py").Select(File.ReadAllText));
+            string all = string.Join("\n", Directory.GetFiles(RepoPaths.Combine("examples", "limits"), "*.py").Select(File.ReadAllText));
             foreach (string limit in new[] { "MaxSteps", "DeadlineMs", "MaxAllocBytes", "MaxCallDepth", "MaxDataDepth",
                 "MaxStrChars", "MaxCollectionItems", "MaxIntBits", "MaxOutputBytes", "RegexPerOpTimeoutMs", "SleepTotalMs" })
                 Assert.Contains("# limits: " + limit + "=", all);
@@ -34,7 +35,7 @@ namespace Outbridge.PyLite.Tests.Hosting
         [MemberData(nameof(Examples))]
         public void TheLimitFiresAsDescribed(string file)
         {
-            string src = File.ReadAllText(Path.Combine(ExamplesDir(), file));
+            string src = File.ReadAllText(Path.Combine(RepoPaths.Combine("examples", "limits"), file));
             string[] expect = Header(src, "expect").Split(' ');
             RunResult r = Engine.Run(src, new RunRequest { Limits = LimitsOf(Header(src, "limits")) });
 
@@ -80,15 +81,6 @@ namespace Outbridge.PyLite.Tests.Hosting
                 }
             }
             return lim;
-        }
-
-        private static string ExamplesDir()
-        {
-            string dir = AppDomain.CurrentDomain.BaseDirectory;
-            while (dir != null && !Directory.Exists(Path.Combine(dir, "examples", "limits")))
-                dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
-            Assert.NotNull(dir);
-            return Path.Combine(dir, "examples", "limits");
         }
     }
 }

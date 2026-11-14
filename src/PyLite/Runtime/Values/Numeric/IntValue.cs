@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 
@@ -9,27 +8,39 @@ namespace Outbridge.PyLite.Runtime.Values
         private static readonly ScriptTypeInfo Type = new ScriptTypeInfo("int", IntMethods.BuildSlots());
         internal static ScriptTypeInfo IntType { get { return Type; } }
 
-        // P1 small-int fast path: values that fit in a long are stored as one (canonical — a long-fitting
+        // Small-int fast path: values that fit in a long are stored as one (canonical — a long-fitting
         // value is NEVER stored big, the BigInteger ctor normalizes), so arithmetic/compare/hash stay in
         // machine words. Big ints keep the exact BigInteger path.
-        internal readonly bool IsSmall;
+        // A big value lives in a box of its own, so a machine int is header + one long + one null reference
+        // (32 bytes, was 48 with the BigInteger struct and the bit-length cache inline).
+        private sealed class BigBox
+        {
+            internal readonly BigInteger V;
+            internal int Bits;   // exact bit length, 0 = not yet computed (big => >= 64)
+            internal BigBox(BigInteger v) { V = v; }
+        }
+
         internal readonly long Small;
-        private readonly BigInteger _big;
-        private int _bitsCache;   // big path only: exact bit length, 0 = not yet computed (big => >= 64)
+        private readonly BigBox _box;
+        internal bool IsSmall { get { return _box == null; } }
+        private BigInteger _big { get { return _box.V; } }
 
         public BigInteger Value { get { return IsSmall ? new BigInteger(Small) : _big; } }
 
-        internal IntValue(long v) { IsSmall = true; Small = v; }
+        // float(int): the nearest double, ties to even (the cast from long rounds so; .NET Framework's
+        // (double)BigInteger truncates past 64 bits, and even a long-sized BigInteger past 2^53).
+        internal double ToDouble() { return IsSmall ? Small : Modules.Support.NearestDouble.FromBigInteger(_big); }
+
+        internal IntValue(long v) { Small = v; }
 
         internal IntValue(BigInteger v)
         {
             if (v >= LongMin && v <= LongMax)
             {
-                IsSmall = true;
                 Small = (long)v;
             }
             else
-                _big = v;
+                _box = new BigBox(v);
         }
 
         private static readonly BigInteger LongMin = long.MinValue;
@@ -62,26 +73,29 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (IsSmall)
                 return NumericOps.BitLengthLong(Small);
-            int c = _bitsCache;
+            int c = _box.Bits;
             if (c > 0)
                 return c;
             long bits = NumericOps.BitLength(_big);
             if (bits <= int.MaxValue)
-                _bitsCache = (int)bits;
+                _box.Bits = (int)bits;
             return bits;
         }
 
         internal void PrefillBits(long bits)
         {
             if (!IsSmall && bits > 0 && bits <= int.MaxValue)
-                _bitsCache = (int)bits;
+                _box.Bits = (int)bits;
         }
 
         protected internal override bool IsTruthyCore(EvalContext ctx) { return IsSmall ? Small != 0 : !_big.IsZero; }
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
         {
-            return IsSmall ? NumericHash.HashLong(Small) : NumericHash.HashBigInteger(_big);
+            if (IsSmall)
+                return NumericHash.HashLong(Small);
+            ctx.Budget.ChargeLinear(BitLength() >> 5);   // a remainder over every word: a hash loop on 4M bits ran seconds on one step
+            return NumericHash.HashBigInteger(_big);
         }
 
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth)
@@ -131,11 +145,42 @@ namespace Outbridge.PyLite.Runtime.Values
             if (IsSmall)
             {
                 NumericOps.ChargeIntToStr(Small, ctx);
-                sb.Append(Small.ToString(CultureInfo.InvariantCulture));
+                sb.AppendDecimal(Small);   // straight into the builder: no string per int
                 return;
             }
-            NumericOps.ChargeIntToStr(_big, ctx);
-            sb.Append(BigOps.ToDecimalString(ctx, _big));
+            sb.Append(DecimalDigits(ctx));
+        }
+
+        // The digits of v at the tail of buf (20 chars hold any long); returns where they start. Managed: on
+        // net472 long.ToString is a call into the runtime that costs several times this loop.
+        internal static int WriteDecimal(long v, char[] buf)
+        {
+            int p = buf.Length;
+            ulong u = v < 0 ? (ulong)(-(v + 1)) + 1 : (ulong)v;
+            do
+            {
+                ulong q = u / 10;
+                buf[--p] = (char)('0' + (int)(u - q * 10));
+                u = q;
+            }
+            while (u != 0);
+            if (v < 0)
+                buf[--p] = '-';
+            return p;
+        }
+
+        // The decimal digits, charged and deadline-bounded (net472's big-int conversion is quadratic).
+        internal string DecimalDigits(EvalContext ctx)
+        {
+            if (IsSmall)
+            {
+                NumericOps.ChargeIntToStr(Small, ctx);
+                char[] buf = ctx.DigitScratch ?? (ctx.DigitScratch = new char[20]);
+                int p = WriteDecimal(Small, buf);
+                return new string(buf, p, buf.Length - p);
+            }
+            NumericOps.ChargeIntToStr(_big, ctx);   // refuses past 4300 digits first
+            return BigOps.ToDecimalString(ctx, _big);
         }
     }
 }

@@ -41,12 +41,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 moved = _gen.MoveNext();
             }
-            catch (ScriptException se) when (Evaluator.IsStopIteration(se))
+            catch (ScriptException se) when (_node.Kind == CompKind.Generator && Evaluator.IsStopIteration(se))
             {
-                // PEP 479: a StopIteration escaping the comprehension/genexp body (element
-                // a condition, or a non-first iterable — everything but the eager first for-iterable) is a
-                // RuntimeError, not a silent end-of-iteration. The bool MoveNext protocol never surfaces
-                // StopIteration itself, so anything caught here came from user code in the body.
+                // PEP 479: a StopIteration escaping a genexp body (element, a condition, or a non-first
+                // iterable) is a RuntimeError, not a silent end-of-iteration. The bool MoveNext protocol never
+                // surfaces StopIteration itself, so anything caught here came from user code in the body.
                 throw Evaluator.StopIterationEscaped(ctx);
             }
             if (moved)
@@ -54,12 +53,17 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 value = _gen.Current;
                 return true;
             }
+            ctx.CaughtStop = null;   // its for loop took the stop as the end, as CPython's does: next() raises a new one
             value = null;
             return false;
         }
 
         private IEnumerable<ScriptValue> Walk(int clauseIndex)
         {
+            if ((clauseIndex & 15) == 0)   // one nested iterator per clause, and a clause need not evaluate anything that probes
+            {
+                StackGuard.Probe(_ctx);
+            }
             if (clauseIndex >= _node.Clauses.Count)
             {
                 yield return EvalElement();
@@ -83,6 +87,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
             else
             {
+                // A clause level is a node of the walk: 99,000 `if` clauses ran per element on 9 steps.
+                if ((++_ctx.NodeCounter & 63) == 0)
+                    _ctx.Budget.Step(BudgetCost.NodeBatch);
                 // T2.3c: a pure-int condition over ONE loop variable reads its slot and decides in
                 // C# longs; anything else (or a non-int/unbound slot) keeps the compiled/tree walk.
                 // Both caches are per clause (multi-if safe).
@@ -113,7 +120,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (_node.Kind == CompKind.Dict)
             {
                 ScriptValue k;
-                if (fusedElem != null && fusedElem(_scope, out f))
+                if (fusedElem != null && fusedElem(_scope, _ctx, out f))
                 {
                     k = _ctx.Values.Int(f);
                 }
@@ -125,7 +132,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ScriptValue v;
                 FusedScopeLong fusedVal = _fused
                     ? Evaluator.GetFusedScopeLong(ref _node.FusedValueElement, _node.ValueElement) : null;
-                if (fusedVal != null && fusedVal(_scope, out f))
+                if (fusedVal != null && fusedVal(_scope, _ctx, out f))
                 {
                     v = _ctx.Values.Int(f);
                 }
@@ -136,7 +143,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 return _ctx.Values.Tuple(new[] { k, v });
             }
-            if (fusedElem != null && fusedElem(_scope, out f))
+            if (fusedElem != null && fusedElem(_scope, _ctx, out f))
             {
                 return _ctx.Values.Int(f);
             }

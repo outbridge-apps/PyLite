@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime;
-using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
@@ -18,7 +16,7 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue IsInstanceBuiltin(EvalContext c, ScriptValue[] args)
         {
             return c.Values.Bool(MatchClassInfo(c, args[1], args[0], true,
-                "isinstance() arg 2 must be a type or tuple of types"));
+                "isinstance() arg 2 must be a type, a tuple of types, or a union"));
         }
 
         private static ScriptValue IsSubclassBuiltin(EvalContext c, ScriptValue[] args)
@@ -26,29 +24,37 @@ namespace Outbridge.PyLite.Modules
             if (args[0].Kind != ValueKind.Type && args[0].Kind != ValueKind.RecordClass && !(args[0] is EnumClassValue))
                 throw Raise.TypeError(c, "issubclass() arg 1 must be a class");
             return c.Values.Bool(MatchClassInfo(c, args[1], args[0], false,
-                "issubclass() arg 2 must be a class or tuple of classes"));
+                "issubclass() arg 2 must be a class, a tuple of classes, or a union"));
         }
 
-        private static bool MatchesType(ScriptValue obj, TypeValue type, bool instance)
+        private static bool MatchesType(EvalContext c, ScriptValue obj, TypeValue type, bool instance)
         {
+            if (type.NoInstanceChecks != null)
+                throw Raise.TypeError(c, type.NoInstanceChecks);   // a TypedDict class, as CPython's
             TypeValue objType = obj as TypeValue;   // a record or enum class is never a subclass of a builtin type
             return instance ? IsInstanceOf(obj, type) : objType != null && IsSubclassOf(objType, type);
         }
 
-        // classinfo may be a type or a (possibly nested) tuple of types; explicit stack, depth-limited.
+        // classinfo may be a type or a (possibly nested) tuple of types; explicit stack, nesting limited to
+        // MaxDataDepth (any number of sibling tuples is fine).
         private static bool MatchClassInfo(EvalContext c, ScriptValue classinfo, ScriptValue obj, bool instance, string argErr)
         {
-            if (classinfo.Kind == ValueKind.Type)   // the common single type: no stack (P8)
-                return MatchesType(obj, (TypeValue)classinfo, instance);
-            var stack = new Stack<ScriptValue>();
-            stack.Push(classinfo);
-            int depth = 0;
+            if (classinfo.Kind == ValueKind.Type)   // the common single type: no stack, none of the walk's locals to clear
+                return MatchesType(c, obj, (TypeValue)classinfo, instance);
+            return WalkClassInfo(c, classinfo, obj, instance, argErr);
+        }
+
+        private static bool WalkClassInfo(EvalContext c, ScriptValue classinfo, ScriptValue obj, bool instance, string argErr)
+        {
+            var stack = new Stack<KeyValuePair<ScriptValue, int>>();
+            stack.Push(new KeyValuePair<ScriptValue, int>(classinfo, 0));
             while (stack.Count > 0)
             {
-                ScriptValue ci = stack.Pop();
+                KeyValuePair<ScriptValue, int> top = stack.Pop();
+                ScriptValue ci = top.Key;
                 if (ci.Kind == ValueKind.Type)
                 {
-                    if (MatchesType(obj, (TypeValue)ci, instance))
+                    if (MatchesType(c, obj, (TypeValue)ci, instance))
                         return true;
                 }
                 else if (ci is EnumClassValue)
@@ -83,13 +89,29 @@ namespace Outbridge.PyLite.Modules
                             return true;
                     }
                 }
+                else if (ci is UnionTypeValue)
+                {
+                    c.Budget.ChargeLinear(((UnionTypeValue)ci).Args.Length);   // as a tuple's below
+                    c.Budget.CheckDeadlineAfterCall();
+                    ScriptValue[] uargs = ((UnionTypeValue)ci).Args;
+                    for (int ui = uargs.Length - 1; ui >= 0; ui--)
+                    {
+                        ScriptValue a = uargs[ui];
+                        if (a.Kind != ValueKind.None)
+                            stack.Push(new KeyValuePair<ScriptValue, int>(a, top.Value + 1));
+                        else if (instance && obj.Kind == ValueKind.None)
+                            return true;   // None stands for NoneType
+                    }
+                }
                 else if (ci.Kind == ValueKind.Tuple)
                 {
-                    if (++depth > 16)
-                        throw Raise.RecursionError(c, "maximum recursion depth exceeded");
+                    if (top.Value >= c.Limits.MaxDataDepth)
+                        throw Raise.RecursionError(c, "maximum recursion depth exceeded in __instancecheck__");
                     TupleValue t = (TupleValue)ci;
-                    for (int i = 0; i < t.Items.Length; i++)
-                        stack.Push(t.Items[i]);
+                    c.Budget.ChargeLinear(t.Items.Length);   // the same tuple may be listed many times
+                    c.Budget.CheckDeadlineAfterCall();
+                    for (int i = t.Items.Length - 1; i >= 0; i--)   // in order: the first match answers, as in CPython
+                        stack.Push(new KeyValuePair<ScriptValue, int>(t.Items[i], top.Value + 1));
                 }
                 else
                 {
@@ -106,7 +128,7 @@ namespace Outbridge.PyLite.Modules
                 ExceptionValue ev = obj as ExceptionValue;
                 return ev != null && ev.ExcType.IsSubtypeOf(tv.ExcType);
             }
-            if (tv.Describes != null && tv.Describes.IsScriptDefined)
+            if (tv.Describes != null && tv.Describes.IsNamedByScript)   // by identity: its name is the script's
                 return obj.TypeInfo.IsSubtypeOf(tv.Describes);
             return obj.TypeInfo.IsSubtypeOf(tv.Name);
         }
@@ -117,7 +139,7 @@ namespace Outbridge.PyLite.Modules
                 return cls.ExcType.IsSubtypeOf(tv.ExcType);
             if (tv.ExcType != null || cls.ExcType != null)
                 return tv.Name == "object";
-            if (tv.Describes != null && tv.Describes.IsScriptDefined)
+            if (tv.Describes != null && tv.Describes.IsNamedByScript)
                 return cls.Describes != null && cls.Describes.IsSubtypeOf(tv.Describes);
             if (cls.Describes != null)
                 return cls.Describes.IsSubtypeOf(tv.Name);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using Outbridge.PyLite.Runtime;
@@ -11,21 +12,21 @@ namespace Outbridge.PyLite.Hosting
     // written before _done is set; the host reads it after WaitCompleted (MRES happens-before barrier).
     internal sealed class RunnerThread
     {
-        public const int StackSizeBytes = 32 * 1024 * 1024;   // x64 reserve is cheap
+        public const int StackSizeBytes = 32 * 1024 * 1024;   // .NET Framework commits all of it at start
         private static long _runIdCounter;                    // infrastructure statics only: a name counter
         private static long _gcHintCounter;                   // ...and the hygiene-hint counter
+        private static readonly HashSet<RunnerThread> _running = new HashSet<RunnerThread>();   // started, not yet ended
 
         private readonly Thread _thread;
         private readonly ManualResetEventSlim _done = new ManualResetEventSlim(false);
         private readonly Func<RunResult> _work;               // returns a success result or throws
         private readonly Func<EvalContext> _ctxProvider;      // current ctx for error building (may be null early)
-        private readonly RunGate _gate;                       // null in unit tests of the thread alone
-        private readonly RunTicket _ticket;
+        private readonly LeakBreaker _breaker;                // null in unit tests of the thread alone
         private readonly MemoryHygieneOptions _hygiene;       // null => off
 
         private RunResult _result;
         private Exception _engineFault;
-        internal int LeakCounted;                             // RunGate leak protocol (Interlocked)
+        internal int LeakCounted;                             // LeakBreaker's protocol (Interlocked)
 
         // Pre-built at type load so the last line of defense allocates NOTHING: under memory pressure
         // the pretty failure path can itself throw (OOM while building strings), and an exception
@@ -35,12 +36,11 @@ namespace Outbridge.PyLite.Hosting
             null, new RunStatistics());
 
         public RunnerThread(Func<RunResult> work, Func<EvalContext> ctxProvider,
-            RunGate gate = null, RunTicket ticket = null, MemoryHygieneOptions hygiene = null)
+            LeakBreaker breaker = null, MemoryHygieneOptions hygiene = null)
         {
             _work = work;
             _ctxProvider = ctxProvider;
-            _gate = gate;
-            _ticket = ticket;
+            _breaker = breaker;
             _hygiene = hygiene;
             long id = Interlocked.Increment(ref _runIdCounter);
             _thread = new Thread(ThreadMain, StackSizeBytes)
@@ -50,8 +50,14 @@ namespace Outbridge.PyLite.Hosting
             };
         }
 
+        // The tests' handle on a thread that cannot start, which the suite cannot cause for real; null in production.
+        internal static Func<Exception> StartFaultForTests;
+
         public void Start()
         {
+            Func<Exception> fault = StartFaultForTests;
+            if (fault != null)
+                throw fault();
             _thread.Start();
         }
 
@@ -67,12 +73,79 @@ namespace Outbridge.PyLite.Hosting
 
         public Exception EngineFault { get { return _engineFault; } }
 
+        // The run threads of the process that compete for CPU. One inside host code is not counted: a hung host call uses
+        // none, and counting the runs stuck in a hung service made them leak later and the breaker open later.
+        internal static int Runnable
+        {
+            get
+            {
+                lock (_running)
+                {
+                    int n = 0;
+                    foreach (RunnerThread r in _running)
+                    {
+                        if (!r.InHostCode)
+                            n++;
+                    }
+                    return n;
+                }
+            }
+        }
+
+        // Host code is the only code of a run that can wait for ever: the engine's own work always ends. Written only
+        // by this thread, read by the caller waiting for it.
+        [ThreadStatic] private static RunnerThread _current;
+        // The script call depth at the innermost host call (-1: none, int.MaxValue: a call that cannot re-enter the script).
+        // Script code the host calls back (a __repr__ through ScriptValue.Repr) runs deeper, so it is no host code.
+        private int _hostAt = -1;
+        private EvalContext _hostCtx;
+
+        internal bool InHostCode
+        {
+            get
+            {
+                int at = Volatile.Read(ref _hostAt);
+                if (at < 0)
+                    return false;
+                EvalContext ctx = Volatile.Read(ref _hostCtx);
+                return ctx == null || Volatile.Read(ref ctx.CallDepth) <= at;
+            }
+        }
+
+        // Returns the mark LeaveHost restores; ctx null for a call that cannot re-enter the script (clock, sleep policy).
+        internal static int EnterHost(EvalContext ctx)
+        {
+            RunnerThread r = _current;
+            if (r == null)
+                return -1;
+            int previous = r._hostAt;
+            if (ctx != null)
+                Volatile.Write(ref r._hostCtx, ctx);
+            Volatile.Write(ref r._hostAt, ctx != null ? ctx.CallDepth : int.MaxValue);
+            return previous;
+        }
+
+        internal static void LeaveHost(int mark)
+        {
+            RunnerThread r = _current;
+            if (r != null)
+                Volatile.Write(ref r._hostAt, mark);
+        }
+
         private void ThreadMain()
         {
+            _current = this;
+            // Never inherited: in an ASP.NET host in .NET 4.5 mode a new thread took the machine's culture, in a
+            // console host the caller's, and .NET's texts, minus signs and number formats reached scripts. Set here, on this
+            // thread: from .NET 4.6 on, setting it on the unstarted Thread object sets the CALLER's culture.
             try
             {
                 try
                 {
+                    lock (_running)
+                        _running.Add(this);
+                    Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+                    Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
                     _result = _work();
                 }
                 catch (Exception ex)
@@ -88,26 +161,39 @@ namespace Outbridge.PyLite.Hosting
             }
             finally
             {
-                // The epilogue must be as escape-proof as the barrier: an exception leaving a finally
-                // on this thread would kill the process. Gate bookkeeping is guarded; the completion
-                // signal fires no matter what.
                 try
                 {
-                    if (_gate != null)
-                    {
-                        _gate.UnregisterLeak(this);   // no-op unless the host marked this thread leaked
-                        _gate.Release(_ticket);       // slot returned strictly here
-                    }
+                    lock (_running)
+                        _running.Remove(this);
                 }
                 catch (Exception)
                 {
-                    // a broken gate must not take the process down; the run result is already set
+                    // nothing may leave this finally
                 }
-                finally
+                // The epilogue must be as escape-proof as the barrier: an exception leaving a finally
+                // on this thread would kill the process. The breaker's bookkeeping is guarded; the
+                // completion signal fires no matter what.
+                try
                 {
-                    _done.Set();                      // unconditional completion signal
+                    try
+                    {
+                        if (_breaker != null)
+                            _breaker.UnregisterLeak(this);   // no-op unless the host marked this thread leaked
+                    }
+                    catch (Exception)
+                    {
+                        // a broken breaker must not take the process down; the run result is already set
+                    }
+                    finally
+                    {
+                        _done.Set();                  // unconditional completion signal
+                    }
+                    TryMemoryHygiene();               // after the caller unblocks
                 }
-                TryMemoryHygiene();                   // self-guarded, after the caller unblocks
+                catch (Exception)
+                {
+                    // out of memory here too, in the first JIT of what is called above: its own try starts too late
+                }
             }
         }
 
@@ -137,7 +223,7 @@ namespace Outbridge.PyLite.Hosting
         private RunResult BuildFailure(Exception ex)
         {
             EvalContext ctx = _ctxProvider != null ? _ctxProvider() : null;
-            if (EngineAbort.TryUnwrap(ex) == null && !(ex is ScriptException))
+            if (EngineAbort.TryUnwrap(ex) == null && !(ex is ScriptException))   // a shortage too: reported as one, still logged
             {
                 _engineFault = ex;   // an engine bug; hosting logs the full exception
             }

@@ -1,10 +1,13 @@
 # Runs the gates of a release on the current commit and writes the report: the xUnit suite (the everyday
 # filter, then the machine-sensitive tests), the conformance cases, the differential corpus against
 # IronPython 3.4.2 and the adversarial corpus. Exit 1 when any gate fails. Give the machine nothing else to do
-# while it runs (about 12 minutes): some tests and every probe measure time.
+# while it runs (about 14 minutes): some tests and every probe measure time. The xUnit gate includes the CPython
+# oracle corpus (also under a hostile culture, in parallel and in an ASP.NET host's .NET 4.5 mode). -Perf adds PerfBench
+# against tools/perf-baseline.json (slower than x1.5 fails), which only means something when that baseline was
+# taken on the same machine.
 #
-#   powershell -ExecutionPolicy Bypass -File tools/run-gates.ps1 [-Out docs/test-report.md]
-param([string]$Out = 'docs/test-report.md')
+#   powershell -ExecutionPolicy Bypass -File tools/run-gates.ps1 [-Out docs/test-report.md] [-Perf]
+param([string]$Out = 'docs/test-report.md', [switch]$Perf)
 
 $ErrorActionPreference = 'Continue'   # native tools write progress to stderr; their exit codes decide
 $root = Split-Path -Parent $PSScriptRoot
@@ -92,24 +95,58 @@ if (Test-Path $diffMd) { $diffRows = Get-Content $diffMd | Where-Object { $_ -ma
 $sw = [Diagnostics.Stopwatch]::StartNew()
 Push-Location tools/PyLite.Stress
 $probeNames = Get-ChildItem bombs -Filter *.py | ForEach-Object { $_.BaseName }
-$stress = & dotnet run -c Release -- bombs
+$stressTsv = Join-Path $work 'stress.tsv'
+$stress = & dotnet run -c Release -- bombs --tsv $stressTsv
 $code = $LASTEXITCODE
 Pop-Location
-# Result lines: name (31) | outcome (35) | ms (8) | cpu (8) | steps (11) | allocMB (8) | depth.
+# The runner's own rows (tab-separated): a fixed-width parse cut the names it was matching by.
 $bombRows = @()
-foreach ($line in $stress)
+if (Test-Path $stressTsv)
 {
-    if ($line.Length -lt 101) { continue }
-    $name = $line.Substring(0, 31).Trim()
-    if ($probeNames -notcontains $name) { continue }
-    $bombRows += [pscustomobject]@{
-        Name = $name; Outcome = $line.Substring(31, 35).Trim(); Ms = $line.Substring(66, 8).Trim();
-        Steps = $line.Substring(82, 11).Trim(); AllocMb = $line.Substring(93, 8).Trim()
+    foreach ($line in (Get-Content $stressTsv | Select-Object -Skip 1))
+    {
+        $f = $line -split "`t"
+        if ($f.Count -lt 8 -or $probeNames -notcontains $f[0]) { continue }
+        $peak = '-'
+        if ($f.Count -gt 8) { $peak = $f[8] }
+        $bombRows += [pscustomobject]@{ Name = $f[0]; Outcome = $f[1]; Ms = $f[2]; Steps = $f[4]; AllocMb = $f[5]; Flags = $f[7]; PeakMb = $peak }
     }
 }
-$held = ($stress | Out-String) -match 'sandbox held on every probe'
-$result = '{0} probes, {1}' -f $bombRows.Count, $(if ($held) { 'the sandbox held on every one' } else { 'NOT ALL HELD' })
+$bad = @($bombRows | Where-Object { $_.Flags -ne '' })
+$held = (($stress | Out-String) -match 'sandbox held on every probe') -and ($bad.Count -eq 0)
+$result = '{0} probes, {1}' -f $bombRows.Count, $(if ($held) { 'the sandbox held on every one' } else { 'NOT ALL HELD: ' + (($bad | ForEach-Object { $_.Name + ' ' + $_.Flags }) -join ', ') })
 Add-Gate 'adversarial (Stress corpus)' (($code -eq 0) -and $held -and ($bombRows.Count -eq $probeNames.Count)) $result $sw.Elapsed
+
+# ---- probe bank (the pre-release reviews' probes, pinned) ----
+$sw = [Diagnostics.Stopwatch]::StartNew()
+Push-Location tools/PyLite.Stress
+$bankTsv = Join-Path $work 'bank.tsv'
+$bankOut = & dotnet run -c Release -- bank --tsv $bankTsv | Out-String
+$code = $LASTEXITCODE
+Pop-Location
+$m = [regex]::Match($bankOut, 'the bank held on every probe \((\d+)\)')
+$moved = @()
+if (Test-Path $bankTsv)
+{
+    foreach ($line in (Get-Content $bankTsv | Select-Object -Skip 1))
+    {
+        $f = $line -split "`t"
+        if ($f.Count -ge 6 -and $f[5] -ne '') { $moved += ($f[0] + ' ' + $f[5]) }
+    }
+}
+$result = if ($m.Success) { $m.Groups[1].Value + ' probes on their pins (outcome, output, steps, charge; 1.1.0 ceiling)' } else { 'MOVED: ' + ($moved -join ', ') }
+Add-Gate 'probe bank (reviewers'' probes)' (($code -eq 0) -and $m.Success) $result $sw.Elapsed
+
+# ---- performance (on request) ----
+if ($Perf)
+{
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $perfOut = & dotnet run --project tools/PyLite.PerfBench -c Release -- --full | Out-String
+    $code = $LASTEXITCODE
+    $result = 'within x1.5 of tools/perf-baseline.json'
+    if ($code -ne 0) { $result = 'slower than x1.5 of the baseline, or the gate was skipped (see its output)' }
+    Add-Gate 'performance (PerfBench --full)' ($code -eq 0) $result $sw.Elapsed
+}
 
 # ---- the report ----
 $finished = [DateTime]::UtcNow
@@ -152,14 +189,17 @@ foreach ($r in $diffRows) { [void]$sb.AppendLine($r) }
 [void]$sb.AppendLine('## Adversarial: which limit stopped each probe')
 [void]$sb.AppendLine()
 [void]$sb.AppendLine('`ok` and `raise` mean the script finished or raised a Python exception it was meant to raise; `budget X`')
-[void]$sb.AppendLine('names the limit that stopped it. A probe that hangs past its deadline or crashes the host would fail the')
-[void]$sb.AppendLine('gate. The probes and their limits are in `tools/PyLite.Stress/bombs`; the groups in its README.')
+[void]$sb.AppendLine('names the limit that stopped it. A probe fails the gate when it ends in a host error, an engine fault or')
+[void]$sb.AppendLine('a throw, returns more than 500 ms past its deadline, leaks its runner thread, grows the process past four')
+[void]$sb.AppendLine('times its memory limit plus 512 MB, keeps a core busy in the quarter second after it returned, or ends in')
+[void]$sb.AppendLine('another kind of outcome than `bombs/expected.txt` pins. The probes and their limits are in `tools/PyLite.Stress/bombs`;')
+[void]$sb.AppendLine('the groups in its README.')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('| probe | outcome | ms | steps | MB charged |')
-[void]$sb.AppendLine('|---|---|---:|---:|---:|')
+[void]$sb.AppendLine('| probe | outcome | ms | steps | MB charged | MB peak |')
+[void]$sb.AppendLine('|---|---|---:|---:|---:|---:|')
 foreach ($b in $bombRows)
 {
-    [void]$sb.AppendLine('| `' + $b.Name + '` | ' + ($b.Outcome -replace '\|', '/') + ' | ' + $b.Ms + ' | ' + $b.Steps + ' | ' + $b.AllocMb + ' |')
+    [void]$sb.AppendLine('| `' + $b.Name + '` | ' + ($b.Outcome -replace '\|', '/') + ' | ' + $b.Ms + ' | ' + $b.Steps + ' | ' + $b.AllocMb + ' | ' + $b.PeakMb + ' |')
 }
 $outPath = $Out
 if (-not [IO.Path]::IsPathRooted($outPath)) { $outPath = Join-Path $root $Out }

@@ -50,7 +50,10 @@ namespace Outbridge.PyLite.Modules
             }
             if (step.IsZero)
                 throw Raise.ValueError(c, "range() arg 3 must not be zero");
-            return c.Values.Range(start, stop, step);
+            RangeValue r = c.Values.Range(start, stop, step);
+            if (args.Length == 3 && !(args[2] is IntValue && ((IntValue)args[2]).IsSmall))
+                r.PrimeLength(c);   // a step past a machine word (RangeValue.PrimeLength); a small one costs nothing here
+            return r;
         }
 
         private static ScriptValue ListBuiltin(EvalContext c, ScriptValue[] args)
@@ -76,7 +79,7 @@ namespace Outbridge.PyLite.Modules
             return c.Values.Tuple(Support.Iter.ToArray(c, args[0], adoptedByCaller: true));
         }
 
-        private static ScriptValue DictBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
+        internal static ScriptValue DictBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
             Args.Unpack(c, args, "dict", 0, 1);
             DictValue d = c.Values.Dict(kw.Count + 4);
@@ -92,7 +95,7 @@ namespace Outbridge.PyLite.Modules
             return s;
         }
 
-        private static ScriptValue FrozenSetBuiltin(EvalContext c, ScriptValue[] args)
+        internal static ScriptValue FrozenSetBuiltin(EvalContext c, ScriptValue[] args)
         {
             if (args.Length == 1 && args[0].Kind == ValueKind.FrozenSet)
                 return args[0];   // frozenset(fs) is fs

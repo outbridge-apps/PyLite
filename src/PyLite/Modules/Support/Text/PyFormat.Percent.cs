@@ -37,9 +37,13 @@ namespace Outbridge.PyLite.Modules.Support
 
         private static string PercentCore(EvalContext ctx, string fmt, ScriptValue rhs, bool bytesMode)
         {
+            // CPython's unicode_format_getnextarg: a tuple is read item by item; anything else is the one argument
+            // (argLen -1), and a %(key) makes the looked-up value the one argument of its conversion.
             bool useTuple = rhs.Kind == ValueKind.Tuple;
-            ScriptValue[] args = useTuple ? ((TupleValue)rhs).Items : new[] { rhs };
-            int argIndex = 0;
+            ScriptValue[] args = useTuple ? ((TupleValue)rhs).Items : null;
+            ScriptValue one = rhs;
+            int argLen = useTuple ? args.Length : -1, argIdx = useTuple ? 0 : -2;
+            bool mapping = !useTuple && (rhs.Kind == ValueKind.Dict || rhs.Kind == ValueKind.List || (rhs is BytesValue && !bytesMode));   // PyMapping_Check; bytes_format excludes bytes
 
             var sb = new StringBuilder(fmt.Length + 16);
             int i = 0, n = fmt.Length;
@@ -59,8 +63,6 @@ namespace Outbridge.PyLite.Modules.Support
                 // %(key)conv mapping substitution: the key (parens-nested, up to the matching ')') is
                 // looked up in the right-hand mapping; the resolved value drives this conversion instead
                 // of the next positional argument.
-                ScriptValue mapped = null;
-                bool hasKey = false;
                 if (fmt[i] == '(')
                 {
                     int keyStart = ++i, depth = 1;
@@ -74,11 +76,11 @@ namespace Outbridge.PyLite.Modules.Support
                         throw Raise.ValueError(ctx, "incomplete format key");
                     string key = fmt.Substring(keyStart, i - keyStart);
                     i++;   // skip ')'
-                    DictValue mapping = rhs as DictValue;
-                    if (mapping == null)
+                    if (!mapping)
                         throw Raise.TypeError(ctx, "format requires a mapping");
-                    mapped = mapping.GetItemOrThrow(ctx.Values.Str(key), ctx);
-                    hasKey = true;
+                    one = PyOps.GetItem(rhs, ctx.Values.Str(key), ctx);
+                    argLen = -1;
+                    argIdx = -2;
                 }
 
                 bool left = false, plus = false, space = false, alt = false, zero = false;
@@ -98,7 +100,7 @@ namespace Outbridge.PyLite.Modules.Support
                 if (i < n && fmt[i] == '*')
                 {
                     i++;
-                    int wv = IntArg(ctx, Next(ctx, args, ref argIndex));
+                    int wv = IntArg(ctx, Next(ctx, args, one, argLen, ref argIdx));
                     if (wv < 0) { left = true; width = -wv; }
                     else width = wv;
                 }
@@ -120,7 +122,7 @@ namespace Outbridge.PyLite.Modules.Support
                     if (i < n && fmt[i] == '*')
                     {
                         i++;
-                        int pv = IntArg(ctx, Next(ctx, args, ref argIndex));
+                        int pv = IntArg(ctx, Next(ctx, args, one, argLen, ref argIdx));
                         prec = pv < 0 ? 0 : pv;
                     }
                     else
@@ -146,24 +148,25 @@ namespace Outbridge.PyLite.Modules.Support
                     continue;
                 }
 
-                ScriptValue value = hasKey ? mapped : Next(ctx, args, ref argIndex);
+                ScriptValue value = Next(ctx, args, one, argLen, ref argIdx);
                 string piece = RenderConv(ctx, conv, convPos, value, left, plus, space, alt, zero, width, prec, bytesMode);
                 ctx.Values.CheckStrLen((long)sb.Length + piece.Length);   // capped as it grows: one large %s may repeat
                 sb.Append(piece);
             }
 
-            // In mapping mode (rhs is a dict) leftover keys are fine; the leftover-args check applies to
-            // positional (tuple / single-arg) formatting only.
-            if (rhs.Kind != ValueKind.Dict && argIndex < args.Length)
+            if (argIdx < argLen && !mapping)
                 throw Raise.TypeError(ctx, "not all arguments converted during "
                     + (bytesMode ? "bytes" : "string") + " formatting");
             return sb.ToString();
         }
 
-        private static ScriptValue Next(EvalContext ctx, ScriptValue[] args, ref int argIndex)
+        private static ScriptValue Next(EvalContext ctx, ScriptValue[] args, ScriptValue one, int argLen, ref int argIdx)
         {
-            if (argIndex < args.Length)
-                return args[argIndex++];
+            if (argIdx < argLen)
+            {
+                argIdx++;
+                return argLen < 0 ? one : args[argIdx - 1];
+            }
             throw Raise.TypeError(ctx, "not enough arguments for format string");
         }
 
@@ -188,12 +191,19 @@ namespace Outbridge.PyLite.Modules.Support
                     return PadStr(ctx, bytesMode ? BytesOperand(ctx, v) : v.Str(ctx), left, width, prec);
                 case 'r':
                     // for bytes, %r is the (deprecated) alias of %a -- the repr must stay ASCII
-                    return PadStr(ctx, bytesMode ? AsciiEscape(v.Repr(ctx)) : v.Repr(ctx), left, width, prec);
+                    return PadStr(ctx, bytesMode ? AsciiEscape(ctx, v.Repr(ctx)) : v.Repr(ctx), left, width, prec);
                 case 'a':
-                    return PadStr(ctx, AsciiEscape(v.Repr(ctx)), left, width, prec);
+                    return PadStr(ctx, AsciiEscape(ctx, v.Repr(ctx)), left, width, prec);
                 case 'd':
                 case 'i':
                 case 'u':
+                    if (v.Kind == ValueKind.Int && ((IntValue)v).IsSmall && !plus && !space && width < 0 && prec < 0)
+                    {
+                        // plain %d of a machine int: no BigInteger round trip (uncharged, as RenderInt leaves a <= 64-bit one)
+                        char[] buf = ctx.DigitScratch ?? (ctx.DigitScratch = new char[20]);
+                        int p = IntValue.WriteDecimal(((IntValue)v).Small, buf);
+                        return new string(buf, p, buf.Length - p);
+                    }
                     return RenderInt(ctx, ToIntTrunc(ctx, v, "d"), 10, "", left, plus, space, zero, width, prec);
                 case 'x':
                     return RenderInt(ctx, IntOnly(ctx, v, "x"), 16, alt ? "0x" : "", left, plus, space, zero, width, prec);
@@ -282,7 +292,14 @@ namespace Outbridge.PyLite.Modules.Support
                 return ((BoolValue)v).Value ? BigInteger.One : BigInteger.Zero;
             if (v.Kind == ValueKind.Float)
                 return Builtins.IntFromFloat(ctx, ((FloatValue)v).Value);
-            throw Raise.TypeError(ctx, "%" + conv + " format: a number is required, not " + v.PyTypeName);
+            // int(v) of the other real numbers, as PyNumber_Long
+            DecimalValue dv = v as DecimalValue;
+            if (dv != null)
+                return ((IntValue)dv.TruncCore(ctx)).Value;
+            FractionValue fr = v as FractionValue;
+            if (fr != null)
+                return BigInteger.Divide(fr.Num, fr.Den);
+            throw Raise.TypeError(ctx, "%" + conv + " format: a real number is required, not " + v.PyTypeName);
         }
 
         private static BigInteger IntOnly(EvalContext ctx, ScriptValue v, string conv)
@@ -294,7 +311,16 @@ namespace Outbridge.PyLite.Modules.Support
             throw Raise.TypeError(ctx, "%" + conv + " format: an integer is required, not " + v.PyTypeName);
         }
 
-        private static double ToDoublePct(EvalContext ctx, ScriptValue v) { return Coerce.ToDouble(ctx, v, "a float is required"); }
+        private static double ToDoublePct(EvalContext ctx, ScriptValue v)
+        {
+            DecimalValue dv = v as DecimalValue;
+            if (dv != null)
+                return NearestDouble.FromDecimal(dv.Value);
+            FractionValue fr = v as FractionValue;
+            if (fr != null)
+                return fr.AsDouble(ctx);
+            return Coerce.ToDouble(ctx, v, "must be real number, not " + v.PyTypeName);
+        }
 
         private static string RenderInt(EvalContext ctx, BigInteger v, int radix, string prefix,
             bool left, bool plus, bool space, bool zero, int width, int prec)

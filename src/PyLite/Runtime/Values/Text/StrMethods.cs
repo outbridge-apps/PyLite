@@ -25,6 +25,7 @@ namespace Outbridge.PyLite.Runtime.Values
             s.Linear("endswith", 1, 3, (self, a, kw, c) => TailMatch(c, S(self), a, true));
             s.Linear("replace", (self, a, kw, c) =>
             {
+                RefusePositionalOnly(c, a, kw, "replace", 2, "old", "new");
                 ScriptValue[] ra = WithKw(c, a, kw, "replace", "old", "new", "count");   // count= is a keyword since 3.13
                 Args.Between(c, ra, "replace", 2, 3);
                 return ReplaceImpl(c, self, ra);
@@ -49,7 +50,9 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 ScriptValue[] ea = WithKw(c, a, kw, "encode", "encoding", "errors");
                 bool hasEnc = ea.Length >= 1 && ea[0].Kind != ValueKind.None;
-                string errors = ea.Length >= 2 && ea[1] is StrValue ? ((StrValue)ea[1]).Value : "strict";
+                if (ea.Length >= 2 && !(ea[1] is StrValue))
+                    throw Raise.TypeError(c, "encode() argument 'errors' must be str, not " + ea[1].PyTypeName);
+                string errors = ea.Length >= 2 ? ((StrValue)ea[1]).Value : "strict";
                 return c.Values.Bytes(BytesCodec.Encode(c, S(self), hasEnc ? BytesCodec.Normalize(c, ea[0]) : "utf-8", errors));
             });
             AddCaseSlots(s);
@@ -57,10 +60,28 @@ namespace Outbridge.PyLite.Runtime.Values
             return s.Table;
         }
 
+        // CPython's "/" parameters: a keyword for one of `names` is refused before any work.
+        internal static void RefusePositionalOnly(EvalContext c, ScriptValue[] a, KwArgs kw, string fname, int need, params string[] names)
+        {
+            if (kw.Count == 0)
+                return;
+            foreach (string n in names)
+            {
+                ScriptValue ignored;
+                if (!kw.TryGet(n, out ignored))
+                    continue;
+                if (a.Length < need)
+                    throw Raise.TypeError(c, fname + "() takes at least " + need + " positional arguments (" + a.Length + " given)");
+                throw Raise.TypeError(c, fname + "() got some positional-only arguments passed as keyword arguments: '" + n + "'");
+            }
+        }
+
         // Maps keyword arguments onto the positional slots named in `names` (declaration order), so a
         // method implemented positionally also accepts CPython's keyword spelling (split(maxsplit=1)).
         internal static ScriptValue[] WithKw(EvalContext c, ScriptValue[] a, KwArgs kw, string fname, params string[] names)
         {
+            if (a.Length > names.Length)
+                throw Args.AtMostError(c, fname, names.Length, a.Length);
             if (kw.Count == 0)
                 return a;
             var slots = new ScriptValue[names.Length];
@@ -110,6 +131,8 @@ namespace Outbridge.PyLite.Runtime.Values
             var sb = new StringBuilder(s.Length);
             for (int i = 0; i < s.Length; i++)
             {
+                if ((i & 0xFFFE) == 0xFFFE)   // i steps by 1 or 2: one of the two is hit in every 64K, never index 0
+                    c.Budget.CheckDeadlineNow();   // a dict lookup per char: 16M chars are seconds
                 int width = 1;
                 int cp = s[i];
                 if (i + 1 < s.Length && char.IsHighSurrogate(s[i]) && char.IsLowSurrogate(s[i + 1]))
@@ -130,7 +153,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 StrValue rs = repl as StrValue;
                 if (rs != null)
                 {
-                    c.Values.EnsureStrLen(sb.Length + (long)rs.Value.Length);
+                    c.Values.CheckStrLen(sb.Length + (long)rs.Value.Length);   // the cap as it grows; charged once below
                     sb.Append(rs.Value);
                     continue;
                 }
@@ -140,19 +163,20 @@ namespace Outbridge.PyLite.Runtime.Values
                     if (target < 0 || target > 0x10FFFF)
                         throw Raise.ValueError(c, "character mapping must be in range(0x110000)");
                     int code = (int)target;
+                    c.Values.CheckStrLen(sb.Length + 2L);   // a mapping to an astral char doubles the length
                     sb.Append(code <= 0xFFFF ? ((char)code).ToString() : char.ConvertFromUtf32(code));
                     continue;
                 }
                 throw Raise.TypeError(c, "character mapping must return integer, None or str");
             }
-            return c.Values.StrPrecharged(sb.ToString());
+            return c.Values.Str(sb.ToString());
         }
 
         private static bool TryMapping(EvalContext c, ScriptValue table, DictValue dict, int cp, out ScriptValue repl)
         {
-            ScriptValue key = c.Values.Int(cp);
             if (dict != null)
-                return dict.TryGet(key, c, out repl);
+                return dict.TryGet(new IntValue((long)cp), c, out repl);   // a key for one lookup is not an allocation of the script's
+            ScriptValue key = c.Values.Int(cp);
             try
             {
                 repl = PyOps.GetItem(table, key, c);
@@ -208,6 +232,8 @@ namespace Outbridge.PyLite.Runtime.Values
             if (i >= a.Length)
                 return dflt;
             System.Numerics.BigInteger b = Coerce.ToIndex(c, a[i], "str method");
+            if (b > long.MaxValue || b < long.MinValue)
+                throw Raise.Overflow(c, "Python int too large to convert to C ssize_t");   // a Py_ssize_t argument
             if (b > int.MaxValue)
                 return int.MaxValue;
             if (b < int.MinValue)
@@ -226,10 +252,10 @@ namespace Outbridge.PyLite.Runtime.Values
             int pos;
             if (sub.Length == 0)
             {
-                if (right)
-                    pos = end;
+                if (start > s.Length || start > end)
+                    pos = -1;
                 else
-                    pos = start <= s.Length && start <= end ? start : -1;
+                    pos = right ? end : start;
             }
             else if (start > end || end - start < sub.Length)
             {
@@ -286,6 +312,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     StrValue sv = t.Items[i] as StrValue;
                     if (sv == null)
                         throw Raise.TypeError(c, "tuple for " + (end ? "endswith" : "startswith") + " must only contain str, not " + t.Items[i].PyTypeName);
+                    c.Budget.ChargeLinear(sv.Value.Length);   // a compare per item: 3,000 long prefixes were one step
                     if (One(s, sv.Value, start, stop, end))
                         return c.Values.Bool(true);
                 }
@@ -343,6 +370,10 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (at < 0)
                     break;
                 c.Budget.Step();
+                if (positions.Count == positions.Capacity)   // 16M positions were 64 MB before any was charged
+                    c.Values.PreCharge(4L * Math.Max(4, positions.Count));
+                if (newS.Length > oldS.Length)   // a growing result stops when it passes the cap, not after
+                    c.Values.CheckStrLen((long)s.Length + (positions.Count + 1L) * (newS.Length - oldS.Length));
                 positions.Add(at);
                 scan = at + oldS.Length;
             }
@@ -391,7 +422,7 @@ namespace Outbridge.PyLite.Runtime.Values
             var parts = new List<string>();
             RSplitBySep(c, s, sep, maxsplit, parts);
             for (int i = 0; i < parts.Count; i++)
-                result.Add(c.Values.Str(parts[i]), c);
+                AddPiece(result, parts[i], 0, parts[i].Length);   // charged as found
             return result;
         }
 
@@ -443,6 +474,16 @@ namespace Outbridge.PyLite.Runtime.Values
             c.Budget.ChargeAllocation(32L + 2L * len);
         }
 
+        // rsplit finds its pieces from the right into a list it reverses at the end: each is charged and
+        // capped as it is found, as the forward split charges its own (8M uncharged pieces took 426 MB).
+        private static void ChargeRPiece(EvalContext c, List<string> parts, int len)
+        {
+            if (parts.Count >= c.Limits.MaxCollectionItems)
+                SequenceOps.CheckCap((long)parts.Count + 1, c);
+            c.Budget.Step();
+            c.Budget.ChargeAllocation(32L + 2L * len);
+        }
+
         private static void AddPiece(ListValue result, string s, int start, int len)
         {
             result.Items.Add(len == 0 ? StrValue.Empty : new StrValue(s.Substring(start, len)));
@@ -456,11 +497,12 @@ namespace Outbridge.PyLite.Runtime.Values
                 int at = PySearch.LastIndexOf(c, s, sep, 0, end);
                 if (at < 0 || end == 0)
                     break;
-                c.Budget.Step();
+                ChargeRPiece(c, parts, end - (at + sep.Length));
                 parts.Add(s.Substring(at + sep.Length, end - (at + sep.Length)));
                 end = at;
                 splits++;
             }
+            ChargeRPiece(c, parts, end);
             parts.Add(s.Substring(0, end));
             parts.Reverse();
         }
@@ -507,6 +549,7 @@ namespace Outbridge.PyLite.Runtime.Values
                         break;
                     if (maxsplit >= 0 && splits >= maxsplit)
                     {
+                        ChargeRPiece(c, parts, i + 1);
                         parts.Add(s.Substring(0, i + 1));
                         i = -1;
                         break;
@@ -514,14 +557,14 @@ namespace Outbridge.PyLite.Runtime.Values
                     int endTok = i;
                     while (i >= 0 && !PyUnicode.IsPythonSpace(s[i]))
                         i--;
-                    c.Budget.Step();
+                    ChargeRPiece(c, parts, endTok - i);
                     parts.Add(s.Substring(i + 1, endTok - i));
                     splits++;
                 }
                 parts.Reverse();
             }
             for (int k = 0; k < parts.Count; k++)
-                result.Add(c.Values.Str(parts[k]), c);
+                AddPiece(result, parts[k], 0, parts[k].Length);   // charged as found
         }
 
         // ---- splitlines ----
@@ -583,6 +626,15 @@ namespace Outbridge.PyLite.Runtime.Values
             if (it == null)
                 throw Raise.TypeError(c, "can only join an iterable");
             var parts = new List<string>();
+            // A list or tuple was charged when built: the parts are sized once and pay no doubling, as in 1.1.0.
+            ListValue sl = a[0] as ListValue;
+            TupleValue st = a[0] as TupleValue;
+            long known = sl != null ? sl.Items.Count : st != null ? st.Items.Length : 0;
+            if (known > 0)
+            {
+                c.Values.EnsureCollectionSize(known);
+                parts.Capacity = (int)known;
+            }
             ScriptValue v;
             long total = 0;
             while (it.MoveNext(c, out v))
@@ -591,16 +643,20 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (sv == null)
                     throw Raise.TypeError(c, "sequence item " + parts.Count + ": expected str instance, " + v.PyTypeName + " found");
                 c.Budget.Step();
+                if (parts.Count == parts.Capacity)   // ''.join(repeat('', 25000000)) kept every part uncharged
+                {
+                    c.Values.EnsureCollectionSize(parts.Count + 1L);
+                    c.Values.PreCharge(8L * Math.Max(4, parts.Count));
+                }
+                total += sv.Value.Length + (parts.Count > 0 ? sep.Length : 0);
+                if (total > c.Limits.MaxStrChars)
+                    c.Values.CheckStrLen(total);
                 parts.Add(sv.Value);
-                total += sv.Value.Length;
             }
             if (parts.Count == 0)
                 return c.Values.Str("");
             if (parts.Count == 1)
                 return c.Values.Str(parts[0]);
-            total += (long)sep.Length * (parts.Count - 1);
-            if (total > c.Limits.MaxStrChars)
-                throw c.Budget.CreateAbort(EngineAbortKind.Memory, "MaxStrChars", c.Limits.MaxStrChars, total);
             c.Values.PreCharge(2 * total + 24);
             var sb = new StringBuilder((int)total);
             for (int i = 0; i < parts.Count; i++)
@@ -625,7 +681,13 @@ namespace Outbridge.PyLite.Runtime.Values
                     throw Raise.TypeError(c, "strip arg must be None or str");
                 chars = sv.Value;
             }
+            if (s.Length == 0)
+                return selfVal;
             // a long chars argument would make every character a scan of it: past a few, a set
+            if (chars != null)
+                c.Budget.ChargeLinear(chars.Length);
+            if (chars != null && HasSurrogate(chars))
+                return StripCodePoints(c, selfVal, s, chars, left, right);
             HashSet<char> set = chars != null && chars.Length > 16 ? new HashSet<char>(chars) : null;
             int start = 0, end = s.Length;
             if (left)
@@ -643,6 +705,45 @@ namespace Outbridge.PyLite.Runtime.Values
             if (end <= start)
                 return c.Values.Str("");
             return c.Values.Str(s.Substring(start, end - start));
+        }
+
+        private static bool HasSurrogate(string s)
+        {
+            foreach (char ch in s)
+            {
+                if (char.IsSurrogate(ch))
+                    return true;
+            }
+            return false;
+        }
+
+        // An astral character in the set: whole code points, or half of a pair comes off (a lone surrogate in the result).
+        private static ScriptValue StripCodePoints(EvalContext c, ScriptValue selfVal, string s, string chars, bool left, bool right)
+        {
+            var set = new HashSet<int>();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                bool pair = char.IsHighSurrogate(chars[i]) && i + 1 < chars.Length && char.IsLowSurrogate(chars[i + 1]);
+                set.Add(pair ? char.ConvertToUtf32(chars[i], chars[i + 1]) : chars[i]);
+                if (pair)
+                    i++;
+            }
+            int start = 0, end = s.Length;
+            while (left && start < end)
+            {
+                bool pair = char.IsHighSurrogate(s[start]) && start + 1 < end && char.IsLowSurrogate(s[start + 1]);
+                if (!set.Contains(pair ? char.ConvertToUtf32(s[start], s[start + 1]) : s[start]))
+                    break;
+                start += pair ? 2 : 1;
+            }
+            while (right && end > start)
+            {
+                bool pair = char.IsLowSurrogate(s[end - 1]) && end - 2 >= start && char.IsHighSurrogate(s[end - 2]);
+                if (!set.Contains(pair ? char.ConvertToUtf32(s[end - 2], s[end - 1]) : s[end - 1]))
+                    break;
+                end -= pair ? 2 : 1;
+            }
+            return start == 0 && end == s.Length ? selfVal : c.Values.Str(s.Substring(start, end - start));
         }
 
         private static bool IsStripChar(char ch, string chars, HashSet<char> set)

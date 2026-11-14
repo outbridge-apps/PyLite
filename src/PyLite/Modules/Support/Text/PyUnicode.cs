@@ -24,6 +24,41 @@ namespace Outbridge.PyLite.Modules.Support
             }
         }
 
+        // str.strip() with no argument: Python's whitespace, not string.Trim()'s.
+        internal static string Strip(string s)
+        {
+            int a = 0, b = s.Length;
+            while (a < b && IsPythonSpace(s[a]))
+                a++;
+            while (b > a && IsPythonSpace(s[b - 1]))
+                b--;
+            return a == 0 && b == s.Length ? s : s.Substring(a, b - a);
+        }
+
+        // str.split() with no argument.
+        internal static System.Collections.Generic.List<string> SplitWhitespace(string s)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            int i = 0;
+            while (i < s.Length)
+            {
+                while (i < s.Length && IsPythonSpace(s[i]))
+                    i++;
+                int start = i;
+                while (i < s.Length && !IsPythonSpace(s[i]))
+                    i++;
+                if (i > start)
+                    parts.Add(s.Substring(start, i - start));
+            }
+            return parts;
+        }
+
+        // Py_ISSPACE: the six ASCII spaces C code strips (float.fromhex, int()'s C helpers).
+        internal static bool IsAsciiSpace(char c)
+        {
+            return c == ' ' || (c >= '\t' && c <= '\r');
+        }
+
         // The splitlines/line-boundary set (Py_UNICODE_ISLINEBREAK). Note \x1c..\x1e ARE line breaks
         // here even though they are also spaces; \x1f is a space but NOT a line break.
         internal static bool IsLineBreak(char c)

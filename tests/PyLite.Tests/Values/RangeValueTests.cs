@@ -109,5 +109,18 @@ namespace Outbridge.PyLite.Tests.Values
             var ex = Assert.Throws<ScriptException>(() => PyOps.RichCompare(PyCmpOp.Lt, R(ctx, 0, 2, 1), R(ctx, 0, 3, 1), ctx));
             Assert.Equal("'<' not supported between instances of 'range' and 'range'", ex.Value.GetMessageText(ctx));
         }
+
+        // A step past a machine word takes BigOps for the length division, membership, index and slicing
+        // (the one case where a range's arithmetic can be long); the answers are the plain operators'.
+        [Theory]
+        [InlineData("r = range(0, 10 ** 40, 10 ** 20 + 1)\nv = ((r[-1] - r[0]) // r.step + 1, 3 *(10 ** 20 + 1) in r, 3 * (10 ** 20 + 1) + 1 in r, r.index(5 * (10 ** 20 + 1)), r[7], r[-1], r[2:9:3], r.count(0))",
+            "(100000000000000000000, True, False, 5, 700000000000000000007, 9999999999999999999999999999999999999999, range(200000000000000000002, 900000000000000000009, 300000000000000000003), 1)")]
+        [InlineData("r = range(2 ** 70, -2 ** 70, -(2 ** 65 + 7))\nv = (len(r), r[3], 2 ** 70 - 5 * (2 ** 65 + 7) in r, list(r[1:3]), next(iter(reversed(r))))",
+            "(64, 1069911156275153993707, True, [1143698132569992200185, 1106804644422573096946], -1143698132569992200633)")]
+        [InlineData("r = range(0, 1, 2 ** 80)\nv = (len(r), list(r), 0 in r, r[0])", "(1, [0], True, 0)")]
+        public void StepPastAMachineWord(string src, string expected)
+        {
+            Assert.Equal(expected, Outbridge.PyLite.Tests.Evaluator.Ev.Run(src + "\n").Repr("v"));
+        }
     }
 }

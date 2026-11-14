@@ -115,7 +115,7 @@ Strings and bytes
 
 Numbers
 - `random` is backed by `System.Random`, not MT19937: seeded SEQUENCES differ from CPython's.
-  This is permanent (owner decision, re-confirmed 2026-09-08); the API contract — ranges, per-seed
+  This is permanent, by design; the API contract — ranges, per-seed
   determinism within an engine version, distribution invariants — is what the cases assert.
 - `decimal` keeps a coefficient and an exponent as the spec does, but the magnitude is a
   `System.Decimal`, so the context is real and the range is the backend's: `prec` and `rounding` both
@@ -203,7 +203,9 @@ Modules
   them eagerly (CPython imports a submodule only when asked). All the import forms resolve.
 - `re.ASCII` is applied by rewriting `\w \W \d \D \s \S \b \B` into their ASCII forms - pattern-wide,
   inline `(?a)`, or scoped by `(?a:...)` to its group; a negated escape inside a class (`[\D x]`,
-  `[^\W]`) is rebuilt as the exact complement. Variable-width lookbehind is accepted (.NET).
+  `[^\W]`) is rebuilt as the exact complement. A pattern is checked first by a port of `sre_parse`, so a
+  bad one is `re.PatternError` with CPython's text and position, and a variable-width look-behind is
+  refused as in CPython.
   Three pattern forms .NET does not share with Python are rewritten as well: a possessive quantifier
   (`a*+`, `a++`, `a?+`, `a{m,n}+`, 3.11) becomes the atomic group it means, `{,n}` becomes `{0,n}`
   (.NET alone reads that brace as a literal), and `\N{NAME}` (3.8) resolves off the same Unicode
@@ -340,17 +342,12 @@ Modules
   infinite input costs what is consumed) and `operator` (the operator
   functions, `itemgetter`/`attrgetter`/`methodcaller`; no in-place `i*` forms, no `matmul`,
   `length_hint` or `call`) are present.
-- `unicodedata`: `normalize`/`is_normalized` (the four forms, through the BCL's normalizer - the OS
-  NLS tables on net472, older than Unicode 16.0 for the newest characters; a lone surrogate passes
-  through as in CPython), `name`/`lookup` (the engine's own Unicode 16.0 name table, aliases and named
+- `unicodedata`: `normalize`/`is_normalized` (the four forms, UAX #15 over the generated Unicode 16.0
+  decompositions, linear in the text; a lone surrogate passes through as in CPython), `name`/`lookup` (the engine's own Unicode 16.0 name table, aliases and named
   sequences included), `category`/`numeric`/`decimal`/`digit` (from `CharUnicodeInfo`, the BCL's
   Unicode version), `east_asian_width`/`combining`/`bidirectional`/`mirrored`/`decomposition`
   (generated Unicode 16.0 tables; an unassigned code point has bidi class `''`, as in CPython).
-  Absent: `ucd_3_2_0` (the IDNA snapshot, which nothing here consumes). One `Normalize()` call is
-  quadratic in its own length on Windows, so a string over 4096 characters is normalized in chunks cut
-  where a split cannot change the answer (a starter that is never the second half of a composition).
-  A sequence longer than 8192 characters offering no such point - a base character followed by
-  thousands of combining marks - raises `ValueError` instead of running; CPython normalizes it.
+  Absent: `ucd_3_2_0` (the IDNA snapshot, which nothing here consumes).
 
 ## Attribution
 

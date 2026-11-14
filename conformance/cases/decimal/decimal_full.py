@@ -27,7 +27,7 @@ for bad in ('abc', '1.2.3', '', '1e', '--1', '1 2'):
 try:
     Decimal([1])
     assert False
-except TypeError:
+except ValueError:   # a list is read as the (sign, digits, exponent) tuple: "argument must be a sequence of length 3"
     pass
 try:
     Decimal(float('nan'))
@@ -208,10 +208,10 @@ assert Decimal('0e-30') == 0                      # a zero that IS zero stays an
 assert Decimal('1.5') - Decimal('1.5') == 0 and Decimal(1) // Decimal(2) == 0
 assert Decimal('0.001').quantize(Decimal('0.1')) == 0
 
-# round() takes the context mode as well, and round(d, n) quantizes - so it pads
+# round(d, n) takes the context mode and quantizes - so it pads; round(d) is half-even whatever the context says
 assert round(Decimal('1.5'), 3) == Decimal('1.500') and round(Decimal('1234.5'), -2) == Decimal('1200')
 ctx.rounding = ROUND_UP
-assert round(Decimal('1.111'), 2) == Decimal('1.12') and round(Decimal('1.1')) == 2
+assert round(Decimal('1.111'), 2) == Decimal('1.12') and round(Decimal('1.1')) == 1
 assert Decimal(1) / Decimal(7) == Decimal('0.1428571428571428571428571429')
 ctx.rounding = ROUND_HALF_EVEN
 ctx.rounding = ROUND_HALF_UP

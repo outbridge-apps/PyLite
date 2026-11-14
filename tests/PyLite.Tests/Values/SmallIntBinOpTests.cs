@@ -95,8 +95,8 @@ namespace Outbridge.PyLite.Tests.Values
         }
 
         [Theory]
-        [InlineData("r = 1 // 0", "integer division or modulo by zero")]
-        [InlineData("r = 1 % 0", "integer division or modulo by zero")]
+        [InlineData("r = 1 // 0", "division by zero")]
+        [InlineData("r = 1 % 0", "division by zero")]
         [InlineData("r = 1 / 0", "division by zero")]
         [InlineData("r = 1 << -1", "negative shift count")]
         public void ErrorMessagesUnchanged(string src, string message)

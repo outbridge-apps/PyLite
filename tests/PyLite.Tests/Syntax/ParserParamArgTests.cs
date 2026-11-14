@@ -25,7 +25,7 @@ namespace Outbridge.PyLite.Tests.Syntax
         [InlineData("lambda *a, k, **kw: k", "(Lambda [*a,k,**kw] k)")]
         public void Params(string src, string expected) => Assert.Equal(expected, AstDump.Of(src));
 
-        [Fact] public void NonDefaultAfterDefault() => Assert.Equal("non-default argument follows default argument", Err("lambda a=1, b: a"));
+        [Fact] public void NonDefaultAfterDefault() => Assert.Equal("parameter without a default follows parameter with a default", Err("lambda a=1, b: a"));
         [Fact] public void DuplicateParam() => Assert.Equal("duplicate argument 'a' in function definition", Err("lambda a, a: a"));
         [Fact] public void BareStarNeedsKwOnly() => Assert.Equal("named arguments must follow bare *", Err("lambda *: x"));
 
@@ -47,10 +47,10 @@ namespace Outbridge.PyLite.Tests.Syntax
         public void Args(string src, string expected) => Assert.Equal(expected, AstDump.Of(src));
 
         [Fact] public void PositionalAfterKeyword() => Assert.Equal("positional argument follows keyword argument", Err("f(1, k=2, 3)"));
-        [Fact] public void PositionalAfterKwargs() => Assert.Equal("positional argument follows keyword argument", Err("f(**a, 2)"));
+        [Fact] public void PositionalAfterKwargs() => Assert.Equal("positional argument follows keyword argument unpacking", Err("f(**a, 2)"));
         [Fact] public void StarAfterKwargs() => Assert.Equal("iterable argument unpacking follows keyword argument unpacking", Err("f(**a, *b)"));
-        [Fact] public void KeywordRepeated() => Assert.Equal("keyword argument repeated", Err("f(a=1, a=2)"));
-        [Fact] public void KeywordNotExpression() => Assert.Equal("keyword can't be an expression", Err("f(1+2=3)"));
+        [Fact] public void KeywordRepeated() => Assert.Equal("keyword argument repeated: a", Err("f(a=1, a=2)"));
+        [Fact] public void KeywordNotExpression() => Assert.Equal("expression cannot contain assignment, perhaps you meant \"==\"?", Err("f(1+2=3)"));
         [Fact] public void GenexpMustBeParenthesized() => Assert.Equal("Generator expression must be parenthesized", Err("f(x for x in y, z)"));
     }
 }

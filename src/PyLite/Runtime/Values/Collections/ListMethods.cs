@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -61,6 +60,8 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             Args.Exactly(c, a, "insert", 2);
             int i = Coerce.ToClampedIndex(Coerce.ToIndex(c, a[0], "insert"), l.Items.Count);
+            if (l.Items.Count >= c.Limits.MaxCollectionItems)
+                SequenceOps.CheckCap((long)l.Items.Count + 1, c);
             c.Budget.ChargeAllocation(8);
             c.Budget.ChargeLinear(l.Items.Count - i);
             l.Items.Insert(i, a[1]);
@@ -72,6 +73,9 @@ namespace Outbridge.PyLite.Runtime.Values
             int i = SequenceOps.IndexOf(new ListSeq(l.Items), Args.One(c, a, "remove"), 0, l.Items.Count, c);
             if (i < 0)
                 throw Raise.ValueError(c, "list.remove(x): x not in list");
+            if (i >= l.Items.Count)
+                return c.Values.None;   // the matching __eq__ shrank the list: CPython's slice delete removes nothing
+            c.Budget.ChargeLinear(l.Items.Count - i);   // the tail moves down
             l.Items.RemoveAt(i);
             return c.Values.None;
         }

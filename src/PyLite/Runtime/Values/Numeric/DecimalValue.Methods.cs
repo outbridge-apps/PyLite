@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
-using System.Text;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
 
@@ -60,6 +59,8 @@ namespace Outbridge.PyLite.Runtime.Values
                 return this;
             if (targetExp > 29 || targetExp < -28)
                 throw InvalidOp(ctx);
+            if (m.IsZero)
+                return Make(ctx, BigInteger.Zero, targetExp, neg);   // a zero's exponent may be ±10^9: no power of ten
             if (targetExp < exp)
             {
                 BigInteger mNew = m * BigInteger.Pow(10, exp - targetExp);
@@ -329,68 +330,152 @@ namespace Outbridge.PyLite.Runtime.Values
                 return ctx.Values.Str(ToDecimalString());
             FormatSpec f = PyFormat.ParseSpec(ctx, spec);
             char type = f.Type;
-            bool percent = type == '%';
-            if (type != '\0' && type != 'f' && type != 'F' && !percent)
-                throw Raise.ValueError(ctx, "Unknown format code '" + type + "' for object of type 'decimal.Decimal'");
-
-            // No type and no precision: the value's own rendering, padded — so 1E+2 stays 1E+2 under
-            // an alignment spec instead of being written out.
-            if (type == '\0' && f.Precision < 0)
+            int prec = f.Precision;
+            switch (type)
             {
-                string plain = ToDecimalString();
-                bool minus = plain.Length > 0 && plain[0] == '-';
-                string digitsOnly = minus ? plain.Substring(1) : plain;
-                if (f.GroupChar != '\0')
-                    digitsOnly = PyFormat.GroupNumber(digitsOnly, f.GroupChar);
-                string s0 = minus ? "-" : f.Sign == '+' ? "+" : f.Sign == ' ' ? " " : "";
-                return ctx.Values.Str(PyFormat.PadNumeric(ctx, s0, "", digitsOnly, f));
+                case '\0':
+                    type = 'G';   // the context's capitals
+                    goto case 'g';
+                case 'n':
+                    type = 'g';   // the C locale: no separators
+                    goto case 'g';
+                case 'g':
+                case 'G':
+                    if (prec == 0)
+                        prec = 1;
+                    break;
+                case 'e': case 'E': case 'f': case 'F': case '%':
+                    break;
+                default:
+                    throw Raise.ValueError(ctx, "invalid format string");
             }
+            if (prec > 0)
+                ctx.Values.CheckStrLen((long)prec + 64);   // the cap only: the str made at the end charges itself
 
-            BigInteger m;
-            int scale;
+            BigInteger coeff;
+            int exp;
             bool neg;
-            Parts(out m, out scale, out neg);
-            BigInteger unscaled = m;
-            if (percent)
+            Coeff(out coeff, out exp, out neg);
+            if (type == '%')
+                exp += 2;
+            // Lib/_pydecimal.py's __format__: round in the context's mode, then place the point. A coefficient
+            // padded for a wide precision keeps its zeros as a count, written out as text, never as 10**n.
+            RoundingMode mode = ctx.DecimalCtx.Mode;
+            int zeros = 0;
+            if (prec >= 0)
             {
-                scale -= 2;   // multiply by 100
-                if (scale < 0)
-                {
-                    unscaled *= BigInteger.Pow(10, -scale);
-                    scale = 0;
-                }
+                if (type == 'e' || type == 'E')
+                    RoundToDigits(ref coeff, ref exp, ref zeros, prec + 1, neg, mode);
+                else if (type == 'f' || type == 'F' || type == '%')
+                    RescaleTo(ref coeff, ref exp, ref zeros, -prec, neg, mode);
+                else if (DecimalBits.SignificantDigits(coeff) > prec)
+                    RoundToDigits(ref coeff, ref exp, ref zeros, prec, neg, mode);
             }
+            bool fixedPoint = type == 'f' || type == 'F' || type == '%';
+            if (coeff.IsZero && exp > 0 && fixedPoint)
+                exp = 0;
 
-            int nd = (type == 'f' || type == 'F' || percent)
-                ? (f.Precision >= 0 ? f.Precision : 6)
-                : (f.Precision >= 0 ? f.Precision : scale);
-            if (nd < scale)
-            {
-                unscaled = DecimalBits.RoundUnscaledToScale(unscaled, scale, nd);
-                scale = nd;
-            }
-            else if (nd > scale)
-            {
-                unscaled *= BigInteger.Pow(10, nd - scale);
-                scale = nd;
-            }
-
-            string digits = unscaled.ToString(CultureInfo.InvariantCulture);
-            string body;
-            if (nd == 0)
-                body = digits;
-            else if (digits.Length > nd)
-                body = digits.Substring(0, digits.Length - nd) + "." + digits.Substring(digits.Length - nd);
+            string digits = coeff.ToString(CultureInfo.InvariantCulture);
+            long digitCount = digits.Length + (long)zeros;
+            long leftDigits = (long)exp + digitCount;
+            long dot;
+            if (type == 'e' || type == 'E')
+                dot = coeff.IsZero && prec >= 0 ? 1 - prec : 1;
+            else if (fixedPoint || (exp <= 0 && leftDigits > -6))
+                dot = leftDigits;
             else
-                body = "0." + new string('0', nd - digits.Length) + digits;
+                dot = 1;
+            long shown = leftDigits - dot;
+            string exponent = shown != 0 || type == 'e' || type == 'E'
+                ? (type == 'e' || type == 'g' ? "e" : "E") + (shown < 0 ? "-" : "+") + Math.Abs(shown).ToString(CultureInfo.InvariantCulture)
+                : "";
 
-            if (f.GroupChar != '\0')
-                body = PyFormat.GroupNumber(body, f.GroupChar);
-            if (percent)
-                body += "%";
+            // One buffer of the exact size: a wide result is nearly all zeros, and every copy of them went uncharged.
+            long intLength = Math.Max(dot, 1), leadZeros = Math.Max(-dot, 0);
+            long fraction = leadZeros + Math.Max(digitCount - Math.Max(dot, 0), 0);
+            bool point = fraction > 0 || f.AltForm;
+            long size = intLength + (point ? 1 : 0) + fraction + exponent.Length + (type == '%' ? 1 : 0);
+            ctx.Values.CheckStrLen(size);
+            var text = new char[size];
+            int at = PutDigits(text, 0, dot > 0 ? digits : "0", 0, intLength);
+            if (point)
+                text[at++] = '.';
+            at = PutDigits(text, at, "", 0, leadZeros);
+            at = PutDigits(text, at, digits, Math.Max(dot, 0), digitCount);
+            exponent.CopyTo(0, text, at, exponent.Length);
+            if (type == '%')
+                text[at + exponent.Length] = '%';
 
             string sign = neg ? "-" : f.Sign == '+' ? "+" : f.Sign == ' ' ? " " : "";
+            string body;
+            if (f.GroupChar != '\0')
+            {
+                string intPart = new string(text, 0, (int)intLength), tail = new string(text, (int)intLength, text.Length - (int)intLength);
+                // As _insert_thousands_sep: the '0' flag widens the integer part, separators included.
+                if (f.ZeroPad && f.Width > 0)
+                {
+                    ctx.Values.CheckStrLen(f.Width);
+                    int minInt = f.Width - tail.Length - sign.Length, k = intPart.Length;
+                    while (k + (k - 1) / 3 < minInt)
+                        k++;
+                    intPart = new string('0', k - intPart.Length) + intPart;
+                }
+                body = PyFormat.GroupNumber(intPart, f.GroupChar) + tail;
+            }
+            else
+            {
+                body = new string(text);
+            }
             return ctx.Values.Str(PyFormat.PadNumeric(ctx, sign, "", body, f));
+        }
+
+        // Positions [from, to) of the coefficient's digits, then zeros: what follows the digits is their pad.
+        private static int PutDigits(char[] into, int at, string digits, long from, long to)
+        {
+            for (long i = from; i < to; i++)
+                into[at++] = i < digits.Length ? digits[(int)i] : '0';
+            return at;
+        }
+
+        // _pydecimal's _rescale: the value (coeff followed by `zeros` zeros) at exponent newExp, rounded in the
+        // given mode or padded. Rounding first drops pad zeros, which are exact; the backend's coefficient has at
+        // most 29 digits, so the divisor stays small.
+        private static void RescaleTo(ref BigInteger coeff, ref int exp, ref int zeros, int newExp, bool neg, RoundingMode mode)
+        {
+            if (coeff.IsZero || newExp <= exp)
+            {
+                if (!coeff.IsZero)
+                    zeros += exp - newExp;
+                exp = newExp;
+                return;
+            }
+            int drop = newExp - exp;
+            if (drop <= zeros)
+            {
+                zeros -= drop;
+                exp = newExp;
+                return;
+            }
+            exp += zeros;
+            drop -= zeros;
+            zeros = 0;
+            BigInteger divisor = BigInteger.Pow(10, drop), r;
+            BigInteger q = BigInteger.DivRem(coeff, divisor, out r);
+            coeff = DecimalRound.Apply(q, r, divisor, neg, mode);
+            exp = newExp;
+        }
+
+        // _pydecimal's _round: to `places` significant digits; a carry that adds a digit (99.97 -> 100.0)
+        // is rescaled once more.
+        private static void RoundToDigits(ref BigInteger coeff, ref int exp, ref int zeros, int places, bool neg, RoundingMode mode)
+        {
+            if (coeff.IsZero)
+                return;
+            int adjusted = exp + DecimalBits.SignificantDigits(coeff) + zeros - 1;
+            RescaleTo(ref coeff, ref exp, ref zeros, adjusted + 1 - places, neg, mode);
+            int after = exp + DecimalBits.SignificantDigits(coeff) + zeros - 1;
+            if (after != adjusted)
+                RescaleTo(ref coeff, ref exp, ref zeros, after + 1 - places, neg, mode);
         }
 
         // ---- slots ----
@@ -429,14 +514,14 @@ namespace Outbridge.PyLite.Runtime.Values
                 ["exp"] = MK("exp", new[] { "context" }, (self, a, c) => DecimalMath.Exp(c, self)),
                 ["copy_abs"] = M("copy_abs", (self, a, c) => FromExp(c, Math.Abs(self.Value), self.Exp)),
                 ["copy_negate"] = M("copy_negate", (self, a, c) => FromExp(c, -self.Value, self.Exp)),
-                ["copy_sign"] = M("copy_sign", (self, a, c) => self.CopySign(c, a)),
-                ["same_quantum"] = M("same_quantum", (self, a, c) => self.SameQuantum(c, a)),
+                ["copy_sign"] = M1("copy_sign", (self, a, c) => self.CopySign(c, a)),
+                ["same_quantum"] = M1("same_quantum", (self, a, c) => self.SameQuantum(c, a)),
                 ["min"] = M("min", (self, a, c) => self.MinMax(c, a, false, false)),
                 ["max"] = M("max", (self, a, c) => self.MinMax(c, a, true, false)),
                 ["min_mag"] = M("min_mag", (self, a, c) => self.MinMax(c, a, false, true)),
                 ["max_mag"] = M("max_mag", (self, a, c) => self.MinMax(c, a, true, true)),
-                ["compare"] = M("compare", (self, a, c) => self.Compare(c, a)),
-                ["compare_signal"] = M("compare_signal", (self, a, c) => self.Compare(c, a)),
+                ["compare"] = M1("compare", (self, a, c) => self.Compare(c, a)),
+                ["compare_signal"] = M1("compare_signal", (self, a, c) => self.Compare(c, a)),
                 ["logb"] = M("logb", (self, a, c) => FromDecimal(c, self.AdjustedInt())),
                 ["to_eng_string"] = M("to_eng_string", (self, a, c) => c.Values.Str(self.ToEngString())),
             };
@@ -449,9 +534,40 @@ namespace Outbridge.PyLite.Runtime.Values
             return SlotDescriptor.MakeMethod(name, (self, a, kw, c) => f((DecimalValue)self, StrMethods.WithKw(c, a, kw, name, names), c));
         }
 
+        // A method of one required operand: called bare, it read args[0] past the end (an engine fault).
+        private static SlotDescriptor M1(string name, Func<DecimalValue, ScriptValue[], EvalContext, ScriptValue> f)
+        {
+            return SlotDescriptor.MakeMethod(name, Args.BoundKeywords(name, 1, (self, a, kw, c) =>
+            {
+                if (a.Length < 1)
+                    throw Raise.TypeError(c, name + "() missing required argument other (pos 1)");
+                return f((DecimalValue)self, a, c);
+            }, "other", "context"));
+        }
+
+        // CPython's signatures: no argument, (context=None), or (other, context=None). An unknown keyword or an extra
+        // positional was dropped silently (normalize(zzz=1), as_tuple(5)).
+        // (A switch, not static tables: the slots may be built from another part's static initializer.)
         private static SlotDescriptor M(string name, Func<DecimalValue, ScriptValue[], EvalContext, ScriptValue> f)
         {
-            return SlotDescriptor.MakeMethod(name, (self, a, kw, c) => f((DecimalValue)self, a, c));
+            BuiltinDelegate body = (self, a, kw, c) => f((DecimalValue)self, a, c);
+            switch (name)
+            {
+                case "min":
+                case "max":
+                case "min_mag":
+                case "max_mag":
+                    return SlotDescriptor.MakeMethod(name, Args.BoundKeywords(name, 1, body, "other", "context"));
+                case "normalize":
+                case "number_class":
+                case "is_normal":
+                case "is_subnormal":
+                case "logb":
+                case "to_eng_string":
+                    return SlotDescriptor.MakeMethod(name, Args.BoundKeywords(name, body, "context"));
+                default:
+                    return SlotDescriptor.MakeMethod(name, Args.Positional(name, 0, 0, body));
+            }
         }
     }
 }

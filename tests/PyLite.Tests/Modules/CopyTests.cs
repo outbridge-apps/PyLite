@@ -82,7 +82,8 @@ namespace Outbridge.PyLite.Tests.Modules
             // 100k-deep nesting copies iteratively without a C# stack overflow.
             string body = "x = []\ncur = x\nfor _ in range(100000):\n    n = []\n    cur.append(n)\n    cur = n\n"
                 + "c = copy.deepcopy(x)\nr = 'ok'\n";
-            Assert.Equal("'ok'", Body(body));
+            // what it proves is the stack, not the clock: the default deadline was lost under a full gate run's load
+            Assert.Equal("'ok'", Ev.Run(P + body, TestEngines.Unhurried).Repr("r"));
         }
     }
 }

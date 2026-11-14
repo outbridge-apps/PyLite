@@ -47,10 +47,10 @@ namespace Outbridge.PyLite.Tests.Modules
         public void TemplateOutputIsCappedAndItsWorkIsCharged()
         {
             RunResult big = Run("from string import Template\nr = Template('$a' * 1000).substitute(a='y' * 10000)\n",
-                ResourceLimits.Default.With(maxStrChars: 2_000_000));
+                TestEngines.Unhurried.With(maxStrChars: 2_000_000));
             Assert.Equal("MaxStrChars", big.Error.LimitName);
             RunResult steps = Run("from string import Template\nr = Template('$a' * 200000).substitute(a='x')\n",
-                ResourceLimits.Default.With(maxSteps: 300_000));
+                TestEngines.Unhurried.With(maxSteps: 300_000));
             Assert.Equal("MaxSteps", steps.Error.LimitName);
         }
 

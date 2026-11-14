@@ -22,7 +22,7 @@ namespace Outbridge.PyLite.Modules
                 Hexlify(c, StrMethods.WithKw(c, a, kw, "b2a_hex", "data", "sep", "bytes_per_sep"), "b2a_hex"));
             m["unhexlify"] = BuiltinFunctionValue.Make("unhexlify", Args.Positional("unhexlify", 1, 1, (s, a, kw, c) => Unhexlify(c, a)));
             m["a2b_hex"] = BuiltinFunctionValue.Make("a2b_hex", Args.Positional("a2b_hex", 1, 1, (s, a, kw, c) => Unhexlify(c, a)));
-            m["b2a_base64"] = BuiltinFunctionValue.Make("b2a_base64", B2aBase64);
+            m["b2a_base64"] = BuiltinFunctionValue.Make("b2a_base64", Args.KnownKeywords("b2a_base64", B2aBase64, "newline"));
             m["a2b_base64"] = BuiltinFunctionValue.Make("a2b_base64", Args.Positional("a2b_base64", 1, 1, (s, a, kw, c) => A2bBase64(c, a)));
             m["crc32"] = BuiltinFunctionValue.Make("crc32", Args.Positional("crc32", 1, 2, (s, a, kw, c) => Crc32(c, a)));
             m["Error"] = ModuleKit.ExceptionClass(PyExceptionTypes.BinasciiError);
@@ -70,6 +70,8 @@ namespace Outbridge.PyLite.Modules
                 string hex = ((StrValue)BytesMethods.Hex(ctx, data, rest)).Value;
                 return ctx.Values.Bytes(System.Text.Encoding.ASCII.GetBytes(hex));
             }
+            ctx.Budget.ChargeLinear(data.Length);
+            ctx.Values.CheckStrLen(2L * data.Length);   // refused before the buffer is made
             ctx.Values.PreCharge(24 + 2L * data.Length);
             return ctx.Values.Bytes(Hex.EncodeAscii(data));
         }
@@ -79,6 +81,7 @@ namespace Outbridge.PyLite.Modules
             string hex = TextArg(ctx, a, "unhexlify");
             if ((hex.Length & 1) != 0)
                 throw Raise.Make(ctx, PyExceptionTypes.BinasciiError, "Odd-length string");
+            ctx.Budget.ChargeLinear(hex.Length);
             ctx.Values.PreCharge(24 + hex.Length / 2);
             var result = new byte[hex.Length / 2];
             for (int i = 0; i < result.Length; i++)
@@ -105,6 +108,8 @@ namespace Outbridge.PyLite.Modules
             ScriptValue nv;
             if (kw.TryGet("newline", out nv))
                 newline = nv.IsTruthy(ctx);
+            ctx.Budget.ChargeLinear(data.Length);
+            ctx.Values.CheckStrLen((data.Length + 2L) / 3 * 4 + (newline ? 1 : 0));   // refused before it is built
             string s = Convert.ToBase64String(data) + (newline ? "\n" : "");
             ctx.Values.PreCharge(24 + s.Length);
             var result = new byte[s.Length];
@@ -116,6 +121,7 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue A2bBase64(EvalContext ctx, ScriptValue[] a)
         {
             string s = TextArg(ctx, a, "a2b_base64").Trim();
+            ctx.Budget.ChargeLinear(s.Length);
             try
             {
                 return ctx.Values.Bytes(Convert.FromBase64String(s));

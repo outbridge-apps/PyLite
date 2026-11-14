@@ -24,7 +24,7 @@ namespace Outbridge.PyLite.Modules
                 return c.Values.None;
             });
             m["localcontext"] = BuiltinFunctionValue.Make("localcontext", LocalContext);
-            m["Context"] = ctx.Values.Type("decimal.Context", (self, args, kw, c) =>
+            m["Context"] = ctx.Values.EngineType("decimal.Context", (self, args, kw, c) =>
             {
                 if (args.Length > 2)
                     throw Raise.TypeError(c, "Context() takes prec and rounding in this dialect");

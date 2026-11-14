@@ -31,14 +31,14 @@ namespace Outbridge.PyLite.Tests.Syntax
         [InlineData("f(x)", "(Expr (Call f x))")]
         public void StatementShapes(string src, string expected) => Assert.Equal(expected, AstDump.OfStmt(src));
 
-        [Fact] public void TwoStarred() => Assert.Equal("two starred expressions in assignment", Err("a, *b, *c = xs"));
-        [Fact] public void AssignLiteral() => Assert.Equal("can't assign to literal", Err("1 = x"));
-        [Fact] public void AssignCall() => Assert.Equal("can't assign to function call", Err("f() = x"));
-        [Fact] public void AssignOperator() => Assert.Equal("can't assign to operator", Err("a + b = x"));
+        [Fact] public void TwoStarred() => Assert.Equal("multiple starred expressions in assignment", Err("a, *b, *c = xs"));
+        [Fact] public void AssignLiteral() => Assert.Equal("cannot assign to literal here. Maybe you meant '==' instead of '='?", Err("1 = x"));
+        [Fact] public void AssignCall() => Assert.Equal("cannot assign to function call here. Maybe you meant '==' instead of '='?", Err("f() = x"));
+        [Fact] public void AssignOperator() => Assert.Equal("cannot assign to expression here. Maybe you meant '==' instead of '='?", Err("a + b = x"));
         [Fact] public void TopLevelStarred() => Assert.Equal("starred assignment target must be in a list or tuple", Err("*x = xs"));
-        [Fact] public void AugTupleIllegal() => Assert.Equal("illegal expression for augmented assignment", Err("a, b += 1"));
-        [Fact] public void DelStarred() => Assert.Equal("can't use starred expression in del", Err("del *a"));
-        [Fact] public void DelLiteral() => Assert.Equal("can't delete literal", Err("del 1"));
+        [Fact] public void AugTupleIllegal() => Assert.Equal("'tuple' is an illegal expression for augmented assignment", Err("a, b += 1"));
+        [Fact] public void DelStarred() => Assert.Equal("cannot delete starred", Err("del *a"));
+        [Fact] public void DelLiteral() => Assert.Equal("cannot delete literal", Err("del 1"));
         [Fact] public void VariableAnnotation() => Assert.Equal("(Assign [x] 1)", AstDump.OfStmt("x: int = 1"));
         [Fact] public void BareVariableAnnotation() => Assert.Equal("(Pass)", AstDump.OfStmt("x: int"));
         [Fact] public void TupleAnnotationRejected() => Assert.Equal("only single target (not tuple) can be annotated", Err("a, b: int = 1, 2"));

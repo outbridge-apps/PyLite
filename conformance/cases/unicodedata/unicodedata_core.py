@@ -92,7 +92,7 @@ try:
 except TypeError:
     pass
 
-# ---- long input: normalized in chunks, which must not change the answer ----
+# ---- long input: the whole string normalizes as its units do ----
 # Each unit is normalized on its own, so the concatenation is the reference for the whole string.
 for form in ('NFC', 'NFD', 'NFKC', 'NFKD'):
     for unit in ('a' + chr(0x301) + 'bc ', chr(0x9C7) + chr(0x9BE) + 'x ', chr(0x1100) + chr(0x1161) + 'y ',
@@ -101,8 +101,4 @@ for form in ('NFC', 'NFD', 'NFKC', 'NFKD'):
         assert normalize(form, big) == normalize(form, unit) * 4000
         assert is_normalized(form, normalize(form, big))
 assert normalize('NFC', 'a' + chr(0x301) * 4000) == chr(0xE1) + chr(0x301) * 3999
-try:
-    normalize('NFC', 'a' + chr(0x301) * 20000)   # no break point in a run that long: refused
-    assert False
-except ValueError:
-    pass
+assert normalize('NFC', 'a' + chr(0x301) * 20000) == chr(0xE1) + chr(0x301) * 19999   # a run of any length

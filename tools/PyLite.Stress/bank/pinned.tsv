@@ -1,0 +1,1202 @@
+# name	kind	output hash	steps	charged KB	1.1.0 steps	1.1.0 MB	note (why a 1.1.0 ceiling does not apply)
+# Written by `dotnet run -c Release -- bank --write-pins` (tools/PyLite.Stress); "-" = not pinned.
+r10A_dec_fast	ok|budget	4fd908c2ed6b5a82	577125	19325	639885	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_getter_calls	ok	1d48faaf537b0d69	7760537	52999	7760514	51	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_getters_mem	ok	0dee35fcd64b79ad	4046909	112106	4046909	40	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_lambdas_mem	ok	0dee35fcd64b79ad	2031268	112106	2031268	109	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_literal_eq	ok	a1f989ab1a4c994d	37435	254	-	-	-
+r10A_nt_names	ok	b43ebd98c4ad1ce9	1455	58	-	-	-
+r10A_nt_type	ok	4941631fe6523256	561	16	-	-	-
+r10A_re_icase2	ok	93765ab89f4a0be4	621	13	523	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_re_icase_ranges	ok	a338a21363720de7	1187035	28063	1126325	33	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_re_nestcount	ok	b1a303c5ee4984f0	3234	164894	3229	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_re_nestcount2	budget	-	5466	263250	34408	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_re_nestcount3	budget	-	5466	263250	-	-	-
+r10A_re_starloop	budget	-	2605	266664	-	-	-
+r10A_re_window	ok	4f763ec9b389d5ac	280146	2967	241593	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_speed_mix	ok	389f0fd040a07165	3359586	47959	3407129	46	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_speed_mix1	ok	389f0fd040a07165	3359586	47959	3407129	46	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_star_deep	budget	-	17000056	265628	-	-	-
+r10A_star_deep2	budget	-	30000247	268362	-	-	-
+r10A_star_deep3	budget	-	32000068	281252	-	-	-
+r10A_star_default	budget	-	32000068	281252	-	-	-
+r10A_strptime_edge	ok	ceefa7783ffc25ed	878	14	806	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_xml_enc	ok	7bd0721fca7b0796	4331	112	4198	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_xml_enc2	ok	449f0848462c0260	692	15	721	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10A_xpath_text	ok	6a028028902be6d1	1090	28	-	-	-
+r10B_p10_f01	syntax	-	0	0	-	-	-
+r10B_p10_f02	syntax	-	0	0	-	-	-
+r10B_p10_f03	syntax	-	0	0	-	-	-
+r10B_p10_f04	syntax	-	0	0	-	-	-
+r10B_p10_f05	syntax	-	0	0	-	-	-
+r10B_p10_f06	syntax	-	0	0	-	-	-
+r10B_p10_f07	syntax	-	0	0	-	-	-
+r10B_p10_f08	syntax	-	0	0	-	-	-
+r10B_p10_f09	syntax	-	0	0	-	-	-
+r10B_p10_f10	syntax	-	0	0	-	-	-
+r10B_p10_f11	syntax	-	0	0	-	-	-
+r10B_p10_f12	syntax	-	0	0	-	-	-
+r10B_p10_f13	syntax	-	0	0	-	-	-
+r10B_p10_f14	syntax	-	0	0	-	-	-
+r10B_p10_f15	syntax	-	0	0	-	-	-
+r10B_p10_f16	syntax	-	0	0	-	-	-
+r10B_p10_f17	syntax	-	0	0	-	-	-
+r10B_p10_f18	syntax	-	0	0	-	-	-
+r10B_p10_f19	syntax	-	0	0	-	-	-
+r10B_p10_f20	syntax	-	0	0	-	-	-
+r10B_p10_f21	syntax	-	0	0	-	-	-
+r10B_p10_f22	syntax	-	0	0	-	-	-
+r10B_p10_f23	syntax	-	0	0	-	-	-
+r10B_p10_f24	syntax	-	0	0	-	-	-
+r10B_p10_f25	raise NameError	-	4	0	-	-	-
+r10B_p10_f26	syntax	-	0	0	-	-	-
+r10B_p10_f27	syntax	-	0	0	-	-	-
+r10B_p10_f28	syntax	-	0	0	-	-	-
+r10B_p10_f29	syntax	-	0	0	-	-	-
+r10B_p10_f30	syntax	-	0	0	-	-	-
+r10B_p10_f31	syntax	-	0	0	-	-	-
+r10B_p10_f32	syntax	-	0	0	-	-	-
+r10B_p11_deep_arrow_minus	syntax	-	0	0	-	-	-
+r10B_p11_deep_cls_open	syntax	-	0	0	-	-	-
+r10B_p11_deep_comp	syntax	-	0	0	-	-	-
+r10B_p11_deep_fnest	syntax	-	0	0	-	-	-
+r10B_p11_deep_fstr	syntax	-	0	0	-	-	-
+r10B_p11_deep_match_list	syntax	-	0	0	-	-	-
+r10B_p11_deep_star	syntax	-	0	0	-	-	-
+r10B_p11_deep_with	syntax	-	0	0	-	-	-
+r10B_p11_small1	syntax	-	0	0	-	-	-
+r10B_p11_small2	syntax	-	0	0	-	-	-
+r10B_p11_small3	syntax	-	0	0	-	-	-
+r10B_p12_blank_ws	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p12_bs_cr	ok	1121cfccd5913f0a	3	0	3	0	-
+r10B_p12_bs_ff	ok	1121cfccd5913f0a	3	0	3	0	-
+r10B_p12_cr_only	ok	1121cfccd5913f0a	3	0	3	0	-
+r10B_p12_cr_paren	ok	26c6b93809379e36	12	0	10	0	-
+r10B_p12_crlf_tab	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p12_ff_after_block	ok	4355a46b19d348dc	5	0	5	0	-
+r10B_p12_ff_semi	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p12_ws_mix	ok	67358ed8fd6cd4d8	15	0	13	0	-
+r10B_p13_arrow_async	syntax	-	0	0	-	-	-
+r10B_p13_arrow_method	ok	4355a46b19d348dc	9	1	7	0	-
+r10B_p13_arrow_minus_ifexp	ok	1121cfccd5913f0a	5	0	5	0	-
+r10B_p13_arrow_minus_params	ok	e3b0c44298fc1c14	0	0	0	0	-
+r10B_p13_arrow_plus_call	ok	53c234e5e8472b6a	5	0	5	0	-
+r10B_p13_kw_bbc	syntax	-	0	0	-	-	-
+r10B_p13_kw_dotnone	syntax	-	0	0	-	-	-
+r10B_p13_kw_none2	syntax	-	0	0	-	-	-
+r10B_p13_try_else	syntax	-	0	0	-	-	-
+r10B_p13_try_fin_else	syntax	-	0	0	-	-	-
+r10B_p13_try_pass	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p13_try_pass_inline	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p13_walrus_hint_minus	syntax	-	0	0	-	-	-
+r10B_p13_walrus_hint_plain	syntax	-	0	0	-	-	-
+r10B_p13_with_as_as	syntax	-	0	0	-	-	-
+r10B_p13_with_cd	syntax	-	0	0	-	-	-
+r10B_p15_rep_err	syntax	-	0	0	-	-	-
+r10B_p15_rep_ok	ok	52d947b1b89285a3	23	1	-	-	-
+r10B_p1_arrow_ell	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p1_arrow_lambda	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p1_arrow_minus	raise AttributeError	-	6	0	-	-	-
+r10B_p1_arrow_minus_x	ok	e3b0c44298fc1c14	0	0	0	0	-
+r10B_p1_arrow_not	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p1_arrow_plus	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p1_arrow_str	raise AttributeError	-	6	0	-	-	-
+r10B_p1_arrow_tilde	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p1_arrow_yieldparen	syntax	-	0	0	-	-	-
+r10B_p2_from_bc	syntax	-	0	0	-	-	-
+r10B_p2_from_paren	ok	5039b012df8a962b	18	0	18	0	-
+r10B_p2_from_paren2	ok	5039b012df8a962b	18	0	18	0	-
+r10B_p2_imp_backslash	syntax	-	0	0	-	-	-
+r10B_p2_imp_bc	syntax	-	0	0	-	-	-
+r10B_p2_imp_block	ok	af474170f56a2676	18	0	18	0	-
+r10B_p2_imp_block_eof	ok	e3b0c44298fc1c14	16	0	16	0	-
+r10B_p2_imp_comma	ok	ae0d8ded0031dfe8	38	1	37	0	-
+r10B_p2_imp_comment	ok	af474170f56a2676	18	0	18	0	-
+r10B_p2_imp_eof	ok	e3b0c44298fc1c14	16	0	16	0	-
+r10B_p2_imp_ff	ok	af474170f56a2676	18	0	18	0	-
+r10B_p2_imp_from	syntax	-	0	0	-	-	-
+r10B_p2_imp_minus	syntax	-	0	0	-	-	-
+r10B_p2_imp_semi	ok	af474170f56a2676	18	0	18	0	-
+r10B_p2_imp_soft	ok	ae0d8ded0031dfe8	38	1	37	0	-
+r10B_p3_cls_attr	raise TypeError	-	20	1	-	-	-
+r10B_p3_cls_call	raise TypeError	-	6	1	-	-	-
+r10B_p3_cls_const	syntax	-	0	0	-	-	-
+r10B_p3_cls_gen	syntax	-	0	0	-	-	-
+r10B_p3_cls_ifexp	raise AttributeError	-	10	1	-	-	-
+r10B_p3_cls_int_enum_trail	raise NameError	-	4	0	-	-	-
+r10B_p3_cls_kw	syntax	-	0	0	-	-	-
+r10B_p3_cls_lambda	raise TypeError	-	4	0	-	-	-
+r10B_p3_cls_mangle	syntax	-	0	0	-	-	-
+r10B_p3_cls_missing_comma	syntax	-	0	0	-	-	-
+r10B_p3_cls_multi	syntax	-	0	0	-	-	-
+r10B_p3_cls_multi3	syntax	-	0	0	-	-	-
+r10B_p3_cls_multiline	raise TypeError	-	4	0	-	-	-
+r10B_p3_cls_paren	raise AttributeError	-	8	1	-	-	-
+r10B_p3_cls_star	syntax	-	0	0	-	-	-
+r10B_p3_cls_str_trail	raise TypeError	-	4	0	-	-	-
+r10B_p3_cls_strenum	ok	80b59c0126f79358	21	2	21	0	-
+r10B_p3_cls_strenum_trail	ok	1b3238ab5101f963	18	2	-	-	-
+r10B_p3_cls_trail	raise AttributeError	-	8	1	-	-	-
+r10B_p3_cls_walrus	raise AttributeError	-	8	1	-	-	-
+r10B_p4_cls_ifexp	ok	53c234e5e8472b6a	13	1	7	0	-
+r10B_p4_cls_multiline	ok	4355a46b19d348dc	11	1	7	0	-
+r10B_p4_cls_nested	ok	4355a46b19d348dc	17	1	13	0	-
+r10B_p4_cls_or	ok	4355a46b19d348dc	11	1	7	0	-
+r10B_p4_cls_paren	ok	4355a46b19d348dc	11	1	7	0	-
+r10B_p4_cls_str_trail	raise TypeError	-	4	0	-	-	-
+r10B_p4_cls_sub	ok	4355a46b19d348dc	12	1	8	0	-
+r10B_p4_cls_trail	ok	9e2be3ab69d88e1c	15	1	-	-	-
+r10B_p4_cls_walrus	ok	ff47f995c3cb64c0	11	1	7	0	-
+r10B_p5_fstr_valid	ok	eb6c5d3bbefb234f	278	6	-	-	-
+r10B_p6_bom_cc	syntax	-	0	0	-	-	-
+r10B_p6_cc_1a	syntax	-	0	0	-	-	-
+r10B_p6_cc_after_bs	syntax	-	0	0	-	-	-
+r10B_p6_cc_after_err	syntax	-	0	0	-	-	-
+r10B_p6_cc_after_err2	syntax	-	0	0	-	-	-
+r10B_p6_cc_after_err_fstr	syntax	-	0	0	-	-	-
+r10B_p6_cc_bare1	syntax	-	0	0	-	-	-
+r10B_p6_cc_bare7f	syntax	-	0	0	-	-	-
+r10B_p6_cc_dedent	syntax	-	0	0	-	-	-
+r10B_p6_cc_eof	syntax	-	0	0	-	-	-
+r10B_p6_cc_in_comment	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p6_cc_in_fexpr	syntax	-	0	0	-	-	-
+r10B_p6_cc_in_fstr	ok	1121cfccd5913f0a	6	0	6	0	-
+r10B_p6_cc_in_str	ok	f0b5c2c2211c8d67	5	0	5	0	-
+r10B_p6_cc_in_triple	ok	1121cfccd5913f0a	5	0	5	0	-
+r10B_p6_cc_indent	syntax	-	0	0	-	-	-
+r10B_p6_cc_linestart	syntax	-	0	0	-	-	-
+r10B_p6_cc_vt	syntax	-	0	0	-	-	-
+r10B_p6_ff_indent	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p6_ff_lead	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p6_ff_line	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p6_ff_mid	ok	4355a46b19d348dc	3	0	3	0	-
+r10B_p6_nul_comment	syntax	-	0	0	-	-	-
+r10B_p6_nul_end	syntax	-	0	0	-	-	-
+r10B_p6_nul_str	syntax	-	0	0	-	-	-
+r10B_p7_ib_bom	syntax	-	0	0	-	-	-
+r10B_p7_ib_bom2	syntax	-	0	0	-	-	-
+r10B_p7_ib_bs	syntax	-	0	0	-	-	-
+r10B_p7_ib_case	syntax	-	0	0	-	-	-
+r10B_p7_ib_cr	syntax	-	0	0	-	-	-
+r10B_p7_ib_crlf_c	syntax	-	0	0	-	-	-
+r10B_p7_ib_dedent_y	syntax	-	0	0	-	-	-
+r10B_p7_ib_dedent_y_nl	syntax	-	0	0	-	-	-
+r10B_p7_ib_deep	syntax	-	0	0	-	-	-
+r10B_p7_ib_else	syntax	-	0	0	-	-	-
+r10B_p7_ib_ff	syntax	-	0	0	-	-	-
+r10B_p7_ib_fin	syntax	-	0	0	-	-	-
+r10B_p7_ib_triple	syntax	-	0	0	-	-	-
+r10B_p7_ib_unterminated	syntax	-	0	0	-	-	-
+r10B_p7_ib_with	syntax	-	0	0	-	-	-
+r10B_p7_ib_ws	syntax	-	0	0	-	-	-
+r10B_p8_list_star_valid	ok	a41107bccf6e6d16	306	3	266	0	-
+r10B_p8_try_valid	ok	ae2a51bb41a61149	60	1	57	0	-
+r10B_p8_with_valid	ok	2b8309ea0501ed80	276	18	270	0	-
+r10B_p9_match_as_ab	syntax	-	0	0	-	-	-
+r10B_p9_match_as_attr	syntax	-	0	0	-	-	-
+r10B_p9_match_as_call	syntax	-	0	0	-	-	-
+r10B_p9_match_as_minus	syntax	-	0	0	-	-	-
+r10B_p9_match_as_str	syntax	-	0	0	-	-	-
+r10B_p9_match_as_sub	syntax	-	0	0	-	-	-
+r10B_p9_match_as_tuple	syntax	-	0	0	-	-	-
+r10B_p9_match_as_us	syntax	-	0	0	-	-	-
+r10B_p9_match_valid	ok	c9935a2470355389	255	3	227	0	-
+r10C_fl_xmlpos	ok	-	235495	13740	475013	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_h_twins	budget	-	424046	65578	811408	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_h_twins2	budget	-	649468	102416	2461331	67	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_h_twins_s	budget	-	692103	65536	809345	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_hostile_h_alloc	budget	-	48383	20480	-	-	-
+r10C_hostile_h_deadline	ok|budget	-	-	10190	-	-	-
+r10C_hostile_h_depth	raise RecursionError	-	230	12	-	-	-
+r10C_hostile_h_output	budget	-	155	11	-	-	-
+r10C_hostile_h_rec	budget	-	418	14	-	-	-
+r10C_hostile_h_rec_exc	budget	-	422	16	-	-	-
+r10C_hostile_h_recache	ok	e3b0c44298fc1c14	40275	923	40275	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_hostile_h_regex	budget	-	83	3	-	-	-
+r10C_hostile_h_sleep	budget	-	18	0	-	-	-
+r10C_hostile_h_steps	budget	-	200001	6330	-	-	-
+r10C_ke	ok	e3b0c44298fc1c14	13	1	13	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_ke5	ok	e3b0c44298fc1c14	13	1	13	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak2_l_ids	ok	876e13f4e07bb397	124766	4118	124766	4	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak2_l_mods	ok	907d61560826694c	10110	634	9833	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak2_l_ops	ok	5c07f1a3def74029	57231	883	55231	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak2_l_regex	ok	ce3238bf88811a6e	76881	4951	16306	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak2_l_types	raise AttributeError	-	8866	1179	-	-	-
+r10C_leak2_l_typing	ok	22237b741dfebc1c	7712	123	2012	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak_lib30	ok	-	2724302	77832	2710458	75	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak_mix	ok	-	13489	298	13286	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_leak_mix2	ok	-	3850	108	3996	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_append	ok	-	951591	35543	951591	34	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_csv_dictread	ok	-	570077	21682	570077	21	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_csv_read	raise TypeError	-	58	1	-	-	-
+r10C_mb_hash	ok	-	13011	17682	13011	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_lru_hit	ok	-	1209036	24322	1209036	23	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_lru_make	ok	-	262541	16281	262541	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_strptime	ok	-	203791	3167	183791	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_struct	ok	-	657855	13167	657855	12	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_u_nfc	ok	-	51135	7502	41135	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_u_nfc_ascii	ok	-	51135	1721	41135	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_u_nfd	ok	-	51135	13283	41135	5	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_mb_u_nfkc	ok	-	51135	12111	41135	4	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_ret_r_big	ok	75e5da2995939c1c	3136604	25799	2845377	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_ret_r_big_abort	ok|budget	-	-	-	-	-	-
+r10C_ret_r_exc_abort	budget	-	841	413	-	-	-
+r10C_setattr_static	ok	-	820	29	820	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_smoke_rep	ok	46251acfc71ec253	47655	745	33780	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_core	ok	-	7500190	185558	7481624	188	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_lib	ok	-	2724302	77832	2710458	75	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_many	ok	-	19545163	810786	19186299	796	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_num	ok	-	16962092	271498	17370893	318	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_recompile	ok	-	514235	4133	509735	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_rewords	ok	-	84103	-	65391	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_rewords_r7	ok	-	84103	-	65391	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_sin	ok	-	1706465	42122	1706465	41	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_xml	ok	-	1096634	42557	1064114	39	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_xmlpos	ok	-	174567	13729	234340	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_sp_xmlpos_r7	ok	-	174567	13729	234340	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_st_xml	ok	c99093ef8303a463	52504	3850	76439	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_syn100	syntax	-	0	0	-	-	-
+r10C_syn100b	syntax	-	0	0	-	-	-
+r10C_tiny50	ok	4355a46b19d348dc	3	0	3	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x0_setup	ok	e3b0c44298fc1c14	22359	3556	22324	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x1	ok	e3b0c44298fc1c14	22614	3572	24327	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x2	ok	e3b0c44298fc1c14	26615	3622	28327	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x3	ok	e3b0c44298fc1c14	23116	3572	28328	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x4	ok	e3b0c44298fc1c14	25117	3572	30328	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x5	ok	e3b0c44298fc1c14	22866	3556	24327	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x6	ok	e3b0c44298fc1c14	27115	3556	26330	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x7	ok	e3b0c44298fc1c14	35966	3693	34363	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r10C_xmlb_x8	ok	e3b0c44298fc1c14	25556	3597	28330	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a01_share_during_iterfind	ok	9c26fb84f638309c	237	10	-	-	-
+r11A_a02_share_during_findall	ok	2349e47aa02a1539	113	6	101	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a02b_dbg	ok	62489302089088d5	64	3	61	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a03_detach_then_insert	ok	acc95b87440b8c91	150	7	-	-	-
+r11A_a04_sorted_rows_positional	ok	-	883671	16961	547117	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a04b_control_unsorted	ok	-	235497	13740	475015	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a04c_snapshot	ok	-	843085	16694	475033	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a05_boundary_edges	ok	9972ffb3e4eff705	64354	1443	63090	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a06_word_loop_risky	ok	-	2005362	-	1422862	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a07_wclass_loop_risky	ok|budget	-	2056546	-	458296	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a08a_loop_plain	ok	4f6635fab1541047	99	6051	99	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a08b_loop_comment	ok	4f6635fab1541047	100	6051	100	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a08c_star_comment	ok	085c348f64a3b543	96	17580	96	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a09_comment	ok	bb69f86f383c3e97	4790	247820	4783	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a09_plain	ok	bb69f86f383c3e97	4720	247819	4713	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a09b_comment_32mb	budget	-	648	34736	11965	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a10a_star_gen	syntax	-	0	0	-	-	-
+r11A_a10b_star_args	budget	-	8000049	70314	-	-	-
+r11A_a10c_star_partial	budget	-	8002025	70314	-	-	-
+r11A_a11_ns_pass_attrs	ok|budget	-	-	12384	-	-	-
+r11A_a11b_ns_pass_attrs_2m	ok|budget	-	16836787	48110	-	-	-
+r11A_a12_cyclic	budget	-	6250109	97660	97	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a13_many_elements	ok|budget	-	-	-	-	-	-
+r11A_a13b_many_elements_15s	ok	f5bbc9df805e6618	6160359	256456	-	-	-
+r11A_a13c_count	budget	-	5024967	262144	-	-	-
+r11A_a14_compile_drop_alternations	ok|budget	-	-	-	5058361	145	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a14b_default_limits	ok|budget	-	2191312	221162	2190187	62	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a14c_no_ignorecase	ok|budget	-	2191281	-	2190156	62	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a14d_len	ok	7586312289773093	1647	65	1647	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a14e_raised	ok	-	2191312	221240	2190187	62	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a15_dag_find	ok|budget	-	-	19	-	-	-
+r11A_a15_dag_iter	ok|budget	-	-	19	-	-	-
+r11A_a15_dag_map	ok|budget	-	1347584	23	-	-	-
+r11A_a15_dag_ns	budget	-	625380	19	-	-	-
+r11A_a15_dag_text	ok|budget	-	-	20	-	-	-
+r11A_a16_class_chars	ok	c32a3a889623ebe9	95045	3554	86340	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a17_backref	budget	-	166	33207	-	-	-
+r11A_a17_group	budget	-	168	33207	-	-	-
+r11A_a18_tag_eq_mutates	ok	b4ab11b7f24adab1	233	9	217	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_a19_codec_aliases	ok	b15a2174877844d1	749	9	626	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann1	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann10	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann2	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann3	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann4	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann5	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann6	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann7	syntax	-	0	0	-	-	-
+r11A_ann_ann8	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11A_ann_ann9	ok	d2fab2a33b1c3438	8	1	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11B_p_ck_c_I_cls_0	ok	-	146796	2194	146546	0	-
+r11B_p_ck_c_I_cls_I	ok	-	148796	2038	146546	0	-
+r11B_p_ck_c_b_0	ok	-	146895	-	144646	0	review 15: compiled and dropped, the charge follows when the CLR collects
+r11B_p_ck_c_b_I	ok	-	146896	-	144646	0	review 15: compiled and dropped, the charge follows when the CLR collects
+r11B_p_ck_c_email_0	ok	-	150896	-	148646	0	review 12: a pattern is held by its translation's length too, until the CLR collects it
+r11B_p_ck_c_email_I	ok	-	150896	-	148646	0	review 12: a pattern is held by its translation's length too, until the CLR collects it
+r11B_p_ck_c_plain_0	ok	-	144896	2186	144646	0	-
+r11B_p_ck_c_plain_I	ok	-	146896	2149	144646	0	-
+r11B_p_ck_c_w_0	ok	-	145832	3170	143581	0	-
+r11B_p_ck_c_w_I	ok	-	145831	2112	143581	0	-
+r11B_p_ck_c_wb3_0	ok	-	157896	4448	147646	0	review 12: a pattern is held by its translation's length too, until the CLR collects it
+r11B_p_ck_c_wb3_I	ok	-	157896	-	147646	0	review 12: a pattern is held by its translation's length too, until the CLR collects it
+r11B_p_ft1	ok	-	367276	3053	454773	2	-
+r11B_p_ft2	ok	-	368057	3053	455554	2	-
+r11B_p_ft3	ok	-	731340	17233	856336	10	release notes: an iterfind is charged its walk
+r11B_p_ft4	ok	-	543060	3053	655554	2	-
+r11B_p_ft5	ok	-	543060	3053	655554	2	-
+r11B_p_ft6	ok	-	429778	8640	554774	8	-
+r11B_p_ft7	ok	-	373527	8639	454774	8	-
+r11B_p_ft8	ok	-	304775	3052	304773	2	-
+r11B_p_j1	ok	a539a9c68297262e	29	1	29	0	-
+r11B_p_j2	ok	16f42909345aae07	29	0	27	0	-
+r11B_p_j3	ok	ab0feb4a29dfe660	52	1	52	0	-
+r11B_p_w01_logs	ok	-	795682	22452	742011	15	-
+r11B_p_w01a	ok	-	72961	8343	72953	8	-
+r11B_p_w01b	ok	-	279235	18062	256718	10	-
+r11B_p_w01c	ok	-	117206	10049	108573	9	-
+r11B_p_w01d	ok	-	181785	8728	159276	8	-
+r11B_p_w02_match_groups	ok	-	325149	47064	312631	12	release notes: a match object is charged 64 B and 32 a group
+r11B_p_w02b	ok	-	321990	3221	309489	3	-
+r11B_p_w02c	ok	-	325140	47064	312631	12	release notes: a match object is charged 64 B and 32 a group
+r11B_p_w03_log_finditer	ok|budget	-	1134778	121181	1108492	57	release notes: match objects and compiled patterns charged
+r11B_p_w04_fixed_fields	budget	-	2138770	262144	-	-	-
+r11B_p_w05_many_groups	budget	-	515711	262144	508106	38	release notes: a match object is charged 64 B and 32 a group
+r11B_p_w06_compile_kinds	raise NameError	-	36	2	-	-	-
+r11B_p_w07_keyword_alt	raise NameError	-	146	14	-	-	-
+r11B_p_w07a	ok	-	867427	-	811177	13	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w07b	ok	-	867396	26225	811146	13	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w07c	ok|budget	-	2285497	49010	2265810	32	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w07d	ok	-	931769	-	930081	13	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w07e	ok	-	931722	-	930034	13	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w07f	ok	-	931839	-	930150	13	review 13: each regex is charged its runner from its first run, a pattern held until the CLR collects it
+r11B_p_w08_big_alt_I	raise NameError	-	38	2	-	-	-
+r11B_p_w08a	ok	-	206589	11810	206476	3	release notes: a compiled regex is charged
+r11B_p_w09_search_I	ok	-	33843	6431	27489	6	-
+r11B_p_w09b	ok	-	44812	10147	28057	9	-
+r11B_p_w10_star_calls	ok|budget	-	6387964	105874	6387964	103	-
+r11B_p_w11_xml	ok	-	1317354	44107	1486645	40	-
+r11B_p_w11a	ok	-	317965	17636	317965	16	-
+r11B_p_w11b	ok	-	482474	20502	469974	19	-
+r11B_p_w11c	ok	-	686836	39110	673977	36	-
+r11B_p_w11d1	ok	-	890126	40648	928082	37	-
+r11B_p_w11d2	ok	-	728357	39238	746237	36	-
+r11B_p_w11d3	ok	-	863195	40091	897837	37	-
+r11B_p_w11d4	ok	-	896057	40751	936298	38	-
+r11B_p_w12_findtext	raise NameError	-	72	4	-	-	-
+r11B_p_w13_xml_findtext	raise NameError	-	115	4	-	-	-
+r11B_p_w13a	ok|budget	-	4679899	76116	-	-	-
+r11B_p_w13b	ok|budget	-	5407334	58536	-	-	-
+r11B_p_w13c	ok	-	5907859	13674	-	-	-
+r11B_p_w14_json_csv	ok	-	3408353	89916	3565902	86	-
+r11B_p_w15_money_dates	ok	-	907998	22120	907915	21	-
+r11B_p_w16_classes_coll	ok|budget	-	5596866	70988	5557158	72	-
+r11B_p_w17_strings	ok|budget	-	7449704	215241	6385035	215	-
+r11B_p_w18_nested_counts	ok	-	3159	4065	1087	3	-
+r11B_p_w18b	ok	-	6899	11542	1088	11	-
+r11B_p_w19_k1	ok	-	134	7135	135	6	-
+r11B_p_w19_k12	ok	-	1024	7179	1020	6	-
+r11B_p_w19_k4	ok	-	378	7147	377	6	-
+r11B_p_w19_nested_real_mem	raise NameError	-	38	7130	-	-	-
+r11B_p_w20_match_twins	ok	-	125378	1727	123431	1	-
+r11B_p_w20a	ok	-	84507	1393	83233	1	-
+r11B_p_w20b	ok	-	49464	1140	48790	1	-
+r11B_p_w20c	ok	-	49499	1128	48785	1	-
+r11B_p_w20d	ok	-	49689	1145	49011	1	-
+r11B_p_w21_name_search_I	ok	-	494325	-	481574	2	release notes: a compiled pattern is charged while alive (6,000 compiled and dropped: 7 MB)
+r11B_p_w22_codecs	ok	-	2901611	34995	2901611	34	-
+r11B_p_w23_status_build_big	ok	-	2544890	82737	2924889	80	-
+r11B_p_w24_doc_regex	ok|budget	-	254815	18488	118477	17	release notes: a step per eight matches, plus the callbacks
+r11B_p_w25_misc	ok	-	8938174	66427	8915040	68	-
+r11C_c01_re_hostile	ok	c211fce577d2a150	16036	2798	12652	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c02_xml_hostile	ok	63bbaaeff01abbfa	604466	90047	-	-	-
+r11C_c03_json_hostile	ok	8c94946c9362c84b	185045	24937	32283	20	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c04_num_format	budget	-	71	3	-	-	-
+r11C_c04_num_format_h_work	ok	ca755dfedeaae898	244189	10175	-	-	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c04_num_format_o_work	budget	-	243713	10155	-	-	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c04b	budget	-	22	0	-	-	-
+r11C_c04c	ok	2f1dc3f0bc5670ca	532	1589	519	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c05_str_bytes	budget	-	8973	31351	-	-	-
+r11C_c05_str_bytes_h_work	ok	0d142c109e396e8f	527977	47131	-	-	-
+r11C_c05_str_bytes_o_work	ok	cf207643b9cca0b2	527959	47130	527150	41	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c06_dunders	ok	68cd719c51e71328	19047893	236169	10041629	223	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c07_typing_deep	ok	654dab2fa9e028cc	23146039	13178	193117	4	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c07b	ok	f7517068c220c4f2	53	1	-	-	-
+r11C_c08_datetime	budget	-	235572	6549	-	-	-
+r11C_c08_datetime_h_work	ok	e6fe10c16293a144	235887	6564	235683	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c08b	ok	02fc6df90321576e	508	28	508	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c09_zip	ok	-	599381	44217	286814	43	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c10_xml_mut	budget	-	652019	804	-	-	-
+r11C_c10_xml_mut_h_work	budget	-	652404	59406	-	-	-
+r11C_c10b	ok	16cfd6410dd15b3f	4225	108	-	-	-
+r11C_c11_iterparse_idiom	ok	734724477b4e7982	890	28	492	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c12_re_time	budget	-	981582	136054	-	-	-
+r11C_c13_math	budget	-	35073	61467	-	-	-
+r11C_c13a	budget	-	43296	262148	-	-	-
+r11C_c13c	ok|budget	-	8875	249638	-	-	-
+r11C_c13d	ok	-	174534	112201	173025	109	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c13e	ok	68cc3de5f78f2af3	30	1	30	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c13f	ok	cd708cadd25acc93	727	4	727	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_c13w	ok	587bef884547a4a3	78790	1002	-	-	-
+r11C_c14w	ok	18bc31c412057882	2641147	153556	-	-	-
+r11C_deep_q01_spine_add	budget	-	3074	13	-	-	-
+r11C_deep_q02_spine_attr	ok	12f37a8a84034d3e	3447	15	3445	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q03_spine_sub	ok	4355a46b19d348dc	6460	16	6460	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q04_spine_call	budget	-	1546	7	-	-	-
+r11C_deep_q05_spine_cmp	ok	7fc755fadc1b31a6	627	14	627	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q06_spine_or	ok	9a271f2a916b0b6e	3445	14	3445	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q07_spine_and	ok	4355a46b19d348dc	3445	14	3445	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q08_spine_mul_str	budget	-	3073	13	-	-	-
+r11C_deep_q09_spine_fstr	budget	-	3065	19	-	-	-
+r11C_deep_q10_spine_gen	ok	613da74825fe2754	7462	6456	1612	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q11_spine_lambda_default	budget	-	3062	13	-	-	-
+r11C_deep_q12_spine_repr	budget	-	2172	19	-	-	-
+r11C_deep_q13_spine_eq	ok	a9ac0c3ac83c40e1	4049	37	4047	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q14_spine_calldepth1000	budget	-	3073	13	-	-	-
+r11C_deep_q15_spine_calldepth5000	budget	-	3074	18	-	-	-
+r11C_deep_q16_spine_sort_key	budget	-	1505	23	-	-	-
+r11C_deep_q17_spine_dict_hash	budget	-	2174	19	-	-	-
+r11C_deep_q18_spine_str_of_list	budget	-	2471	26	-	-	-
+r11C_deep_q19_spine_xml_eq	ok	a9ac0c3ac83c40e1	6192	115	5970	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_deep_q20_spine_re_sub	budget	-	1590	21	-	-	-
+r11C_lim_l01_lru_many	budget	-	3212878	65536	-	-	-
+r11C_lim_l02_counter_many	budget	-	371391	69091	-	-	-
+r11C_lim_l03_deque_many	budget	-	3211287	68409	-	-	-
+r11C_lim_l04_dict_many	budget	-	371373	69091	-	-	-
+r11C_lim_l05_normalize_expand	budget	-	217	101564	33	28	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_lim_l06_float_parse_long	budget	-	158	66411	-	-	-
+r11C_lim_l07_format_width	ok	de6aeb89b0d91519	25	39063	25	38	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_lim_l08_traceback_big	ok	054e112313b4a93a	1434	46894	457	61	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_lim_l09_namedtuple_many	budget	-	3016514	65536	-	-	-
+r11C_lim_l10_sort_keys	budget	-	2887751	65536	-	-	-
+r11C_lim_l11_json_indent	budget	-	3610897	45581	-	-	-
+r11C_lim_l12_findall_many	ok	085c348f64a3b543	125826	41018	93	40	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_lim_l13_finditer_many	budget	-	733233	65536	-	-	-
+r11C_lim_l14_xml_many	budget	-	1321687	65536	-	-	-
+r11C_lim_l15_xml_parse_many	budget	-	118777	65536	-	-	-
+r11C_lim_l16_set_many	budget	-	1070427	69091	-	-	-
+r11C_lim_l17_decimal_many	budget	-	2459151	65536	-	-	-
+r11C_lim_l18_fraction_many	budget	-	4262108	65536	-	-	-
+r11C_lim_l19_datetime_many	budget	-	2205288	65536	-	-	-
+r11C_lim_l20_objects_many	budget	-	1709913	65536	-	-	-
+r11C_lim_l21_csv_many	budget	-	4149313	65536	-	-	-
+r11C_lim_l22_comb_list	budget	-	932425	65536	-	-	-
+r11C_lim_l23_str_many	budget	-	7565661	65536	-	-	-
+r11C_lim_l24_tuple_many	budget	-	1391727	65536	-	-	-
+r11C_lim_l25_float_many	budget	-	2009338	65536	-	-	-
+r11C_lim_l26_bigint_many	budget	-	1077008	65536	-	-	-
+r11C_lru	budget	-	7667	219	-	-	-
+r11C_one_lo_o01_ffmt_big	budget	-	2	29297	-	-	-
+r11C_one_lo_o02_efmt_big	budget	-	0	29297	-	-	-
+r11C_one_lo_o03_gfmt_big	budget	-	137	29299	-	-	-
+r11C_one_lo_o05_dec_fmt_big	budget	-	22	29298	-	-	-
+r11C_one_lo_o08_fmt_width_prec	budget	-	10	48829	-	-	-
+r11C_one_lo_o21_re_escape	budget	-	1972	46875	-	-	-
+r11C_one_lo_o23_ascii_astral	budget	-	4	41016	-	-	-
+r11C_one_lo_o25_nfc_marks_sort	budget	-	2030	39266	1059	15	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_lo_o28_upper_expand3	budget	-	1223	39063	-	-	-
+r11C_one_o01_ffmt_big	ok	87256d43466594b9	14	29297	-	-	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o02_efmt_big	ok	2b8254c692e30f97	19	58594	19	57	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o03_gfmt_big	ok	e38cd75dfdd5204f	280	29302	280	28	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o04_round_big	ok	2978a17e860e0797	8	0	8	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o05_dec_fmt_big	ok	728f6a1842857c3a	34	29298	-	-	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o06_int_ffmt	raise OverflowError	-	6	2	-	-	-
+r11C_one_o07_hex_fmt	budget	-	0	0	-	-	-
+r11C_one_o08_fmt_width_prec	ok	6e7b639c77dc507b	23	78126	-	-	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o09_frac_fmt	raise ValueError	-	26	118	-	-	-
+r11C_one_o10_fromhex_long	raise ValueError	-	1082	23441	-	-	-
+r11C_one_o11_float_parse_long	ok	a6311009c6c322ca	4	54688	4	53	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o12_dec_parse_long	ok	a6311009c6c322ca	1730	54689	1730	53	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o13_frac_parse_exp	budget	-	20	0	-	-	-
+r11C_one_o14_frac_parse_long	raise ValueError	-	1732	27345	-	-	-
+r11C_one_o15_int_parse_zeros	raise ValueError	-	19838	27357	129203	26	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o16_int_parse_hex_zeros	ok	4355a46b19d348dc	1715	41016	111075	40	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o17_log_bigint	ok	954252ef2862ed4e	22	244	22	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o18_fmean_bigint	ok	a9ac0c3ac83c40e1	100046	3126	100046	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o19_fsum_long	ok	5717e7c840171019	8000023	78126	8000023	76	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o20_pct_many	ok|budget	-	-	194804	-	-	-
+r11C_one_o21_re_escape	ok	33af8436cb9c3616	1984	46875	30	45	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o22_repr_ctrl	syntax	-	0	0	-	-	-
+r11C_one_o23_ascii_astral	ok	728f6a1842857c3a	16	41016	-	-	-
+r11C_one_o24_nfd_marks	ok	4c2dec143eee6604	767	41016	-	-	-
+r11C_one_o25_nfc_marks_sort	ok	7c9cb056bc302223	2041	47158	1059	15	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o26_case_chain	ok	00cb10b2c7f01dd0	7826	78125	7826	76	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o27_upper_expand	ok	de6aeb89b0d91519	1235	29297	1235	28	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_one_o28_upper_expand3	ok	6e7b639c77dc507b	1235	39063	1235	38	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_parse_p02_parens200	syntax	-	0	0	-	-	-
+r11C_parse_p16_indent100	syntax	-	0	0	-	-	-
+r11C_parse_p17_fstr	syntax	-	0	0	-	-	-
+r11C_parse_p18_fstr_q	syntax	-	0	0	-	-	-
+r11C_parse_p19_compr	syntax	-	0	0	-	-	-
+r11C_parse_p24_walrus	syntax	-	0	0	-	-	-
+r11C_parse_p25_star	syntax	-	0	0	-	-	-
+r11C_parse_p26_tuple_unpack	syntax	-	0	0	-	-	-
+r11C_parse_p27_match	syntax	-	0	0	-	-	-
+r11C_parse_p28_match_or	syntax	-	0	0	-	-	-
+r11C_parse_p32_nul	syntax	-	0	0	-	-	-
+r11C_parse_p33_bom_mid	syntax	-	0	0	-	-	-
+r11C_parse_p34_tabs	syntax	-	0	0	-	-	-
+r11C_parse_p35_cr	ok	4355a46b19d348dc	3	0	3	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_parse_p36_lone_surr	ok	53c234e5e8472b6a	5	0	5	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_parse_p37_bad_utf8	ok	53c234e5e8472b6a	5	0	5	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_parse_p38_ident_nfkc	ok	4355a46b19d348dc	3	0	-	-	-
+r11C_parse_p39_ident_comb	ok	4355a46b19d348dc	3	0	-	-	-
+r11C_parse_p48_typealias	syntax	-	0	0	-	-	-
+r11C_parse_p49_ann	syntax	-	0	0	-	-	-
+r11C_parse_p54_trynest	syntax	-	0	0	-	-	-
+r11C_parse_p56_unclosed	syntax	-	0	0	-	-	-
+r11C_parse_p58_fstr_fmt_nest	ok	4355a46b19d348dc	4	0	-	-	-
+r11C_parse_p61_fstr_deep_mixed	syntax	-	0	0	-	-	-
+r11C_parse_p62_tstring	syntax	-	0	0	-	-	-
+r11C_parse_p63_genexp_nest	syntax	-	0	0	-	-	-
+r11C_parse_p64_dictcomp_nest	syntax	-	0	0	-	-	-
+r11C_parse_p67_del_many	ok	4355a46b19d348dc	3	0	3	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_parse_p69_assert_deep	syntax	-	0	0	-	-	-
+r11C_parse_p70_set_nest	syntax	-	0	0	-	-	-
+r11C_rep_c01_re_hostile	ok	c211fce577d2a150	16036	2798	12652	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rep_c06_dunders_h_work	ok	68cd719c51e71328	19047893	236169	10041629	223	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rep_c09_zip_h_work	ok	-	599381	44217	286814	43	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rep_c13w	ok	587bef884547a4a3	78790	1002	-	-	-
+r11C_rx_y02_nest_la	ok	5cdf1781c657b5d8	604	918	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y03_nest_lb	ok	91bf20f1316bc9ed	604	304	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y04_nest_alt	ok	50b6c589828f7ffa	614	1002	613	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y05_nest_quant	ok	9315b752168b5ade	604	954	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y05b_nest_quant_ab	ok	1a8fa99dc65b700c	604	960	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y06_nest_atomic	ok	9315b752168b5ade	604	918	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y07_nest_ic	ok	9315b752168b5ade	607	304	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y09_nest_neg_la	ok	cb88c50a2a145c32	604	918	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y10_nest_b	ok	03931991f3dc5308	594	1160	590	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y12_many_classes	ok	c355c9f89130cc04	604	294	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y14_w_many	ok	86580058445af564	607	1077	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y14b_w_many_q	ok	99ab5711dfb5031a	613	1126	609	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y15_backref_many	ok	e11c183d415e200e	3605	1060	603	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y16_named_many	syntax	-	0	0	-	-	-
+r11C_rx_y17_named_nest	syntax	-	0	0	-	-	-
+r11C_rx_y18_cond	ok	763c65092cf3debc	104	3	100	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y19_ic_wide	ok	1af5ac703957a508	390	3	112	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y20_ic_many_ranges	ok	e6646e7b48abf2d4	10102	555	10050	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y21_lb_nested_fixed	ok	7e0de6b2ce5f2e7c	554	251	553	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_rx_y22_poss_nested	ok	f4b942de0d026dc8	1116	1026	440	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s01	ok	-	254314	93752	254314	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s02	ok	-	254314	93752	254314	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s03	ok	-	4312	93752	4312	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s04	ok	-	398	93752	398	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s05	ok	-	401	93752	401	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s06	ok	-	4316	125002	4316	122	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s07	ok	-	4318	125002	4316	122	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s08	ok	-	4329	93752	4329	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s09	ok	-	4310	125002	4310	122	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s10	ok	-	4310	125002	4310	122	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s11	ok	-	3942	62502	3942	61	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s12	ok	-	3942	62502	3942	61	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s13	ok	-	254315	93752	254315	91	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s14	ok	-	2165	31251	2165	30	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s15	ok	-	2165	31251	2165	30	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s16	ok	-	2165	31251	2165	30	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s17	ok	-	208	31251	208	30	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s18	ok	-	2169	39064	2167	38	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r11C_srch_s19	ok	-	2173	39064	2173	38	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_cyc	ok	b21a935d14de57c6	50	2	46	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_fuzz_xp	ok	363fb081a2867168	188531	2978	-	-	-
+r13A_fuzz_xp2	ok	c91524c4d5fb3fcb	7417415	108541	-	-	-
+r13A_fuzz_xp3	ok	d6e66f49d25f7d89	6297780	94686	-	-	-
+r13A_grp_200000	ok	38150b95a5de13b4	2151356	133300	2400033	146	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_grp_240000	ok	79d1a90ff772f184	2581620	159550	2880033	175	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_grp_270000	ok	28ba810c48d17e53	2904317	181285	3240033	197	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_grp_300000	ok	afd31060f83877c2	3227015	200973	3600033	219	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_grp_400000	budget	-	3180978	262144	-	-	-
+r13A_grp_parseonly	ok	a7c6882a45dbaefd	1601344	131737	1600025	143	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_find_3000	ok	-	608285	1138	4540721	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_find_6000	ok	-	2342099	2341	18081972	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_iterlist_3000	ok	-	1186348	1935	4556096	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_iterlist_6000	ok|budget	-	4623224	3935	18112722	2	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_iternext_3000	ok	-	620566	1654	4553002	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_loop_iternext_6000	ok	-	2366661	3372	18106534	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_mem_el	raise NameError	-	38	1	-	-	-
+r13A_mem_grp	raise NameError	-	800686	65869	-	-	-
+r13A_mem_re	raise NameError	-	29	2	-	-	-
+r13A_mg1	raise NameError	-	800684	65869	-	-	-
+r13A_re_wide	ok	53d52d470d2efba7	3498	76	-	-	-
+r13A_rep_fuzz	ok	0adb7c8de7e75023	126339	1991	-	-	-
+r13A_rep_iter	ok	26f073edd58106c3	220741	23071	-	-	-
+r13A_sub_attr	ok	fac27ed31a6a4cd4	93	3	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_t_search	ok	-	4741374	27126	10820848	26	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_x_attrib	ok	7603f089452372d6	1042	41	933	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13A_x_hostile	budget	-	638288	58847	-	-	-
+r13B_p_b01_attr_parse_100k	ok	-	1953440	182612	1951645	166	-
+r13B_p_b02_fields_attr_search	ok	-	3436768	151286	4620755	132	-
+r13B_p_b03_positional_loops	ok	-	15311359	68821	-	-	-
+r13B_p_b04_iterparse_stream	budget	-	7319030	262395	4605967	252	review 9 C-1: iterparse hands every record to the loop now (1.1.0 handled 1 of 10)
+r13B_p_b04b_iterparse_20k	ok	-	3405942	110813	1535461	83	review 9 C-1: iterparse hands every record to the loop now (1.1.0 handled 1 of 10)
+r13B_p_b05_log_rules	budget	-	4814381	262144	4482825	253	release notes: bounded regex loops and match objects charged (1.1.0 at 253 of 256 MB)
+r13B_p_b05b_log_rules_20k	ok	-	1646161	98351	1494468	83	-
+r13B_p_b06_keyword_lists	ok	-	154867	20815	137319	19	-
+r13B_p_b07_xml_template_sort	ok	-	1623171	47291	-	-	-
+r13B_p_b08_mixed_host	ok	-	5994114	124479	6122873	124	-
+r13B_p_b09_tree_positional_charge	ok	-	2650913	109379	-	-	-
+r13B_p_b09a_parse_only	ok	-	920798	93360	920058	86	-
+r13B_p_b10_lastrow_after_sort	ok	-	2385088	3418	-	-	-
+r13B_p_b11_lastrow_after_move	ok	-	2384835	3417	18129957	2	-
+r13B_p_b11d_2000	ok	-	294210	1110	2042582	0	-
+r13B_p_b11d_3000	ok	-	629366	1675	4564426	1	-
+r13B_p_b11d_move_default_limits	ok	-	2384835	3416	18129957	2	-
+r13B_p_b11e_move_first_row	ok	-	2384835	3416	18129957	2	-
+r13B_p_b12_lastrow_plain	ok	-	2384077	3416	18123950	2	-
+r13B_p_b13_iterparse_end_60k	ok	-	3624280	195747	3532967	188	-
+r13B_p_b13b_iterparse_se_60k	ok	-	5672722	239918	5581409	228	-
+r13B_p_b13c_fromstring_60k	ok	-	1497626	127236	1451313	126	-
+r13B_p_b14_etl_copy_then_summary	ok	-	1223499	3328	4592479	2	-
+r13B_p_b14p_etl_no_share	ok	-	624029	1314	4553841	0	-
+r13B_p_b15_deepcopy_config	ok	-	1164838	55491	1134837	53	-
+r13B_p_b16_zip_gzip_csv	ok	-	1634707	42636	1634010	41	-
+r13B_p_b17_typed_models	ok	-	1509274	24126	1481587	19	-
+r13B_p_b18_validation_exceptions	ok|budget	-	2534892	61661	2534886	59	-
+r13B_p_b19_base_600000	ok	3dc080397e4c9e7f	11	35157	11	34	-
+r13B_p_b19_one_attr_300000	ok	7d45055e354d1fae	300766	135933	300033	96	-
+r13B_p_b19_one_attr_600000	budget	-	575960	262144	600034	193	release notes: an element with attributes is charged for the element too (1.1.0 at 193 MB)
+r13B_p_b20_tree_positional_111	ok	-	15348600	204805	-	-	-
+r13B_p_b20a_parse_only	ok	-	1555788	186512	1554430	163	-
+r13B_p_b20b_child_positional	ok	-	10398580	204803	12954670	186	-
+r13B_p_b21_positional_split	ok	-	5966699	85808	7718695	100	-
+r13B_p_b22_groups_distinct_tags	ok	-	4076481	143801	3800077	152	-
+r13B_p_b22a_parse_only	ok	-	1701439	135205	1700047	147	-
+r13B_p_b22b_one_search_140k	ok	-	2872008	190995	3360055	209	-
+r13B_p_b22c_parse_only_140k	ok	-	2381994	189901	2380045	206	-
+r13B_p_b23_first_match_iterfind	ok	-	1773763	49429	1861017	41	-
+r13B_p_b23b_first_match_plain	ok	-	1573762	46245	1861017	41	-
+r13B_p_b23c_parse_only	ok	-	342487	27408	342243	29	-
+r13B_p_b23d_first_match_240k	ok|budget	-	3777534	79099	3987288	58	release notes: an unfinished iterfind is charged its map and walk until collected
+r13B_p_b24_per_invoice_after_move	ok	-	1004292	26949	1281037	18	-
+r13B_p_b24b_per_invoice_no_move	ok	-	1004286	26949	1281032	18	-
+r13B_p_m01_compile_charge	raise NameError	-	47	3	-	-	-
+r13B_p_t_paths	ok	bafa957703069721	301	8	248	0	-
+r13B_rp_b02_fields_attr_search	ok	-	3436768	151286	4620755	132	-
+r13B_rp_b05b_log_rules_20k	ok	-	1646161	98351	1494468	83	-
+r13B_rp_b07_xml_template_sort	ok	-	1623171	47291	-	-	-
+r13B_rp_b08_mixed_host	ok|budget	-	-	-	-	-	-
+r13B_rp_b12_lastrow_plain	ok	-	2384077	3416	18123950	2	-
+r13B_rp_b15_deepcopy_config	ok	-	1164838	55491	1134837	53	-
+r13B_rp_b16_zip_gzip_csv	ok	-	1634707	42636	1634010	41	-
+r13B_rp_b17_typed_models	ok	-	1509274	24126	1481587	19	-
+r13B_rp_b18_validation_exceptions	ok|budget	-	2534892	61661	2534886	59	-
+r13C_c01_bigU	ok	699f28e8b2b425ce	52076	1851	52269	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_accumulate	ok	7e1196685c4bb78f	611031	14939	611031	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_batched	budget	-	1095046	26658	-	-	-
+r13C_c02_chain	ok	252a0d1d02a37ce1	711031	19627	711031	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_chain_from	ok	0ff23339b2a13ad7	714156	21971	714156	21	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_compress	ok	e9874876c4192461	915718	19627	915718	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_cycle	ok	b46094a30ee37461	611031	16502	611031	16	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_deep_lazy	budget	-	3694565	77338	-	-	-
+r13C_c02_dropwhile	ok	c88618e8bfbfca4d	814156	14939	814156	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_enumerate	budget	-	1058555	26658	-	-	-
+r13C_c02_filter	ok	942b7de5ace1937d	612593	14939	612593	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_filterfalse	ok	ed231149b7d0b8bb	814156	14939	814156	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_genexp	budget	-	404734	21970	-	-	-
+r13C_c02_groupby	budget	-	1049835	26658	-	-	-
+r13C_c02_islice	budget	-	587441	14939	-	-	-
+r13C_c02_iter_call	ok	233e34f307d4b0fe	99	4	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map	ok	91e2d9e01a68f84b	812593	14939	812593	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_any	ok	b5f488f7f43d7299	812592	14939	812592	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_bytes	ok	a7c9da38d0669db6	1512598	14940	1512598	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_counter	ok	7146cec4471fbf14	1512620	14940	1512617	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_csv	ok	215aad47955a4cec	512599	21191	512599	20	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_deque	ok	c052c459cdfa7611	1512608	14940	1512606	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_dict	ok	efb4924a73a67828	817418	33690	817418	32	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_enumerate_list	ok	1d0e789cca65802f	1512644	14940	1512636	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_for	ok	707fdf7593e7fbd3	1512612	14940	1512610	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_fsum	ok	a3a2892f5c09b428	512599	14941	512599	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_heapq	ok	7a62bc33443949c4	512599	14941	512599	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_in	ok	c34079f3a16647af	1412597	14940	1412597	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_join	ok	aa3ed673e0560078	1512602	14940	1512602	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_list	ok	c45667c33b8846bc	1512608	14940	1512606	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_max	ok	81dcf09a50ad4b60	1512600	14939	1512600	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_minmax_key	ok	74707116d3532bea	1512609	14940	1512609	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_prod	ok	52d010e8bcd6209f	512599	14941	512599	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_reduce	ok	5304d5b267073e06	1512603	14940	1512603	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_set	ok	3f4051cc2c16ceff	1512608	14940	1512606	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_sorted	ok	fc682135d7d40ca3	1512617	14940	1512615	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_star_call	ok	73c73c1b7b4f8d14	1512606	14940	1512606	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_statistics	ok	43f7b204217724ca	512599	14941	512599	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_str_join	ok	abdf4e6fa37c7a03	1512604	14940	1512604	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_sum	ok	7dd906c6332ebc47	1512596	14939	1512596	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_sumprod	ok	42fd7ad5a3dff65e	512599	14941	512599	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_tuple	ok	8cd3d0162b206931	1512611	14940	1512609	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_unpack	ok	0f498241337405d0	1512608	14940	1512606	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_map_zip_list	ok	f36610ab0d71207b	1512618	14940	1512614	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_pairwise	budget	-	1387125	43845	-	-	-
+r13C_c02_reversed_list	ok	474b9029f69b1e4b	1114156	25877	1114156	25	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_starmap	budget	-	865446	19626	-	-	-
+r13C_c02_takewhile	ok	9e5ad0609c4cbbac	812593	14939	812593	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_tee	ok	c3639233745aef71	615718	30564	615718	20	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_zip	ok	82dc61474b9ed792	1211031	20807	1011031	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02_zip_longest	budget	-	1080043	26658	-	-	-
+r13C_c02m_map_100000	ok	4355a46b19d348dc	607823	7906	607823	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02m_map_130000	ok	4355a46b19d348dc	790167	10338	790167	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02m_map_85000	ok	4355a46b19d348dc	516651	6690	516651	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_genexp_10000	ok	4355a46b19d348dc	20480	1369	20480	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_genexp_20000	ok	4355a46b19d348dc	40948	2872	40948	2	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_genexp_40000	ok	4355a46b19d348dc	81886	5880	81886	5	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_genexp_70000	ok	4355a46b19d348dc	143292	10396	143292	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_map_10000	ok	4355a46b19d348dc	60792	665	60792	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_map_20000	ok	4355a46b19d348dc	121573	1466	121573	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_map_40000	ok	4355a46b19d348dc	243136	3068	243136	2	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c02n_map_70000	ok	4355a46b19d348dc	425480	5475	425480	5	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_attrgetter	ok	d64426f0e62dc67e	200225	5667	200175	1	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_cm_copy	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_deepcopy	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_eq	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_get	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_getitem	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_in	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_items	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_len	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_list	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_newchild	budget	-	17762	262144	-	-	-
+r13C_c03_cm_parents	budget	-	17762	262144	-	-	-
+r13C_c03_cm_repr	raise TypeError	-	171	3	-	-	-
+r13C_c03_cm_set	raise TypeError	-	171	3	-	-	-
+r13C_c03_cmp_key	ok	3ae66c5ef07b56d5	306428	9471	306427	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_counter_nested	ok	e9eb74906e1c2040	414253	43846	514249	48	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_asdict	ok	3ea91a733a71ba32	306560	6366	306430	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_astuple	ok	3ea91a733a71ba32	306560	6351	306430	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_deepcopy	ok	e37e005e7041d20c	1006428	11433	1006425	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_eq	ok	741430051aa14c0e	306430	6347	306427	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_hash	ok	4a0453fc7ecbd132	306562	6354	306559	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_replace	ok	e37e005e7041d20c	806431	8308	806427	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dc_repr	ok	9da7364dbdc7d10e	806436	8308	806433	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_deque_deepcopy	ok	b3dc64a1af74c31a	714440	9477	714375	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_deque_eq	ok	741430051aa14c0e	514239	9472	514238	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_deque_in	ok	77ee0832e71ec2e2	514239	9472	514238	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_deque_lt	ok	77ee0832e71ec2e2	514239	9472	514238	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_deque_repr	ok	b3dc64a1af74c31a	514433	9477	514369	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_deepcopy	ok	249491294c17eee1	312674	42284	312673	41	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_eq	ok	741430051aa14c0e	112675	22753	112675	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_json	ok	b3b5896a11e5edc6	112933	22763	113189	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_json_indent	ok	b3b5896a11e5edc6	112933	22812	113189	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_json_sort	ok	b3b5896a11e5edc6	112933	22763	113189	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_or	ok	d64426f0e62dc67e	112675	22753	112676	22	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_dict_repr	ok	0bf9f4e06b21ee85	912683	27058	712682	23	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_deepcopy	ok	37a40bdafe418148	507989	29002	307986	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_dump	ok	fdbcd611dc96c175	520488	18651	507987	18	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_eq	ok	77ee0832e71ec2e2	307988	17284	307987	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_find_parent	ok	fcc3636dd64c5945	433001	25878	607997	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_findall	ok	fcc3636dd64c5945	320500	19237	407996	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_findall_last	ok	fcc3636dd64c5945	433001	19237	307991	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_findall_pos	ok	fcc3636dd64c5945	433001	19237	307991	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_indent	budget	-	324206	262162	-	-	-
+r13C_c03_el_iter	ok	4ed18cdd19e5003f	520499	18456	507998	20	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_iterfind	ok	fcc3636dd64c5945	545504	25097	307991	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_iterparse	ok	4ed18cdd19e5003f	946702	45214	908690	47	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_itertext	ok	25d6659a6e3c06f8	320493	18456	407993	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_ns	ok	3a13e28037ccf8fe	521011	17967	508167	18	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_repr	ok	af424e4c290bfd88	307987	17284	307986	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_roundtrip	ok	d64426f0e62dc67e	721347	34569	708335	35	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_text_pred	budget	-	-	-	-	-	-
+r13C_c03_el_tostring	ok	f2618588ce572a94	521008	17967	508167	18	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_tostring_html	ok	33a7e5b771d3ad01	521009	17967	508168	18	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_tostring_text	ok	25d6659a6e3c06f8	320491	18455	407991	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_tostringlist	ok	d64426f0e62dc67e	521002	17967	508161	18	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_tree_write	ok	37a40bdafe418148	307989	17284	307988	17	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_el_xmlid	ok	25d6659a6e3c06f8	821348	34569	808336	37	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_exc_context	ok	c4c7826c95ca9e68	814343	14953	814341	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_exc_repr_args	ok	b3dc64a1af74c31a	306428	10253	306428	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_exc_str_args	ok	b3dc64a1af74c31a	306428	10253	306426	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_frozenset_eq	ok	4a0453fc7ecbd132	1412815	81440	1412750	79	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_frozenset_hash	ok	4e1f870b7400a9aa	706446	40721	706445	39	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_itemgetter_tuple	ok	fcc3636dd64c5945	200187	9807	200186	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_ascii	ok	0adfcf13d1188392	912682	10253	712681	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_count	ok	9d350d5cb7e07b79	312682	9472	312681	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_deepcopy	ok	3ae66c5ef07b56d5	512674	16503	512673	16	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_eq	ok	741430051aa14c0e	312674	9472	312673	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_format	ok	0adfcf13d1188392	912684	10644	712683	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_fstr	ok	0adfcf13d1188392	912680	10644	712679	10	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_in	ok	77ee0832e71ec2e2	312674	9472	312673	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_index	ok	25d6659a6e3c06f8	312679	9472	312678	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_json	ok	b3b5896a11e5edc6	312933	9482	312933	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_lt	ok	77ee0832e71ec2e2	312675	9472	312674	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_pct	syntax	-	0	0	-	-	-
+r13C_c03_list_print	ok	ccb0e9403554dcb1	912674	9862	712673	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_repr	ok	0adfcf13d1188392	912682	10253	712681	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_sort	ok	3ae66c5ef07b56d5	312678	9472	312677	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_str	ok	0adfcf13d1188392	912682	10253	712681	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_list_sum	syntax	-	0	0	-	-	-
+r13C_c03_list_tuple_hash	ok	4a0453fc7ecbd132	615935	25190	615935	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_lru_call	budget	-	307213	34480	-	-	-
+r13C_c03_methodcaller	ok	d64426f0e62dc67e	407986	8690	407985	8	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_asdict	ok	249491294c17eee1	306425	6347	306423	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_deepcopy	ok	2dcb76b5e458b2e5	506425	6347	506423	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_eq	ok	741430051aa14c0e	306427	6347	306425	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_hash	ok	4a0453fc7ecbd132	306557	6347	306556	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_json	ok	b3b5896a11e5edc6	306686	6357	306685	6	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_nt_repr	ok	9da7364dbdc7d10e	806433	8308	806431	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_od_deepcopy	ok	275088c2a0454a4a	514239	45409	514238	44	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_od_eq	ok	741430051aa14c0e	314243	24316	314242	23	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_od_json	ok	b3b5896a11e5edc6	314498	24326	314754	23	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_od_repr	ok	0ecd851288512843	1314248	33691	1114247	27	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_partial_call	ok	d64426f0e62dc67e	406425	7908	406424	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_partial_deepcopy	ok	857bf0b39e9b507b	406422	7909	406421	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_partial_repr	ok	a222cb27d0ca5702	406426	7908	406425	7	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_set_of_tuples	ok	4a0453fc7ecbd132	304992	16503	304992	16	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_sm_call	raise NameError	-	167	3	-	-	-
+r13C_c03_tuple_dictkey	ok	4a0453fc7ecbd132	303429	15721	303429	15	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_tuple_eq	ok	4a0453fc7ecbd132	606560	31443	606560	30	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_tuple_set	ok	4a0453fc7ecbd132	303429	15721	303429	15	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c03_wraps_call	ok	d64426f0e62dc67e	509548	25096	509547	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c04_special	ok	a0e8f50261f4bdcf	1079444	11094	-	-	-
+r13C_c04s_decimal_from_big	ok	1606055bd26edebe	4198	226	-	-	-
+r13C_c04s_divmod_big	ok	4c52572f6f9bd989	4191	227	-	-	-
+r13C_c04s_float_big	ok	f31490161c921c13	4190	224	-	-	-
+r13C_c04s_float_big2	ok	5e96b5c87498de39	4197	225	-	-	-
+r13C_c04s_fmt_comma	ok	7c7e70d664bc670b	80722	245	-	-	-
+r13C_c04s_fmt_d	ok	a174a256d50687bd	80758	235	-	-	-
+r13C_c04s_fmt_e	ok	43328f7f01e074f5	4197	226	-	-	-
+r13C_c04s_fmt_f	ok	c60cb3d347cffa82	4197	226	-	-	-
+r13C_c04s_fmt_g	ok	cc08f15e1ae1f816	4197	226	-	-	-
+r13C_c04s_fmt_n	ok	7319bf7a3269260b	80758	235	-	-	-
+r13C_c04s_fmt_pct_int	ok	a17a171628860c82	4197	226	-	-	-
+r13C_c04s_fmt_under	ok	aaafe15fada76d7a	80722	245	-	-	-
+r13C_c04s_fmt_x	ok	9a2853cea9f1574c	4196	254	-	-	-
+r13C_c04s_fstr	ok	6649b1984bd971d6	80756	235	-	-	-
+r13C_c04s_fstr_eq	ok	0d4726518d587db2	80756	235	-	-	-
+r13C_c04s_hex_huge	ok	e5c31aeab3b63ced	4198	2787	-	-	-
+r13C_c04s_int_4300	ok	7c1354257f2fdb5d	22312	236	-	-	-
+r13C_c04s_int_4301	ok	68063ded55fc1f0a	4199	234	-	-	-
+r13C_c04s_int_4301_lead0	ok	00bdc1445df14625	4199	242	-	-	-
+r13C_c04s_int_4301_sp	ok	dadcea657014ff3e	24033	254	-	-	-
+r13C_c04s_int_4301_us	ok	9e90cb560f11c4dc	4199	246	-	-	-
+r13C_c04s_int_b0_bin	ok	73e60797d7ea0dec	4228	237	-	-	-
+r13C_c04s_int_b0_long	ok	d209dcbb50210d22	5761	712	-	-	-
+r13C_c04s_int_b16_0x	ok	8afbae729238ea06	4197	224	-	-	-
+r13C_c04s_int_b16_0x_only	ok	044394ac4fad022b	4198	225	-	-	-
+r13C_c04s_int_b16_bad_us	ok	f1ea9429a4137a8d	4198	225	-	-	-
+r13C_c04s_int_b16_empty	ok	887a258883714d95	4198	225	-	-	-
+r13C_c04s_int_b16_long	budget	-	3849	989	-	-	-
+r13C_c04s_int_b16_neg	ok	1f8bb8df723ee778	4207	229	-	-	-
+r13C_c04s_int_b16_plus	ok	05fd9a34ca232ff6	4207	229	-	-	-
+r13C_c04s_int_b16_sign_only	ok	eeb9c393363c4937	4198	225	-	-	-
+r13C_c04s_int_b16_space_mid	ok	224801fed94c5336	4198	225	-	-	-
+r13C_c04s_int_b16_trail_us	ok	2eba5c21c77c4ef9	4198	225	-	-	-
+r13C_c04s_int_b16_unicode	ok	368d8b921d79210e	4195	224	-	-	-
+r13C_c04s_int_b16_us	ok	c010bf862f29dc5c	7324	1152	-	-	-
+r13C_c04s_int_b2_long	ok	f4676edfea063f59	19825	2787	-	-	-
+r13C_c04s_int_b32_long	ok	aa68d3c59a9d3cd8	7325	834	-	-	-
+r13C_c04s_int_b36_4301	ok	86e6431928275474	4199	234	-	-	-
+r13C_c04s_int_b4_long	ok	1cee02f60cd1b224	12012	1567	-	-	-
+r13C_c04s_int_b8_long	ok	ef66f9c8791a1548	9408	1160	-	-	-
+r13C_c04s_int_from_bytes_huge	budget	-	3782	330	-	-	-
+r13C_c04s_pct_d	ok	3ce503660f075902	80756	235	-	-	-
+r13C_c04s_pct_f	ok	404cb56d33abf662	4195	226	-	-	-
+r13C_c04s_pct_i_float	ok	35640a7a8ed79f5a	4847	225	-	-	-
+r13C_c04s_pct_r	ok	12af32395d87daac	80756	235	-	-	-
+r13C_c04s_pct_s	ok	b5e7fffe74555a55	80756	235	-	-	-
+r13C_c04s_pct_x	ok	53697d7a4d0cfc07	4194	260	-	-	-
+r13C_c04s_repr4301	ok	a3f32d6b99b30ead	80758	235	-	-	-
+r13C_c04s_round_neg	ok	d7309522b459cda4	4191	227	-	-	-
+r13C_c04s_str4300	ok	c46d042e490a804b	80722	250	-	-	-
+r13C_c04s_str4301	ok	8caa7037cc835a47	80758	235	-	-	-
+r13C_c04s_str_bool	ok	94c90d3b621c2332	4205	224	-	-	-
+r13C_c04s_str_int_sub	ok	3efcbc42178b528b	4197	225	-	-	-
+r13C_c04s_strneg4300	ok	7db334e3c1333ad9	80722	252	-	-	-
+r13C_c04s_truediv_big	ok	f040bc0be9187473	4188	227	-	-	-
+r13C_c05_decint	ok	4a7287350ea8b2b8	513	122	505	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c06_s1	ok	580818aebd6816bd	689072	14494	675921	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c06_s2	ok	31b04e31f1447086	696061	14718	677953	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c06_s3	ok	07e8f6db6e848b62	687462	14383	673614	9	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c06_xpath_fuzz	raise NameError	-	68	1	-	-	-
+r13C_c06d	raise NameError	-	68	1	-	-	-
+r13C_c06d_s1	ok	6019147ac5db9cd8	938743	21161	895191	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c06d_s2	ok	e6542575eeed8cb4	938415	21185	895021	14	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c07_subtmpl	ok	-	1050783	13286	193	12	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_call_depth_kw	ok	02a87f4ec2a26690	217518	41425	217516	40	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_calls	budget	-	5327379	263371	-	-	-
+r13C_c08_dc_kw_big	ok	f3103df06da15dfb	301276	24867	301274	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_dict_kw_big	ok	aacdf16afe71929c	301281	36415	301279	35	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_dict_upd_kw_big	ok	1795d96abbf2cc26	302401	43287	302399	42	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_dt_replace_kw	ok	151c6ecfb5463864	201267	24867	201265	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_dup_kw	ok	0dde8771f1080a93	201260	24867	201258	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_dup_kw2	ok	0bc1d987af1972b2	201262	24867	201260	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_elem_attrib_and_kw	ok	5cfdf98b6710072c	302399	43287	302397	42	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_elem_kw_big	ok	7e8085e4ebf706b9	302401	43287	302399	42	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_empty_kw	ok	ec6624496bd17306	201259	24866	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_fmt_kw_big	ok	b30d0ce066c30853	301267	24866	301265	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_fmt_map	ok	7f082e5e2e81bfaf	201263	24866	201261	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_int_kw	ok	6118f75f4b719c13	201258	24866	201256	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_int_kw_x	ok	551f55da85d6b689	201263	24867	201261	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_json_kw	ok	33b92fc87d663575	201264	24867	201262	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_kw_big	ok	caf15204f264e1ba	301281	36415	301279	35	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_kw_to_abs	ok	70c7874c283c9787	201261	24866	201259	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_kw_to_builtin_bad	ok	1cf621a14bd575df	201263	24867	201261	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_kwonly_missing	ok	1300ba570686c795	201261	24867	201259	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_lambda_defaults_many	ok	9ae558f713578fbf	302298	36431	302294	35	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_max_kw	ok	1535abe21087e053	201260	24866	201258	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_method_kw_big	ok	62a2b038f2097aca	201257	24866	201255	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_nonstr_kw	ok	c8da706ce4db1145	201260	24866	201258	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_nt_kw	ok	2b2c81353019b5d7	201269	24868	201265	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_nt_replace_big	ok	11e05ba8510161c6	301277	28373	301273	27	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_partial_kw_big	ok	994d9c80c7014c18	301335	37196	301333	36	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_partial_kw_merge	ok	52bb6a645a89e6c1	401369	37196	401367	36	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_posonly_by_kw	ok	aece5ef94aa82259	201275	24866	201271	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_posonly_in_kw_k	ok	d5393b09bc78a378	201277	24866	201273	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_print_kw	ok	4116a0d9d71a90bd	201264	24867	201262	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_range_kw	ok	a5e15deff5d3816e	201263	24867	201261	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_sorted_kw	ok	6d00e607a1a01567	201270	24866	201266	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_sorted_kw_bad	ok	002b36f6d1b7e9dd	201263	24867	201261	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_dict	ok	0981e71f9b8543a9	301263	26671	301261	25	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_gen	ok	444c7116a380c114	2201267	74850	2201265	65	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_huge	ok	620373ae2624d6ff	1201266	74850	1201264	65	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_nonit	ok	285ef82fb37fb4df	201259	24867	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_set	ok	74edd7e1066962d0	401268	37944	401266	36	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_chainmap	ok	61a60f3b15ec59ed	402412	51343	201259	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_counter	ok	d1295f31ff7f7e7e	402410	51342	403540	58	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_defaultdict	ok	f7c97ad1f2de0169	402410	51342	402420	50	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_getitem_raise	ok	58e9a96403e7b3a2	201259	24866	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_mapping_keys	ok	07f837ef7b465bc2	402410	51342	402420	50	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_nonmap	ok	ca29e3a3967e5893	201259	24867	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_script_badkey	ok	6493759bdc0f1055	201259	24866	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_script_map	ok	055c729d02b3994f	201259	24866	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_star_script_raise	ok	70b44d96043312f3	201259	24866	201257	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_star_str	ok	0419ad5acb10baa4	1201264	42824	1201262	33	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_str_kw	ok	00d7a80f75427f96	201257	24866	201255	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_surr_kw	ok	d3ead0eaf53b7be7	201261	24866	201259	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_tmpl_both	ok	ff4141565561b2a5	201387	24870	201384	24	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08_tmpl_kw	ok	e720ca523cec3d14	301405	36419	301402	35	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c08b	ok	93547d0bd75d8374	154	11	121	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_append_iter	ok	bba050addb26c211	95	4	95	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_add_dict	ok	a477b75bcabd9387	79	4	79	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_and_neg	ok	f6c5a572f22f836c	97	4	94	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_copy	ok	9e07e76d8bdf3f52	91	3	88	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_del_missing	ok	f679fcaf5b49267d	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_elements_bool	ok	99efce36658bef55	84	3	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_elements_float	ok	e33f8e810e4d0b8d	83	4	77	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_elements_neg	ok	275bdbe036d76038	88	3	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_eq_zero	ok	9134e55bc1313619	73	3	72	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_float_vals	ok	eedb59969178fc4e	88	3	86	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_fromkeys	ok	7f1bcb9a09a780bd	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_hash	ok	088dda030f974184	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_huge_vals	ok	c5b60cf10354b3a8	80	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_iadd_self	ok	44684fe2c83091f7	80	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_iand_self	ok	5d2bcba27ffc8294	80	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_ior_self	ok	bbed2871b6047856	80	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_isub_self	ok	382fa71cfc0e8d1a	80	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_le_missing	ok	24381f63c4710300	80	3	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_lt	ok	927c3534ed515505	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_missing	ok	c1875b8301e56109	70	2	70	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_mixed_cmp	ok	8cfe3fab0ed52fea	80	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_mixed_repr	ok	bf224009edb14108	91	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_most_big	ok	847c38b197b95c70	105	3	98	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_most_bool	ok	5b9789cc121a3dfb	94	3	89	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_most_float	ok	5fee45694b89dff3	86	4	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_most_neg	ok	43616d3bd94b8b3e	81	3	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_most_none	ok	be2f68d7571f3c00	104	3	98	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_neg	ok	a6bbd11ac22115d6	92	3	86	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_or_dict	ok	c2ba121d5f2517f8	90	3	90	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_or_neg	ok	a3a47f213e8b9215	97	4	94	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_pos	ok	a86b18b2ba170603	89	3	86	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_str_vals	ok	6eafbca3a95a7fdc	81	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_sub_neg	ok	e43df7c8a5f693ad	95	4	92	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_subtract_self	ok	3ea8eb4a79f1d0be	95	3	92	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_total_mixed	ok	fd63ea374f5136e3	72	3	72	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_total_str	ok	2515ac26608957b7	79	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_update_kw	ok	5ef41a57e7f92eed	89	3	87	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_c_update_self	ok	85099464dcd2d6d0	95	3	92	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_clear_iter	ok	dd89723699ea5ed1	95	4	95	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_bool	ok	350e971a86c78fc1	71	3	71	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_del_parent	ok	81e665ffafecee43	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_empty	ok	006d0648f63d96f5	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_fromkeys	ok	3fc8f1ad2ae987a2	74	3	74	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_iter_order	ok	638fc93071aabeba	86	4	86	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_or	ok	e70f1b22229ec970	84	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_ror	ok	7fd2b01b32641870	86	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cm_self_map	ok	c83ce2f64b1f2c20	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cmp_self	ok	3b8697b016c6cce5	85	3	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_cmp_types	ok	e03042866740f9d7	79	4	79	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_colls	ok	2e7c35559b568229	3107	154	-	-	-
+r13C_c09_copy_maxlen	ok	0d4a62fb07f98fe1	92	3	90	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_count_mut	ok	adf7d869c7dc7d6a	80	2	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_bad_factory	ok	9810e91d0fef8184	76	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_copy	ok	2fad7cbbf89bcfab	90	3	84	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_factory_self	ok	cf0b7d0b68c7c3c7	73	3	73	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_none_factory	ok	af60b002d4acb135	76	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_or	ok	812a832f62fe47c0	94	4	89	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_dd_repr_self	ok	59fd17908add7695	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_deepcopy_self	ok	15d93041891f3aee	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_del_big	ok	7f18a66c9bfe7e83	82	4	82	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_extend_self	ok	f2656885b87552cf	96	3	94	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_extend_self_maxlen	ok	0c63bcf27fdde7c3	99	3	97	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_extendleft_self	ok	8c2fd5bde441acbe	96	3	94	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_getitem_big	ok	8f09459a88169620	84	3	84	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_getitem_neg	ok	7373afa781309bb3	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_getitem_negover	ok	bd2bd8b8b98123f1	84	3	84	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_iadd_self	ok	a345909c2bfa1fdc	79	4	79	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_idx_2_63	ok	6076f8f7fc9940d3	89	3	89	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_idx_big	ok	b1789497f8c549f5	89	3	89	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_idx_missing	ok	ccfbf0f1e07bda6b	97	3	97	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_idx_neg	ok	a065dd210b799d2c	83	2	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_imul_maxlen_big	ok	5c377dbd43fd028f	79	4	79	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_insert_big	ok	5ce5db15114000c0	93	3	91	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_insert_negbig	ok	ca3ae88f412fa724	93	3	91	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_2_31	ok	310012d2c3beda89	81	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_2_63	ok	5d61d166542c9e9d	76	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_2_63m1	ok	ee9ebf898a83c0db	91	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_bool	ok	be316f70e49e89a7	79	3	77	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_neg	ok	b91787f2c13825aa	76	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_maxlen_none	ok	779563b90e3e5329	71	2	71	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_mul_2_63	ok	8055d8b1280dab23	78	4	-	-	-
+r13C_c09_mul_bool	ok	1795dac611061c74	79	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_mul_empty_huge	ok	59e2e5fb56fd8437	76	4	71	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_mul_maxlen	ok	812d820a5606566b	88	3	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_mul_neg	ok	53cc2fea135080fe	73	3	73	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_eq_dict	ok	a6a355c066c0129e	80	3	80	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_eq_order	ok	feb0c6ebe2248bca	81	3	81	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_ior	ok	14ef0227049c0ff1	76	4	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_move_end_iter	ok	eb1bee63b90f96c7	92	4	92	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_or_self	ok	496c33a467c2ced4	84	3	83	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_popitem_iter	ok	c79ee487f1f3d598	90	4	90	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_od_reversed_mut	ok	a64f3eee8c3feec3	85	4	85	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_pop_empty	ok	f1223de2bd880848	78	3	78	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_remove_missing	ok	852a9e75b4239e91	82	3	82	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_repr_self	ok	d867ae946abd4c79	84	3	402	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_reverse_maxlen	ok	bff0a74af80c9445	93	3	91	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_reversed_mut	ok	517fcbcd8ffbcd3e	95	4	88	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_2_63	ok	6fca82d15b26a042	89	4	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_2_63m1	ok	ec9367d065b885c9	101	3	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_2_64	ok	a61edb6cc8d0f6c2	89	4	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_big	ok	1cd103ef289a95f1	89	4	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_bool	ok	9ee295ee3e0c5e82	101	3	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_empty_big	ok	6910ea5b3c83d01e	81	3	76	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_float	ok	1e02525b4efde0fc	89	4	89	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_m2_63	ok	e0bf0817adfe31b0	101	3	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_maxlen	ok	d67359addb9bc6ac	102	3	100	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_rot_negbig	ok	5a488ebd2609c8bd	90	4	99	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c09_setitem_bool	ok	8a36b5677842f519	79	4	79	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c10_codecs	raise ModuleNotFoundError	-	20	0	-	-	-
+r13C_c10b	ok	6880dcca93794e82	568	35	537	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c11_counter_ctor	ok	288252c0b4deb622	713	36	605	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c12_dict_restart	ok	7fc755fadc1b31a6	29	2	27	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c12_set_restart	ok	7fc755fadc1b31a6	47	2	45	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_c13_repeat	ok	077b8b3aba68bde6	2168114	16670	-	-	-
+r13C_c14_sleep	budget	-	1293	14	-	-	-
+r13C_c15_attrib_alias	ok	553faec304bb4bea	797	39	-	-	-
+r13C_esc2_re_distinct	budget	-	2828779	65536	-	-	-
+r13C_esc2_re_distinct_I	budget	-	2852343	65536	-	-	-
+r13C_esc2_re_used	budget	-	3139314	65536	-	-	-
+r13C_esc2_re_word	budget	-	2848916	65536	-	-	-
+r13C_esc3_def_re_distinct	ok|budget	-	-	-	-	-	-
+r13C_esc3_def_re_distinct_I	ok|budget	-	-	-	-	-	-
+r13C_esc3_def_re_word	ok|budget	-	-	-	-	-	-
+r13C_esc_csvw	budget	-	3214145	65536	-	-	-
+r13C_esc_excobj	budget	-	2306892	65536	-	-	-
+r13C_esc_lambdas	budget	-	1471060	65536	-	-	-
+r13C_esc_mapobj	budget	-	2754657	65536	-	-	-
+r13C_esc_md5	budget	-	4422732	65536	-	-	-
+r13C_esc_re_distinct	syntax	-	0	0	-	-	-
+r13C_esc_re_distinct_I	syntax	-	0	0	-	-	-
+r13C_esc_re_word	syntax	-	0	0	-	-	-
+r13C_esc_sha256	budget	-	4422732	65536	-	-	-
+r13C_esc_stringio	budget	-	3382109	65536	-	-	-
+r13C_esc_zipobj	budget	-	2754657	65536	-	-	-
+r13C_fmt_attr_chain	ok	4355a46b19d348dc	100129	2930	100129	2	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_fmt_formatter_parse	ok	638bfb0d77fcf2f9	61	6	59	0	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_fmt_getter_chain	ok	9bba3e6944034b9d	100087	8204	100038	3	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_fmt_idx_chain	ok	cafae586b525c272	314157	12790	314157	12	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_fmt_pct_map_big	budget	-	800001	30079	-	-	-
+r13C_fmt_spec_many	ok	4ef8221618940938	625766	8354	625766	5	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_fmt_template_big	ok|budget	-	-	-	-	-	-
+r13C_itk_it_2_	budget	-	200000001	53451	-	-	-
+r13C_itk_it_a_	budget	-	200000002	27328	-	-	-
+r13C_itk_it_c_	budget	-	1540119	65536	-	-	-
+r13C_itk_it_c_1_	budget	-	4396242	65536	-	-	-
+r13C_itk_it_last_	budget	-	200000001	53082	-	-	-
+r13C_itk_it_x_	budget	-	2393349	65536	-	-	-
+r13C_m01_xml	raise NameError	-	38	1	-	-	-
+r13C_m02_bulk	raise NameError	-	298	13	-	-	-
+r13C_rxo_escape_big	ok	811944a2d4539da2	1001011	17769	1000522	13	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_rxo_expand_big	budget	-	5213474	65536	-	-	-
+r13C_rxo_findall_empty	ok	a0b18b530f4ecec3	250095	19534	95	19	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_rxo_findall_groups	budget	-	43913	65536	-	-	-
+r13C_rxo_findall_lookahead	ok	aa1c1abb0bf6f269	125096	39065	96	38	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_rxo_finditer_groups	budget	-	522104	65536	-	-	-
+r13C_rxo_finditer_list	budget	-	986119	65536	-	-	-
+r13C_rxo_fullmatch_groups	budget	-	86	35158	-	-	-
+r13C_rxo_split_empty	budget	-	232090	65536	-	-	-
+r13C_rxo_split_groups	budget	-	103876	65536	-	-	-
+r13C_rxo_sub_call	budget	-	993532	65536	-	-	-
+r13C_rxo_sub_grow	budget	-	782692	33800	-	-	-
+r13C_rxo_sub_tmpl	budget	-	15333418	33671	-	-	-
+r13C_rxo_subn_tmpl	ok	d64cef01f9c31b57	10125091	42971	89	41	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r13C_star_s_class	budget	-	3031589	66214	-	-	-
+r13C_star_s_kept	budget	-	3031599	66213	-	-	-
+r13C_star_s_kw	budget	-	1531580	65536	-	-	-
+r13C_star_s_lambda	budget	-	3031586	66213	-	-	-
+r13C_star_s_method	budget	-	3031591	66213	-	-	-
+r13C_star_s_mixed	budget	-	2031577	65536	-	-	-
+r13C_star_s_partial	budget	-	2432204	66213	-	-	-
+r13C_star_s_plain	budget	-	3031585	66213	-	-	-
+r13C_star_s_print	budget	-	5883110	67425	-	-	-
+r13C_star_s_sortkey	budget	-	1232320	38112	-	-	-
+r13C_star_s_two	budget	-	3331579	66213	-	-	-
+r13C_star_s_zip	ok	9a271f2a916b0b6e	1232504	38117	1232504	37	hostile probe (review zone A/C): pinned to the approved build; 1.1.0 under-charged what it finds
+r15_add_lazy	ok	9a271f2a916b0b6e	2318675	3339	-	-	-
+r15_add_parent	ok	9a271f2a916b0b6e	2306489	2729	-	-	-
+r15_add_star	ok	9a271f2a916b0b6e	4582365	2308	-	-	-
+r15_attr_neq	ok	9ce9f99387d1ea92	546	11	-	-	-
+r15_c3_accumulate_100000	ok	4355a46b19d348dc	407855	7906	-	-	-
+r15_c3_filter_100000	ok	4355a46b19d348dc	607855	7906	-	-	-
+r15_c3_map2_100000	ok	86ca6db7f61a261d	3312538	12594	-	-	-
+r15_c3_starmap_100000	ok	4355a46b19d348dc	614111	7907	-	-	-
+r15_c3_takewhile_100000	ok	4355a46b19d348dc	607855	7906	-	-	-
+r15_facts	ok	4c53c8da510eb888	40890	31021	-	-	-
+r15_first_match	ok	87263338789f1cc6	3777512	79096	-	-	-
+r15_kept_append	ok	f5aee7df0c39c948	38423205	20736	-	-	-
+r15_kept_insert	budget	-	558566	65536	-	-	-
+r15_map_four_docs	budget	-	3707781	263195	-	-	-
+r15_map_parent_append	ok	-	5681241	72733	-	-	-
+r15_map_parent_remove	ok	-	6502670	55152	-	-	-
+r15_map_search_then_build	ok	-	562563	21200	-	-	-
+r15_map_search_then_parse	ok	-	684951	55304	-	-	-
+r15_outside_append	ok	9a271f2a916b0b6e	5093399	4397	-	-	-
+r15_outside_insert	ok	9a271f2a916b0b6e	5095336	4240	-	-	-
+r15_review	ok	7184a34e45af8e7b	15042	338	-	-	-
+r15_star_run_then_others	ok	4969d1116bb77480	258815	6621	-	-	-
+r15_xp_fuzz2	ok	bca3ba38cef7ceff	8199757	337104	-	-	-
+r15_xp_fuzz3	ok	0333109729b7291e	7005866	302153	-	-	-
+r16_build_elsewhere_then_lazy	ok	f5aee7df0c39c948	1091950	15964	-	-	-
+r16_four_trees_changed	ok	a1fb50e6c86fae16	829084	38538	-	-	-
+r16_kw_attrib_errors	ok	649fc4efd53e9bc1	268	12	-	-	-
+r16_move_rows_between_trees	ok	6bf920d7f5d19223	2149577	15767	-	-	-
+r17_digit_cap	ok	6ac9b84c73b014f8	407434	1014	-	-	-
+r17_empty_path	ok	03893fa1a5a04fcb	254	9	-	-	-
+r17_filter_none_bool_raises	ok	46206618130759ce	307	9	-	-	-
+r17_filter_none_nested	ok	fa2957957a08ec0e	3947028	47835	-	-	-
+r17_isnorm_long_form	ok	50fcd6f31e73e2e4	163	8990	-	-	-
+r17_itertext_per_row	ok	9fb31c9d0eaa2421	3695659	43407	-	-	-
+r17_nfc_alloc	ok	36572cc37718b5df	1516	34669	-	-	-
+r17_nfc_under_limit	ok	77b4bc0a0a5ee408	945	17577	-	-	-
+r17_nfd_one_piece	ok	35d6eea61e3d5535	863	50778	-	-	-
+r17_nfd_past_limit	budget	-	168	3516	-	-	-
+r17_ns_tostring	ok	7b2aa6e1103f3667	331637	10449	-	-	-
+r17_regex_kept_one_way	ok	1d8fa3c8ab49d50b	144837	5020	-	-	-
+r17_regex_kept_six_ways	budget	-	1142671	65537	-	-	-
+r17_stop_sources	ok	b6fba14024552765	1053	24	-	-	-
+r17_stop_sources_nested	ok	af2187ff218fb779	8034446	148022	-	-	-
+r17_text_pred_lookup	ok	ce3238bf88811a6e	11038662	2381	-	-	-
+r19_chain_member_stop	ok	f3199aae2bb2a85b	176	4	-	-	-
+r19_deep_find_loop	ok	b80500a01f984c76	1372096	6447	-	-	-
+r19_deep_itertext_loop	ok	1506fbe11e08699d	3744220	17466	-	-	-
+r19_deep_text_predicate	ok	d6e02e548a55f01b	3965622	2749	-	-	-
+r19_drop_source	ok	16bd3e3e8d341975	430	9	-	-	-
+r19_nfkc_one_piece_refused	budget	-	239	114259	-	-	-
+r19_path_braces	ok	a3cb47905b3c3ae0	637	17	-	-	-
+r19_path_whitespace	ok	92daedcb5bff7e94	1381	47	-	-	-
+r19_regex_runner_held	ok	83c02ac2d48c863d	201870	157155	-	-	-
+r19_regex_stack_per_regex	ok	06e9d52c1720fca4	490	141650	-	-	-
+r19_resuming_iterator	ok	c5d91cfda210582d	2785	49	-	-	-
+r19_walk_lending	ok	0404009df3d54898	1904	26	-	-	-
+r20_regex_alt_per_row	ok	aceaf168c6709487	10607052	-	-	-	-
+r20_regex_build_fits	ok	a9ac0c3ac83c40e1	87589	6129	-	-	-
+r21_regex_empty_groups	budget	-	19961245	16397	-	-	-
+r21_regex_pages_mode	budget	-	11497	65564	-	-	-
+r21_regex_pages_spelled	budget	-	120286	65747	-	-	-
+r21_regex_pages_verbose	budget	-	9430	65743	-	-	-
+r21_regex_repeat_behind	budget	-	6963876	16388	-	-	-
+r21_regex_repeat_dropped	budget	-	6915257	16384	-	-	-
+r21_regex_repeat_empty	ok	792376c209f33895	15662101	12667	-	-	-
+r21_regex_repeat_fits	ok	10eae36e39cfa5c5	213716	5356	-	-	-
+r21_regex_repeat_kept	budget	-	6563578	16390	-	-	-
+r21_regex_repeat_merged	budget	-	14948893	16400	-	-	-
+r21_regex_repeat_once	budget	-	5817156	16394	-	-	-
+r21_regex_repeat_reduced	budget	-	14950390	16395	-	-	-
+r21_regex_repeat_zero	budget	-	477286	16447	-	-	-
+r21_regex_stop_anchor	ok	534a58f4e7e56f11	247	3173	-	-	-
+r21_regex_stop_inside	ok	53c82f17afd5234a	475	315	-	-	-
+r21_regex_stop_once	ok	534a58f4e7e56f11	249	3174	-	-	-
+r21_regex_stop_word0	ok	5c6809fffee2840f	266	26	-	-	-

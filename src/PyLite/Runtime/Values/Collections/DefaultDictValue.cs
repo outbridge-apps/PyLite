@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Evaluator;
 
@@ -21,10 +20,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         public override ScriptTypeInfo TypeInfo { get { return DDType; } }
 
-        internal override string ReprPrefix(EvalContext ctx)
-        {
-            return "defaultdict(" + (DefaultFactory == null ? "None" : DefaultFactory.Repr(ctx)) + ", ";
-        }
+        // The factory and ", " follow from ReprEngine.BuildDict, which walks the factory as a child.
+        internal override string ReprPrefix(EvalContext ctx) { return "defaultdict("; }
 
         internal override string ReprSuffix(EvalContext ctx) { return ")"; }
 

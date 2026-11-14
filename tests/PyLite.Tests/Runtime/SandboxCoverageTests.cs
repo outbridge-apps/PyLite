@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Tests.Runtime
     {
         private static long Steps(string src)
         {
-            return Ev.Run(src).Ctx.Budget.StepsUsed;
+            return Ev.Run(src, TestEngines.Unhurried).Ctx.Budget.StepsUsed;   // the steps are counted, not timed
         }
 
         // A one-megabyte pass charges at least LinearChunk per LinearChunkSize (4096) of it; before the
@@ -80,7 +80,7 @@ namespace Outbridge.PyLite.Tests.Runtime
         [InlineData("from collections import deque\na = deque([1, [2, deque([3])]])\nr = repr(a) + ' ' + str(a == deque([1, [2, deque([3])]]))\n", "'deque([1, [2, deque([3])]]) True'")]
         public void ALeafThatReentersTheEngineCountsItsDepth(string src, string expected)
         {
-            Assert.Equal(expected, Ev.Run(src).Repr("r"));
+            Assert.Equal(expected, Ev.Run(src, TestEngines.Unhurried).Repr("r"));
         }
 
         [Fact]
@@ -170,23 +170,19 @@ namespace Outbridge.PyLite.Tests.Runtime
                 + "n = 0\n"
                 + "for i in range(20000):\n"
                 + "    n += len(next(csv.reader(['a,b'], DIALECT)))\n";
-            long duck = BestOfThreeMs(Loop.Replace("DIALECT", "D()"));
-            long named = BestOfThreeMs(Loop.Replace("DIALECT", "'excel'"));
-            Assert.True(duck < 8 * System.Math.Max(named, 5), "duck " + duck + " ms vs named " + named + " ms");
+            // Counted in steps, not milliseconds (a raise costs steps): an exception per missing attribute made
+            // the duck loop 5x the steps of the named one built with the same D() each turn.
+            long duck = LoopSteps(Loop.Replace("DIALECT", "D()"));
+            long named = LoopSteps(Loop.Replace("    n += len(next(csv.reader(['a,b'], DIALECT)))\n",
+                "    D()\n    n += len(next(csv.reader(['a,b'], 'excel')))\n"));
+            Assert.True(duck < named * 3 / 2, "duck " + duck + " steps vs named " + named);
         }
 
-        private static long BestOfThreeMs(string src)
+        private static long LoopSteps(string src)
         {
-            long best = long.MaxValue;
-            for (int i = 0; i < 3; i++)
-            {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                Assert.Equal("40000", Ev.Run(src, ResourceLimits.Default.With(deadlineMs: 60_000)).Repr("n"));
-                sw.Stop();
-                if (sw.ElapsedMilliseconds < best)
-                    best = sw.ElapsedMilliseconds;
-            }
-            return best;
+            EvResult r = Ev.Run(src, TestEngines.Unhurried);
+            Assert.Equal("40000", r.Repr("n"));
+            return r.Ctx.Budget.StepsUsed;
         }
     }
 }

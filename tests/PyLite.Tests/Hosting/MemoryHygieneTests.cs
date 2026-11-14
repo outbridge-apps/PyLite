@@ -70,7 +70,7 @@ namespace Outbridge.PyLite.Tests.Hosting
                 Assert.False(weaks[i].IsAlive, "run graph object #" + i + " is still rooted after the run");
         }
 
-        // ---- RFC-004 §3 endurance gate (scaled for the PR suite; the full 1000-run version is nightly):
+        // ---- RFC-004 §3 endurance gate, scaled to 100 runs (no job runs the 1000-run version):
         // mixed runs on ONE engine return managed memory to baseline. ----
 
         [Fact]
@@ -88,7 +88,7 @@ namespace Outbridge.PyLite.Tests.Hosting
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-            // The strict 1000-run "process memory returns to baseline ±20%" is the nightly RFC-004 gate.
+            // What this pins is retention, not totals: no gate runs RFC-004's 1000-run "back to baseline ±20%" check.
             Assert.False(midRun.IsAlive, "the engine retained a completed run's value graph across later runs");
         }
 

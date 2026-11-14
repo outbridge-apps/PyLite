@@ -18,6 +18,7 @@ namespace Outbridge.PyLite.Syntax
         private readonly List<KeyValuePair<NameNode, ScopeInfo>> _names = new List<KeyValuePair<NameNode, ScopeInfo>>();
         private ScopeInfo _module;
         private int _literalCount;
+        private int _siteCount;
 
         public ResolvedProgram Run(ModuleNode module)
         {
@@ -36,7 +37,10 @@ namespace Outbridge.PyLite.Syntax
             var globalSlots = new Dictionary<string, NameBinding>(System.StringComparer.Ordinal);
             foreach (var kv in _names)
             {
-                NameBinding b = Classify(kv.Value, kv.Key.Id);
+                // at the class statement's own level only: a lambda or comprehension in the body is its own scope
+                bool globalFirst = kv.Key.ReadsGlobalFirst
+                    && (kv.Value.Kind == ScopeKind.Function || kv.Value.Kind == ScopeKind.Module);
+                NameBinding b = Classify(globalFirst ? _module : kv.Value, kv.Key.Id);
                 if (b != null && b.Kind == NameKind.Builtin)
                 {
                     // One shared binding per builtin name; its Slot indexes the per-run resolved cache.
@@ -63,7 +67,7 @@ namespace Outbridge.PyLite.Syntax
                 kv.Key.Binding = b;   // baked onto the node — the runtime reads the field, not the dictionary
             }
 
-            return new ResolvedProgram(module, moduleInfo, builtinSlots.Count, globalSlots.Count, _literalCount);
+            return new ResolvedProgram(module, moduleInfo, builtinSlots.Count, globalSlots.Count, _literalCount, _siteCount);
         }
 
         private void Record(NameNode n, ScopeInfo s) { _names.Add(new KeyValuePair<NameNode, ScopeInfo>(n, s)); }
@@ -86,7 +90,21 @@ namespace Outbridge.PyLite.Syntax
 
             protected override void Bind(string name, ScopeInfo s) { s.Bind(name); }
 
-            // str/float/bytes literals get a per-run cache slot: one value per literal per run (P4).
+            // obj.attr read, called or stored: a slot of the run's record cache (a field's index, a method)
+            private void NumberSite(AttributeNode a)
+            {
+                if (a.SiteSlot < 0)
+                    a.SiteSlot = _pass._siteCount++;
+            }
+
+            protected override void Target(ExprNode e, ScopeInfo s)
+            {
+                if (e.NodeKind == NodeKind.Attribute)
+                    NumberSite((AttributeNode)e);
+                base.Target(e, s);
+            }
+
+            // str/float/bytes literals get a per-run cache slot: one value per literal per run.
             protected override void Expr(ExprNode e, ScopeInfo s)
             {
                 if (e.NodeKind == NodeKind.Literal)
@@ -96,12 +114,64 @@ namespace Outbridge.PyLite.Syntax
                         lit.CacheSlot = _pass._literalCount++;
                     return;
                 }
+                if (e.NodeKind == NodeKind.Attribute)
+                    NumberSite((AttributeNode)e);
+                if (e.NodeKind == NodeKind.Tuple)
+                {
+                    // a tuple of literals is one value per run too (x in (1, 2, 3) in a loop built it each time)
+                    TupleNode t = (TupleNode)e;
+                    bool literals = t.CacheSlot < 0 && t.Elts.Count > 0;
+                    for (int i = 0; i < t.Elts.Count && literals; i++)
+                        literals = t.Elts[i].NodeKind == NodeKind.Literal;
+                    if (literals)
+                        t.CacheSlot = _pass._literalCount++;
+                }
+                if (e.NodeKind == NodeKind.NamedExpr && (s.IterExprDepth > 0 || s.Kind == ScopeKind.Comprehension))
+                {
+                    NamedExprNode ne = (NamedExprNode)e;
+                    if (s.IterExprDepth > 0)
+                        throw Err(ne.Src, "assignment expression cannot be used in a comprehension iterable expression");
+                    Expr(ne.Value, s);
+                    BindOutside(ne.Target, s);
+                    return;
+                }
                 base.Expr(e, s);
             }
 
             protected override void BindName(NameNode n, ScopeInfo s)
             {
+                if (s.WalrusTargets != null && s.WalrusTargets.Contains(n.Id))
+                    throw Err(n.Src, "comprehension inner loop cannot rebind assignment expression target '" + n.Id + "'");
                 s.Bind(n.Id);
+                _pass.Record(n, s);
+            }
+
+            // PEP 572: a walrus in a comprehension binds in the nearest enclosing function, or the module.
+            private void BindOutside(NameNode n, ScopeInfo s)
+            {
+                ScopeInfo t = s;
+                bool inClass = false;
+                for (; t.Kind == ScopeKind.Comprehension; t = t.Parent)
+                {
+                    if (t.Bound.Contains(n.Id))
+                        throw Err(n.Src, "assignment expression cannot rebind comprehension iteration variable '" + n.Id + "'");
+                    inClass |= t.InClassBody;
+                }
+                if (inClass)
+                    throw Err(n.Src, "assignment expression within a comprehension cannot be used in a class body");
+                if (s.WalrusTargets == null)
+                    s.WalrusTargets = new HashSet<string>(System.StringComparer.Ordinal);
+                s.WalrusTargets.Add(n.Id);
+                if (t.Kind == ScopeKind.Module || t.Globals.Contains(n.Id))
+                {
+                    s.Globals.Add(n.Id);
+                    _pass._module.Bound.Add(n.Id);
+                }
+                else
+                {
+                    s.Nonlocals.Add(n.Id);
+                    t.Bind(n.Id);
+                }
                 _pass.Record(n, s);
             }
 
@@ -109,6 +179,11 @@ namespace Outbridge.PyLite.Syntax
             {
                 switch (st)
                 {
+                    case AssignNode a when a.InClassBody:
+                        s.ClassBodyDepth++;
+                        base.Stmt(st, s);
+                        s.ClassBodyDepth--;
+                        break;
                     case GlobalNode g:
                         foreach (var n in g.Names)
                         {
@@ -138,15 +213,20 @@ namespace Outbridge.PyLite.Syntax
 
             protected override void Comprehension(ComprehensionNode comp, ScopeInfo parent)
             {
+                parent.IterExprDepth++;
                 base.Comprehension(comp, parent);
+                parent.IterExprDepth--;
                 ScopeInfo cs = ChildScope(parent, ScopeKind.Comprehension, "<comp>", comp, null);
+                cs.InClassBody = parent.ClassBodyDepth > 0;
                 Target(comp.Clauses[0].Target, cs);
                 for (int i = 1; i < comp.Clauses.Count; i++)
                 {
                     var cl = comp.Clauses[i];
                     if (cl.IsFor)
                     {
+                        cs.IterExprDepth++;
                         Expr(cl.Iter, cs);
+                        cs.IterExprDepth--;
                         Target(cl.Target, cs);
                     }
                     else
@@ -282,7 +362,13 @@ namespace Outbridge.PyLite.Syntax
         private void BuildScopeInfos(ScopeInfo s)
         {
             if (s.Node != null)
-                s.Node.ScopeInfo = MakeFunctionInfo(s);   // baked onto the node (see NameNode.Binding)
+            {
+                FunctionInfo info = MakeFunctionInfo(s);
+                s.Node.ScopeInfo = info;   // baked onto the node (see NameNode.Binding)
+                ComprehensionNode comp = s.Node as ComprehensionNode;
+                if (comp != null && comp.Kind != CompKind.Generator && !s.InClassBody && s.Parent.Node != null)
+                    info.InlinedInto = s.Parent.Node.ScopeInfo;
+            }
             foreach (var child in s.Children)
                 BuildScopeInfos(child);
         }

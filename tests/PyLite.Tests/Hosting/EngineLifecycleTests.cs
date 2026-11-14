@@ -10,8 +10,8 @@ using Xunit;
 namespace Outbridge.PyLite.Tests.Hosting
 {
     // What a host sees across runs, through the public Run only: the engine is whole after any failed run,
-    // a cancelled run leaves nothing running, concurrent runs stop at the gate and at the memory ceiling,
-    // and a leaked runner thread holds its slot, opens the breaker, and gives both back when it returns.
+    // a cancelled run leaves nothing running,
+    // and leaked runner threads open the breaker, and close it when they return.
     [Trait("Category", "Sandbox")]
     public class EngineLifecycleTests
     {
@@ -33,14 +33,13 @@ namespace Outbridge.PyLite.Tests.Hosting
             table.Set("fail", (self, args, kw, c) => { throw new InvalidOperationException("host side"); });
             var engine = new ScriptEngine(new EngineOptions
             {
-                MaxConcurrentRuns = 1,
                 DefaultLimits = ResourceLimits.Default.With(maxSteps: 1_000_000),
             });
             for (int i = 0; i < 3; i++)
             {
                 RunResult bad = engine.Run(src, new RunRequest { Builtins = table });
                 Assert.Equal(kind, bad.Error.Kind.ToString());
-                RunResult good = Ok(engine);   // one slot: the failed run must have given it back
+                RunResult good = Ok(engine);
                 Assert.True(good.Succeeded, "run after " + kind + ": " + (good.Error == null ? "" : good.Error.Message));
                 Assert.Equal("45", good.ScalarsOut["total"]);
             }
@@ -63,7 +62,6 @@ namespace Outbridge.PyLite.Tests.Hosting
             });
             var engine = new ScriptEngine(new EngineOptions
             {
-                MaxConcurrentRuns = 1,
                 DefaultLimits = ResourceLimits.Default.With(deadlineMs: 60_000, maxIntBits: 4_000_000),
             });
             using (var cts = new CancellationTokenSource())
@@ -88,84 +86,11 @@ namespace Outbridge.PyLite.Tests.Hosting
             Assert.True(Ok(engine).Succeeded);
         }
 
-        // Twenty callers against four slots: four run, sixteen are refused at once, and the four finish.
-        [Fact]
-        public void ConcurrentRunsStopAtTheGate()
-        {
-            var release = new ManualResetEventSlim(false);
-            var entered = new CountdownEvent(4);
-            var table = HostFunctionTable.CreateDefault();
-            table.Set("block", (self, args, kw, c) =>
-            {
-                entered.Signal();
-                release.Wait();
-                return c.Values.None;
-            });
-            var engine = new ScriptEngine(new EngineOptions { MaxConcurrentRuns = 4 });
-            var results = new ConcurrentBag<RunResult>();
-            var threads = Enumerable.Range(0, 20).Select(_ => new Thread(() =>
-                results.Add(engine.Run("block()\n", new RunRequest { Builtins = table }))) { IsBackground = true }).ToList();
-            try
-            {
-                threads.ForEach(t => t.Start());
-                Assert.True(entered.Wait(30_000));
-                var sw = Stopwatch.StartNew();
-                while (results.Count < 16 && sw.ElapsedMilliseconds < 30_000)
-                    Thread.Sleep(10);
-                Assert.Equal(16, results.Count(r => !r.Succeeded && r.Error.LimitName == "MaxConcurrentRuns"));
-            }
-            finally
-            {
-                release.Set();
-                threads.ForEach(t => t.Join(10_000));
-            }
-            Assert.Equal(4, results.Count(r => r.Succeeded));
-            Assert.True(Ok(engine).Succeeded);
-        }
-
-        // The ceiling is shared: three runs of 8 MB fit under 25 MB, a fourth is refused until one ends.
-        [Fact]
-        public void ConcurrentRunsStopAtTheMemoryCeiling()
-        {
-            var release = new ManualResetEventSlim(false);
-            var entered = new CountdownEvent(3);
-            var table = HostFunctionTable.CreateDefault();
-            table.Set("block", (self, args, kw, c) =>
-            {
-                entered.Signal();
-                release.Wait();
-                return c.Values.None;
-            });
-            var engine = new ScriptEngine(new EngineOptions
-            {
-                GlobalMemoryCeilingBytes = 25L << 20,
-                DefaultLimits = ResourceLimits.Default.With(maxAllocBytes: 8L << 20),
-            });
-            var results = new ConcurrentBag<RunResult>();
-            var threads = Enumerable.Range(0, 3).Select(_ => new Thread(() =>
-                results.Add(engine.Run("block()\n", new RunRequest { Builtins = table }))) { IsBackground = true }).ToList();
-            try
-            {
-                threads.ForEach(t => t.Start());
-                Assert.True(entered.Wait(30_000));
-                RunResult refused = Ok(engine);
-                Assert.Equal(ScriptErrorKind.BudgetExceeded, refused.Error.Kind);
-                Assert.Equal("GlobalMemoryCeiling", refused.Error.LimitName);
-            }
-            finally
-            {
-                release.Set();
-                threads.ForEach(t => t.Join(10_000));
-            }
-            Assert.Equal(3, results.Count(r => r.Succeeded));
-            Assert.True(Ok(engine).Succeeded);
-        }
-
         // A host function that blocks past deadline + grace + 5 s leaks its runner thread: Run returns a
-        // HostError, the engine raises ThreadLeaked, the slot stays held, and at the breaker's threshold every
+        // HostError, the engine raises ThreadLeaked, and at the breaker's threshold every
         // run is refused. When the host function returns, the thread ends and the engine serves runs again.
         [Fact]
-        public void ALeakedThreadHoldsItsSlotUntilItReturns()
+        public void LeakedThreadsStopTheEngineUntilTheyReturn()
         {
             var release = new ManualResetEventSlim(false);
             var events = new ConcurrentQueue<EngineEventKind>();
@@ -177,7 +102,6 @@ namespace Outbridge.PyLite.Tests.Hosting
             });
             var engine = new ScriptEngine(new EngineOptions
             {
-                MaxConcurrentRuns = 3,
                 CircuitBreakerLeakedThreads = 2,
                 DefaultLimits = ResourceLimits.Default.With(deadlineMs: 200),
                 EventSink = e => events.Enqueue(e.Kind),
@@ -196,6 +120,7 @@ namespace Outbridge.PyLite.Tests.Hosting
                 RunResult refused = Ok(engine);
                 Assert.Equal(ScriptErrorKind.HostError, refused.Error.Kind);
                 Assert.Equal("engine unavailable: leaked thread limit reached", refused.Error.Message);
+                Assert.Equal(2, refused.Stats.LeakedThreadsAtStart);   // documented, and always 0 before (Q04)
             }
             finally
             {

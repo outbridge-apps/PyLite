@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Globalization;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
 using Outbridge.PyLite.Syntax;
@@ -21,7 +20,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             // The first for-iterable is evaluated eagerly in the OUTER scope (CPython parity).
             ScriptValue iterable = EvalExpr(n.Clauses[0].Iter, env, ctx);
 
-            // P3: single-for (+ optional single if) list/set/dict comprehensions drain in a flat loop —
+            // single-for (+ optional single if) list/set/dict comprehensions drain in a flat loop —
             // no C# yield state machine per element. The odometer stays for genexp (laziness) and
             // nested clauses.
             if (n.Kind != CompKind.Generator && !ctx.InterpretOnly
@@ -34,7 +33,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
             if (n.Kind == CompKind.Generator)
             {
-                return ctx.Values.Iterator(odo, "generator");   // lazy, single-use
+                return ctx.Values.EngineIterator(odo, "generator");   // lazy, single-use
             }
             var sink = new CompSink(n.Kind == CompKind.List ? ctx.Values.List(4) : null,
                 n.Kind == CompKind.Set ? ctx.Values.Set(4) : null, n.Kind == CompKind.Dict ? ctx.Values.Dict(4) : null);
@@ -82,7 +81,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
-        // PEP 479: a StopIteration escaping a comprehension or generator body is a RuntimeError.
+        // PEP 479: a StopIteration escaping a generator body is a RuntimeError; list, set and dict
+        // comprehensions run inline (PEP 709) and let it through.
         internal static bool IsStopIteration(ScriptException se)
         {
             return se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration);
@@ -93,9 +93,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             return Raise.RuntimeError(ctx, "generator raised StopIteration");
         }
 
-        // The flat drain (P3). One try implements PEP 479 for the whole loop (the odometer converts a
-        // StopIteration escaping the body per MoveNext); the extra Step per produced element + one at
-        // exhaustion mirrors the odometer's own MoveNext charges, so budget accounting is unchanged.
+        // The flat drain. The extra Step per produced element + one at exhaustion mirrors the odometer's own MoveNext charges, so budget accounting is unchanged.
         private ScriptValue EvalComprehensionFlat(ComprehensionNode n, Environment scope,
             ScriptValue iterable, EvalContext ctx)
         {
@@ -153,14 +151,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 n.Kind == CompKind.Set ? ctx.Values.Set(hashCap) : null,
                 n.Kind == CompKind.Dict ? ctx.Values.Dict(hashCap) : null);
 
-            // T2.1: the body re-evaluates per element — use the closure-compiled form when the
+            // the body re-evaluates per element — use the closure-compiled form when the
             // expressions are in the compiler's whitelist (null => tree-walk, identical semantics).
             CompiledEval elemFn = GetCompiledExpr(ref n.CompiledElement, n.Element, ctx);
             CompiledEval valFn = n.ValueElement != null
                 ? GetCompiledExpr(ref n.CompiledValueElement, n.ValueElement, ctx) : null;
             CompiledEval condFn = cond != null ? GetCompiledExpr(ref cond.CompiledCond, cond.Cond, ctx) : null;
 
-            // T2.3 superinstruction fusion: a pure-int body/condition over the loop variable runs in
+            // Superinstruction fusion: a pure-int body/condition over the loop variable runs in
             // C# longs; any per-element edge (overflow, zero divisor) re-runs that element generally.
             // The range drain feeds the raw counter; the iterable drain unboxes machine-int items per
             // element (mixed sources fall back item by item).
@@ -181,8 +179,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
 
             IScriptIterator firstIter = PyOps.GetIterator(iterable, ctx);
-            try
-            {
                 ScriptValue item;
                 while (firstIter.MoveNext(ctx, out item))
                 {
@@ -200,7 +196,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                         && item.Kind == ValueKind.Int)
                     {
                         IntValue iv = (IntValue)item;
-                        if (iv.IsSmall)
+                        if (iv.IsSmall && EnumClassValue.MemberOf(item, ctx) == null)   // an IntEnum member keeps its identity: [x for x in C]
                         {
                             x = iv.Small;
                             fast = true;
@@ -233,11 +229,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                         sink.Dict.SetItem(k, v, ctx);   // last-wins
                     }
                 }
-            }
-            catch (ScriptException se) when (IsStopIteration(se))
-            {
-                throw StopIterationEscaped(ctx);
-            }
             ctx.Budget.Step();
             return sink.Result;
         }
@@ -284,8 +275,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             bool up = step > 0;
             bool interpreted = fusedElem == null || (cond != null && fusedCond == null)
                 || (sink.Dict != null && fusedVal == null);
-            try
-            {
                 while (true)
                 {
                     ctx.Budget.Step();   // mirrors the iterator path's per-MoveNext charge incl the final test
@@ -352,11 +341,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                         sink.Dict.SetItem(k, v, ctx);   // last-wins
                     }
                 }
-            }
-            catch (ScriptException se) when (IsStopIteration(se))
-            {
-                throw StopIterationEscaped(ctx);
-            }
             ctx.Budget.Step();
             return sink.Result;
         }
@@ -387,6 +371,25 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private ScriptValue EvalTuple(TupleNode n, Environment env, EvalContext ctx)
         {
+            int slot = n.CacheSlot;
+            if (slot >= 0 && slot < _program.LiteralCount)
+            {
+                if (_literalNodes == null)
+                {
+                    _literalNodes = new ExprNode[_program.LiteralCount];
+                    _literalValues = new ScriptValue[_program.LiteralCount];
+                }
+                if (ReferenceEquals(_literalNodes[slot], n))
+                {
+                    // the elements are not walked again: count them as the walk would, so the steps stay the same
+                    int before = ctx.NodeCounter;
+                    ctx.NodeCounter = before + n.Elts.Count;
+                    int batches = (ctx.NodeCounter >> 6) - (before >> 6);
+                    if (batches > 0)
+                        ctx.Budget.Step(batches * BudgetCost.NodeBatch);
+                    return _literalValues[slot];
+                }
+            }
             if (!HasStar(n.Elts))
             {
                 var arr = new ScriptValue[n.Elts.Count];
@@ -394,7 +397,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 {
                     arr[i] = EvalExpr(n.Elts[i], env, ctx);
                 }
-                return ctx.Values.Tuple(arr);
+                ScriptValue t = ctx.Values.Tuple(arr);
+                if (slot >= 0 && slot < _program.LiteralCount)
+                {
+                    _literalValues[slot] = t;   // literals only: nothing in it can change
+                    _literalNodes[slot] = n;
+                }
+                return t;
             }
             // PEP 448: unpack into a temp list, then copy it into the tuple's array.
             ListValue tmp = ctx.Values.List(n.Elts.Count);
@@ -435,10 +444,10 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 {
                     // PEP 448 '**mapping': merge (last wins). The operand must be a mapping.
                     ScriptValue m = EvalExpr(n.Values[i], env, ctx);
-                    DictValue src = m as DictValue;
-                    if (src == null)
+                    ScriptValue keysFn;
+                    if (!(m is DictValue) && !(m is ChainMapValue) && !(m is RecordInstanceValue && PyOps.TryGetAttr(m, "keys", ctx, out keysFn)))
                         throw Raise.TypeError(ctx, "'" + m.PyTypeName + "' object is not a mapping");
-                    DictMethods.Merge(ctx, dict, src);
+                    DictMethods.Merge(ctx, dict, m);
                     continue;
                 }
                 ScriptValue k = EvalExpr(n.Keys[i], env, ctx);
@@ -473,7 +482,40 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private ScriptValue EvalAttribute(AttributeNode n, Environment env, EvalContext ctx)
         {
-            return AttrOnValue(EvalExpr(n.Value, env, ctx), n.Attr, ctx);
+            ScriptValue obj = EvalExpr(n.Value, env, ctx);
+            if (obj.Kind == ValueKind.RecordInstance)
+            {
+                // a set field answers first (RecordInstanceValue.TryGetAttribute's order); its index is kept per site
+                RecordInstanceValue ri = (RecordInstanceValue)obj;
+                int idx = FieldIndex(n, ri);
+                ScriptValue v = idx >= 0 ? ri.Slots[idx] : null;
+                return v ?? ri.GetAttribute(n.Attr, ctx);
+            }
+            return AttrOnValue(obj, n.Attr, ctx);
+        }
+
+        // The index of n's field in ri's class, or -1 when the class has no such field; kept per site and class.
+        private int FieldIndex(AttributeNode n, RecordInstanceValue ri)
+        {
+            Dictionary<string, int> si = ri.Class.SlotIndex;
+            FieldSite f = SiteOf(n) as FieldSite;
+            if (f != null && ReferenceEquals(f.Node, n) && ReferenceEquals(f.SlotIndex, si))
+                return f.Index;
+            int idx;
+            if (!si.TryGetValue(n.Attr, out idx))
+                return -1;
+            SetSite(n, new FieldSite(n, si, idx));
+            return idx;
+        }
+
+        // self.x = v on a record: the field's slot of a class that is not frozen (SetAttribute's checks otherwise)
+        private bool TryStoreField(AttributeNode n, RecordInstanceValue ri, ScriptValue value)
+        {
+            int idx = FieldIndex(n, ri);
+            if (idx < 0 || ri.Class.Frozen)
+                return false;
+            ri.Slots[idx] = value;
+            return true;
         }
 
         // Attribute access on an already-evaluated object (shared with the fused call path, which must
@@ -501,7 +543,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ScriptValue conv;
                 if (part.Conversion == 'a')
                 {
-                    conv = ctx.Values.Str(ctx.Format.AsciiEscape(v.Repr(ctx)));
+                    conv = ctx.Values.Str(ctx.Format.AsciiEscape(ctx, v.Repr(ctx)));
                 }
                 else if (part.Conversion == 'r')
                 {
@@ -518,7 +560,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 string spec = part.FormatSpec == null ? "" : ResolveSpec(part.FormatSpec, env, ctx);
                 if (ctx.Format == null)
                     throw Raise.NotImplemented(ctx, "formatting is not available in this context");
-                string rendered = ((StrValue)ctx.Format.FormatValue(ctx, conv, spec)).Value;
+                string rendered = spec.Length == 0 ? conv.Str(ctx)   // format(v, "") is str(v): no StrValue in between
+                    : ((StrValue)ctx.Format.FormatValue(ctx, conv, spec)).Value;
                 ctx.Values.ChargeBuilderGrow(sb, rendered.Length);
                 sb.Append(rendered);
             }
@@ -537,18 +580,16 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private string ResolveSpec(IReadOnlyList<FStringPart> specParts, Environment env, EvalContext ctx)
         {
+            if (specParts.Count == 1 && specParts[0].IsLiteral)
+                return specParts[0].Literal;   // f"{x:.2f}": nothing to build
             var sb = ctx.Values.RentBuilder(16);
             for (int i = 0; i < specParts.Count; i++)
             {
                 FStringPart p = specParts[i];
-                if (p.IsLiteral)
-                {
-                    sb.Append(p.Literal);
-                }
-                else
-                {
-                    sb.Append(EvalExpr(p.Expr, env, ctx).Str(ctx));
-                }
+                string text = p.IsLiteral ? p.Literal : EvalExpr(p.Expr, env, ctx).Str(ctx);
+                ctx.Values.ChargeBuilderGrow(sb, text.Length);
+                ctx.Values.PreCharge(2L * text.Length);   // the ToString below holds a second copy
+                sb.Append(text);
             }
             return sb.ToString();
         }

@@ -23,30 +23,10 @@ namespace Outbridge.PyLite.Modules.Support
         }
 
         // The shortest round-tripping significant digits of a finite non-zero double, and the decimal exponent
-        // of the first one. A normal double needs three conversions at most (P11): a k <= 15 digit decimal that
-        // round-trips is the 15-digit rounding padded with zeros (half an ulp is far below the 15-digit
-        // spacing), so E14 settles all of those; otherwise the 16-digit rounding, else 17 digits, which always
-        // round-trip. A subnormal's ulp is not small against its value, so it searches every precision.
+        // of the first one (ReprDigits: CPython's repr digits).
         internal static string ShortestDigits(double d, out bool neg, out int decExp)
         {
-            long bits = BitConverter.DoubleToInt64Bits(d);
-            string sci = null;
-            int first = Math.Abs(d) < 2.2250738585072014e-308 ? 1 : 15;
-            for (int prec = first; prec <= 16 && sci == null; prec++)
-            {
-                string cand = d.ToString("E" + (prec - 1).ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
-                double parsed;
-                if (double.TryParse(cand, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)
-                    && BitConverter.DoubleToInt64Bits(parsed) == bits)
-                    sci = cand;
-            }
-            if (sci == null)
-                sci = d.ToString("E16", CultureInfo.InvariantCulture);
-            neg = sci[0] == '-';
-            int eIdx = sci.IndexOf('E');
-            decExp = int.Parse(sci.Substring(eIdx + 1), CultureInfo.InvariantCulture);
-            string digits = sci.Substring(neg ? 1 : 0, eIdx - (neg ? 1 : 0)).Replace(".", "").TrimEnd('0');
-            return digits.Length == 0 ? "0" : digits;
+            return ReprDigits.Shortest(d, out neg, out decExp);
         }
 
         public static string Repr(double d)
@@ -148,17 +128,6 @@ namespace Outbridge.PyLite.Modules.Support
             string digits = num.ToString(CultureInfo.InvariantCulture);
             decExp = digits.Length - den10;
             return digits;
-        }
-
-        // _PyLong_DivmodNear port: round a/b to the nearest integer, ties to even (a>=0, b>0).
-        internal static BigInteger DivmodNearHalfEven(BigInteger a, BigInteger b)
-        {
-            BigInteger r;
-            BigInteger q = BigInteger.DivRem(a, b, out r);
-            BigInteger twice = r * 2;
-            if (twice > b || (twice == b && !q.IsEven))
-                q += 1;
-            return q;
         }
 
         // Round a significant-digit string to m digits, ties to even; a carry bumps decExp.
@@ -329,7 +298,7 @@ namespace Outbridge.PyLite.Modules.Support
             BigInteger scaled = new BigInteger(mant) * Pow5(ndigits);
             BigInteger q = ndigits >= k
                 ? scaled << (ndigits - k)
-                : DivmodNearHalfEven(scaled, BigInteger.One << (k - ndigits));
+                : BigIntMath.DivNearHalfEven(scaled, BigInteger.One << (k - ndigits));
             if (q.IsZero)
                 return neg ? -0.0 : 0.0;
             double r = (double)q / p;
@@ -359,7 +328,7 @@ namespace Outbridge.PyLite.Modules.Support
                     return v;
                 BigInteger n = new BigInteger(mant) << e2;
                 BigInteger pow = Pow10(-ndigits);
-                BigInteger r = DivmodNearHalfEven(n, pow) * pow;
+                BigInteger r = BigIntMath.DivNearHalfEven(n, pow) * pow;
                 str = (neg ? "-" : "") + r.ToString(CultureInfo.InvariantCulture);
             }
             else
@@ -372,28 +341,21 @@ namespace Outbridge.PyLite.Modules.Support
                 BigInteger d = new BigInteger(mant) * Pow5(k);
                 if (ndigits >= 0)
                 {
-                    BigInteger r = DivmodNearHalfEven(d, Pow10(k - ndigits));
+                    BigInteger r = BigIntMath.DivNearHalfEven(d, Pow10(k - ndigits));
                     str = (neg ? "-" : "") + BuildFixed(r, ndigits);
                 }
                 else
                 {
-                    BigInteger r = DivmodNearHalfEven(d, Pow10(k - ndigits)) * Pow10(-ndigits);
+                    BigInteger r = BigIntMath.DivNearHalfEven(d, Pow10(k - ndigits)) * Pow10(-ndigits);
                     str = (neg ? "-" : "") + r.ToString(CultureInfo.InvariantCulture);
                 }
             }
             double result;
-            try
-            {
-                result = double.Parse(str, NumberStyles.Float, CultureInfo.InvariantCulture);
-            }
-            catch (OverflowException)
-            {
-                throw Raise.Overflow(ctx, "rounded value too large to represent");
-            }
+            NearestDouble.TryParse(str, out result);   // str is digits we built, always the grammar
             if (double.IsInfinity(result))
                 throw Raise.Overflow(ctx, "rounded value too large to represent");
             if (result == 0.0 && neg)
-                return -0.0;   // net472 double.Parse drops the sign of "-0.0"
+                return -0.0;
             return result;
         }
 
@@ -433,12 +395,21 @@ namespace Outbridge.PyLite.Modules.Support
             BigInteger num;
             int den10;
             ExactMagnitude(ctx, mant, e2, out num, out den10);
-            BigInteger r;
+            string body;
             if (precision >= den10)
-                r = num * Pow10(precision - den10);
+            {
+                // Every digit past den10 is zero: pad them instead of scaling by 10^(precision - den10).
+                body = BuildFixed(num, den10);
+                if (precision > den10)
+                {
+                    var sb = new StringBuilder(body, body.Length + precision - den10 + 1);
+                    if (den10 == 0)
+                        sb.Append('.');
+                    body = sb.Append('0', precision - den10).ToString();
+                }
+            }
             else
-                r = DivmodNearHalfEven(num, Pow10(den10 - precision));
-            string body = BuildFixed(r, precision);
+                body = BuildFixed(BigIntMath.DivNearHalfEven(num, Pow10(den10 - precision)), precision);
             if (precision == 0 && altForm)
                 body += ".";
             return (neg ? "-" : "") + body;
@@ -490,7 +461,9 @@ namespace Outbridge.PyLite.Modules.Support
         }
 
         // 'g'/'G': general — fixed or scientific by exponent, trailing zeros trimmed unless altForm/keep.
-        public static string FormatGeneral(EvalContext ctx, double v, int precision, bool upperE, bool altForm, bool keepTrailingZeros)
+        // addDotZero: format() with a precision and no type: repr's look, a float always shows it is one (CPython's
+        // Py_DTSF_ADD_DOT_0), which also moves the switch to an exponent one digit earlier.
+        public static string FormatGeneral(EvalContext ctx, double v, int precision, bool upperE, bool altForm, bool keepTrailingZeros, bool addDotZero = false)
         {
             if (double.IsNaN(v))
                 return "nan";
@@ -511,18 +484,22 @@ namespace Outbridge.PyLite.Modules.Support
                 Decompose(v, out sign, out mant, out e2);
                 int decExp;
                 string digits = ExactDigits(ctx, mant, e2, out decExp);
-                RoundSignificant(digits, p, ref decExp);   // updates decExp on carry
+                if (digits.Length > p)
+                    RoundSignificant(digits, p, ref decExp);   // updates decExp on carry; shorter needs no rounding (it padded p zeros)
                 exp = decExp - 1;
             }
 
             string body;
-            if (-4 <= exp && exp < p)
+            bool fixedForm = -4 <= exp && exp < (addDotZero ? p - 1 : p);
+            if (fixedForm)
                 body = FormatFixed(ctx, v, p - 1 - exp, altForm);
             else
                 body = FormatScientific(ctx, v, p - 1, upperE, altForm);
 
             if (!altForm && !keepTrailingZeros)
                 body = StripTrailingZeros(body);
+            if (addDotZero && fixedForm && body.IndexOf('.') < 0)
+                body += ".0";
             return body;
         }
 

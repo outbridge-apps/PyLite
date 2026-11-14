@@ -72,7 +72,9 @@ namespace Outbridge.PyLite.Modules
             NormalizationForm form = Form(ctx, args[0]);
             string s = Text(ctx, args[1], "normalize", 2);
             ctx.Budget.Step();
-            string r = SafeNormalize(ctx, s, form);
+            string r = SafeNormalize(ctx, s, form, ctx.Limits.MaxStrChars);
+            if (r == null)
+                ctx.Values.CheckStrLen((long)ctx.Limits.MaxStrChars + 1);
             return ReferenceEquals(r, s) ? args[1] : ctx.Values.Str(r);
         }
 
@@ -82,90 +84,24 @@ namespace Outbridge.PyLite.Modules
             NormalizationForm form = Form(ctx, args[0]);
             string s = Text(ctx, args[1], "is_normalized", 2);
             ctx.Budget.Step();
-            return ctx.Values.Bool(SafeNormalize(ctx, s, form) == s);
+            return ctx.Values.Bool(SafeNormalize(ctx, s, form, s.Length) == s);   // a form longer than s is not s
         }
 
-        // The BCL refuses lone surrogates; CPython passes them through. Normalize the well-formed runs
-        // between them and keep the surrogates as they are.
-        private static string SafeNormalize(EvalContext ctx, string s, NormalizationForm form)
+        // Unicode 16.0.0 normalization (PyUnicodeNormalize), linear in the text; the result is checked against
+        // limit as it grows (NFKD is up to 18 chars per char): null when it is longer.
+        private static string SafeNormalize(EvalContext ctx, string s, NormalizationForm form, long limit)
         {
-            int bad = FirstLoneSurrogate(s, 0);
-            if (bad < 0)
-                return NormalizeRun(ctx, s, form);
-            var sb = new StringBuilder(s.Length);
-            int start = 0;
-            while (bad >= 0)
-            {
-                if (bad > start)
-                    sb.Append(NormalizeRun(ctx, s.Substring(start, bad - start), form));
-                sb.Append(s[bad]);
-                start = bad + 1;
-                bad = FirstLoneSurrogate(s, start);
-            }
-            if (start < s.Length)
-                sb.Append(NormalizeRun(ctx, s.Substring(start), form));
-            return sb.ToString();
+            ctx.Budget.ChargeLinear(s.Length);
+            ctx.Budget.CheckDeadlineNow();
+            bool compat = form == NormalizationForm.FormKC || form == NormalizationForm.FormKD;
+            bool compose = form == NormalizationForm.FormC || form == NormalizationForm.FormKC;
+            return PyUnicodeNormalize.Normalize(s, compat, compose, limit, ctx);
         }
 
-        // One Normalize() call is quadratic in the length of ITS input on Windows: 256K expanding
-        // characters take 11s, and a reordered combining run is worse. Normalizing in chunks cut at
-        // positions where a split cannot change the result keeps the cost linear and interruptible.
-        private const int ChunkChars = 4096;
-
-        private static string NormalizeRun(EvalContext ctx, string s, NormalizationForm form)
+        // NFKC of a name the lexer verified; compilation has no run to charge
+        internal static string NfkcIdentifier(string s)
         {
-            if (s.Length <= ChunkChars)
-                return s.IsNormalized(form) ? s : s.Normalize(form);
-            var sb = new StringBuilder(s.Length);
-            int start = 0;
-            while (start < s.Length)
-            {
-                ctx.Budget.CheckDeadlineNow();
-                int end = ChunkEnd(ctx, s, start);
-                string part = s.Substring(start, end - start);
-                sb.Append(part.IsNormalized(form) ? part : part.Normalize(form));
-                start = end;
-            }
-            return sb.ToString();
-        }
-
-        // A split is invisible before a starter that can never be the second half of a composition:
-        // nothing reorders across it and no composition spans it. Scan forward from the target size.
-        private static int ChunkEnd(EvalContext ctx, string s, int start)
-        {
-            int from = start + ChunkChars;
-            if (from >= s.Length)
-                return s.Length;
-            int limit = from + ChunkChars < s.Length ? from + ChunkChars : s.Length;
-            for (int i = from; i < limit; i++)
-            {
-                if (char.IsLowSurrogate(s[i]))
-                    continue;
-                int cp = s[i];
-                if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
-                    cp = char.ConvertToUtf32(s[i], s[i + 1]);
-                if (PyUnicodeProps.Combining(cp) == 0 && !PyUnicodeProps.IsCompositionSecond(cp))
-                    return i;
-            }
-            if (limit == s.Length)
-                return s.Length;   // the tail is short enough to normalize in one call
-            throw Raise.ValueError(ctx, "normalize(): a sequence of more than " + (ChunkChars * 2)
-                + " characters with no safe break point cannot be normalized");
-        }
-
-        private static int FirstLoneSurrogate(string s, int from)
-        {
-            for (int i = from; i < s.Length; i++)
-            {
-                if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
-                {
-                    i++;
-                    continue;
-                }
-                if (char.IsSurrogate(s[i]))
-                    return i;
-            }
-            return -1;
+            return PyUnicodeNormalize.Normalize(s, true, true);
         }
 
         // The single-character argument; a surrogate pair counts as one character, a lone surrogate too.

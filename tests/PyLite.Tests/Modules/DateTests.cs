@@ -25,7 +25,8 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("repr(date.fromordinal(730920))", "'datetime.date(2002, 3, 11)'")]
         [InlineData("date(2002,3,11).weekday()", "0")]
         [InlineData("date(2002,3,11).isoweekday()", "1")]
-        [InlineData("date(2002,3,11).isocalendar()", "(2002, 11, 1)")]
+        [InlineData("date(2002,3,11).isocalendar()", "datetime.IsoCalendarDate(year=2002, week=11, weekday=1)")]
+        [InlineData("tuple(date(2002,3,11).isocalendar())", "(2002, 11, 1)")]
         [InlineData("str(date(2, 3, 4))", "'0002-03-04'")]
         [InlineData("repr(date(2002, 3, 11))", "'datetime.date(2002, 3, 11)'")]
         [InlineData("date(2002,6,6).ctime()", "'Thu Jun  6 00:00:00 2002'")]
@@ -65,7 +66,7 @@ namespace Outbridge.PyLite.Tests.Modules
         public void ValidationOrderYearFirst()
         {
             string src = Prelude + "msg = ''\ntry:\n    date(0, 0, 0)\nexcept ValueError as e:\n    msg = str(e)\n";
-            Assert.Equal("'year is out of range'", Ev.Run(src).Repr("msg"));
+            Assert.Equal("'year must be in 1..9999, not 0'", Ev.Run(src).Repr("msg"));
         }
 
         [Fact]

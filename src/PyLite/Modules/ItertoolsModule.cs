@@ -18,26 +18,26 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["count"] = BuiltinFunctionValue.Make("count", Count);
-            m["repeat"] = BuiltinFunctionValue.Make("repeat", Repeat);
-            m["cycle"] = BuiltinFunctionValue.Make("cycle", Cycle);
-            m["islice"] = BuiltinFunctionValue.Make("islice", Islice);
-            m["accumulate"] = BuiltinFunctionValue.Make("accumulate", Accumulate);
+            m["count"] = BuiltinFunctionValue.Make("count", Args.KnownKeywords("count", 2, Count, "start", "step"));
+            m["repeat"] = BuiltinFunctionValue.Make("repeat", Args.BoundKeywords("repeat", 1, Repeat, "object", "times"));
+            m["cycle"] = BuiltinFunctionValue.Make("cycle", Args.NoKeywords("cycle", Cycle));
+            m["islice"] = BuiltinFunctionValue.Make("islice", Args.NoKeywords("islice", Islice));
+            m["accumulate"] = BuiltinFunctionValue.Make("accumulate", Args.LeadKeywords("accumulate", Accumulate, 1, "iterable", "func", "initial"));
             m["chain"] = MakeChain(ctx);
-            m["compress"] = BuiltinFunctionValue.Make("compress", Compress);
-            m["dropwhile"] = BuiltinFunctionValue.Make("dropwhile", DropWhile);
-            m["takewhile"] = BuiltinFunctionValue.Make("takewhile", TakeWhile);
-            m["filterfalse"] = BuiltinFunctionValue.Make("filterfalse", FilterFalse);
-            m["groupby"] = BuiltinFunctionValue.Make("groupby", GroupBy);
-            m["starmap"] = BuiltinFunctionValue.Make("starmap", Starmap);
-            m["zip_longest"] = BuiltinFunctionValue.Make("zip_longest", ZipLongest);
+            m["compress"] = BuiltinFunctionValue.Make("compress", Args.BoundKeywords("compress", 2, Compress, "data", "selectors"));
+            m["dropwhile"] = BuiltinFunctionValue.Make("dropwhile", Args.NoKeywords("dropwhile", DropWhile));
+            m["takewhile"] = BuiltinFunctionValue.Make("takewhile", Args.NoKeywords("takewhile", TakeWhile));
+            m["filterfalse"] = BuiltinFunctionValue.Make("filterfalse", Args.NoKeywords("filterfalse", FilterFalse));
+            m["groupby"] = BuiltinFunctionValue.Make("groupby", Args.LeadKeywords("groupby", GroupBy, 1, "iterable", "key"));
+            m["starmap"] = BuiltinFunctionValue.Make("starmap", Args.NoKeywords("starmap", Starmap));
+            m["zip_longest"] = BuiltinFunctionValue.Make("zip_longest", Args.KnownKeywords("zip_longest", ZipLongest, "fillvalue"));
             m["tee"] = BuiltinFunctionValue.Make("tee", Tee);
-            m["product"] = BuiltinFunctionValue.Make("product", Product);
-            m["permutations"] = BuiltinFunctionValue.Make("permutations", Permutations);
-            m["combinations"] = BuiltinFunctionValue.Make("combinations", Combinations);
-            m["combinations_with_replacement"] = BuiltinFunctionValue.Make("combinations_with_replacement", CombinationsWithReplacement);
-            m["pairwise"] = BuiltinFunctionValue.Make("pairwise", Pairwise);
-            m["batched"] = BuiltinFunctionValue.Make("batched", Batched);
+            m["product"] = BuiltinFunctionValue.Make("product", Args.KnownKeywords("product", Product, "repeat"));
+            m["permutations"] = BuiltinFunctionValue.Make("permutations", Args.LeadKeywords("permutations", Permutations, 1, "iterable", "r"));
+            m["combinations"] = BuiltinFunctionValue.Make("combinations", Args.LeadKeywords("combinations", Combinations, 1, "iterable", "r"));
+            m["combinations_with_replacement"] = BuiltinFunctionValue.Make("combinations_with_replacement", Args.LeadKeywords("combinations_with_replacement", CombinationsWithReplacement, 1, "iterable", "r"));
+            m["pairwise"] = BuiltinFunctionValue.Make("pairwise", Args.NoKeywords("pairwise", Pairwise));
+            m["batched"] = BuiltinFunctionValue.Make("batched", Args.LeadKeywords("batched", Batched, 2, "iterable", "n", "strict"));
             return ctx.Values.Module("itertools", m);
         }
 
@@ -69,7 +69,7 @@ namespace Outbridge.PyLite.Modules
             ScriptValue step = args.Length >= 2 ? args[1] : ctx.Values.Int(1);
             if (!IsNumber(start) || !IsNumber(step))
                 throw Raise.TypeError(ctx, "a number is required");
-            return ctx.Values.Iterator(new CountIterator(start, step, IsIntOne(step)), "itertools.count");
+            return ctx.Values.EngineIterator(new CountIterator(start, step, IsIntOne(step)), "itertools.count");
         }
 
         // ---- repeat(obj, times=None) ----
@@ -83,7 +83,7 @@ namespace Outbridge.PyLite.Modules
             if (kw.TryGet("times", out tkw))
                 timesVal = tkw;
             if (timesVal == null)
-                return ctx.Values.Iterator(new RepeatIterator(obj), "itertools.repeat");
+                return ctx.Values.EngineIterator(new RepeatIterator(obj), "itertools.repeat");
             if (timesVal.Kind == ValueKind.Float)
                 throw Raise.TypeError(ctx, "integer argument expected, got float");
             BigInteger times;
@@ -96,7 +96,7 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(ctx, "'" + timesVal.PyTypeName + "' object cannot be interpreted as an integer");
             if (times < 0)
                 times = 0;
-            return ctx.Values.Iterator(new RepeatIterator(obj, times), "itertools.repeat");
+            return ctx.Values.EngineIterator(new RepeatIterator(obj, times), "itertools.repeat");
         }
 
         // ---- cycle(iterable) ----
@@ -104,7 +104,7 @@ namespace Outbridge.PyLite.Modules
         {
             Args.Exactly(ctx, args, "cycle", 1);
             IScriptIterator src = IterArg(ctx, args[0]);
-            return ctx.Values.Iterator(new CycleIterator(src), "itertools.cycle");
+            return ctx.Values.EngineIterator(new CycleIterator(src), "itertools.cycle");
         }
 
         // ---- islice(iterable, stop) | islice(iterable, start, stop[, step]) ----
@@ -115,12 +115,12 @@ namespace Outbridge.PyLite.Modules
             if (args.Length == 2)
             {
                 BigInteger? stop1 = SliceIndex(ctx, args[1]);
-                return ctx.Values.Iterator(new ISliceIterator(src, 0, stop1, 1), "itertools.islice");
+                return ctx.Values.EngineIterator(new ISliceIterator(src, 0, stop1, 1), "itertools.islice");
             }
             BigInteger start = SliceIndex(ctx, args[1]) ?? 0;
             BigInteger? stop = SliceIndex(ctx, args[2]);
             BigInteger step = args.Length >= 4 ? SliceStep(ctx, args[3]) : 1;
-            return ctx.Values.Iterator(new ISliceIterator(src, start, stop, step), "itertools.islice");
+            return ctx.Values.EngineIterator(new ISliceIterator(src, start, stop, step), "itertools.islice");
         }
 
         private static BigInteger? SliceIndex(EvalContext ctx, ScriptValue v)
@@ -179,14 +179,14 @@ namespace Outbridge.PyLite.Modules
             return true;
         }
 
-        public void AppendRepr(BudgetStringBuilder sb, EvalContext ctx)
+        public void AppendRepr(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
             sb.Append("count(");
-            sb.Append(_cur.Repr(ctx));
+            sb.Append(_cur.Repr(ctx, depth + 1));
             if (!_stepIsOne)
             {
                 sb.Append(", ");
-                sb.Append(_step.Repr(ctx));
+                sb.Append(_step.Repr(ctx, depth + 1));
             }
             sb.Append(")");
         }
@@ -225,14 +225,14 @@ namespace Outbridge.PyLite.Modules
             return true;
         }
 
-        public void AppendRepr(BudgetStringBuilder sb, EvalContext ctx)
+        public void AppendRepr(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
             sb.Append("repeat(");
-            sb.Append(_obj.Repr(ctx));
+            sb.Append(_obj.Repr(ctx, depth + 1));
             if (!_infinite)
             {
                 sb.Append(", ");
-                sb.Append(_remaining.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(NumericOps.ToDecimalString(_remaining, ctx));   // charged, long ones in BigKernel
             }
             sb.Append(")");
         }
@@ -281,6 +281,7 @@ namespace Outbridge.PyLite.Modules
         private readonly BigInteger _step;
         private BigInteger _idx;        // count of source elements already pulled
         private BigInteger _nextEmit;   // source index of the next element to emit
+        private bool _done;             // CPython's islice drops its source at its end: a source that resumes is not read
 
         internal ISliceIterator(IScriptIterator src, BigInteger start, BigInteger? stop, BigInteger step)
         {
@@ -293,6 +294,12 @@ namespace Outbridge.PyLite.Modules
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
+            if (_done)
+            {
+                value = null;
+                return false;
+            }
+            _done = true;   // stays so at every end, and if the source raises: CPython's islice drops its source then
             while (_idx < _nextEmit)
             {
                 ScriptValue skip;
@@ -313,6 +320,7 @@ namespace Outbridge.PyLite.Modules
                 value = null;
                 return false;
             }
+            _done = false;
             _idx += 1;
             _nextEmit = _idx + (_step - 1);
             return true;

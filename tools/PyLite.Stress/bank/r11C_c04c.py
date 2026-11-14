@@ -1,0 +1,33 @@
+from decimal import Decimal as D
+import struct
+def t(name, f):
+    try:
+        print(name + '=' + repr(f())[:100])
+    except Exception as e:
+        print(name + '!' + type(e).__name__ + ':' + str(e)[:70])
+t('a', lambda: format(D('1234.5678'), ',.2f'))
+t('b', lambda: format(D('-0'), '.2e'))
+t('c', lambda: format(D('NaN'), '>5'))
+t('d', lambda: format(D('1e100000'), '.3'))
+t('e', lambda: D((0, (1, 2), -1)))
+t('f', lambda: D((1, (), 'F')))
+t('g', lambda: D((1, (0,), 'n')))
+t('h', lambda: D((0, (), 0)))
+t('i', lambda: D((0, [1, 2], -1)))
+t('j', lambda: D((True, (1,), 0)))
+t('k', lambda: D((2, (1,), 0)))
+t('l', lambda: D((0, (1,), 2 ** 63)))
+t('m', lambda: D((0, (1,), 999999999999999999)))
+t('n', lambda: D((0, (1,), -999999999999999999)))
+t('o', lambda: D((0, (1,), 1.5)))
+t('p', lambda: D((0, (1,) * 100000, 0)).adjusted())
+t('q', lambda: D((1, (1, 2), 'N')))
+t('s1', lambda: struct.pack('f', 1e300))
+t('s2', lambda: struct.pack('f', 3.4028235e38))
+t('s3', lambda: struct.pack('f', 3.40282357e38))
+t('s4', lambda: struct.pack('<f', float('inf')))
+t('s5', lambda: struct.pack('<f', -1e39))
+t('s6', lambda: struct.unpack('<e', b'\x00\x7c'))
+t('s7', lambda: struct.pack('<e', 65519.99))
+t('s8', lambda: struct.pack('<e', float('nan')))
+t('s9', lambda: struct.pack('<e', 5.96e-8) + struct.pack('<e', 2.98e-8) + struct.pack('<e', 2.9802322387695312e-08) + struct.pack('<e', 2.9802322387695313e-08))

@@ -21,7 +21,7 @@ namespace Outbridge.PyLite.Tests.Infra
             "calendar", "zoneinfo", "collections", "itertools", "functools", "operator", "copy", "copyreg",
             "dataclasses", "typing", "enum", "contextlib", "string", "textwrap", "unicodedata", "html", "base64",
             "binascii", "hashlib", "hmac", "struct", "zlib", "gzip", "zipfile", "csv", "io", "uuid", "bisect",
-            "heapq", "urllib.parse", "email.utils", "xml.etree.ElementTree", "traceback",
+            "heapq", "urllib.parse", "email.utils", "xml.etree.ElementTree", "traceback", "__future__",
         };
 
         // CPython 3.12's builtins module, without the exceptions and without what site adds (help, exit, ...).
@@ -68,7 +68,7 @@ namespace Outbridge.PyLite.Tests.Infra
         public void ModulesMdIsWhatTheEngineReports()
         {
             string text = Generate();
-            string path = Path.Combine(RepoRoot(), "docs", "modules.md");
+            string path = Path.Combine(RepoPaths.Root(), "docs", "modules.md");
             if (System.Environment.GetEnvironmentVariable("PYLITE_WRITE_DOCS") == "1")
                 File.WriteAllText(path, text, new UTF8Encoding(false));
             else if (File.Exists(path))
@@ -136,15 +136,6 @@ namespace Outbridge.PyLite.Tests.Infra
         private static string Ticks(IEnumerable<string> names)
         {
             return string.Join(" ", names.Where(n => n.Length > 0).OrderBy(n => n, StringComparer.Ordinal).Select(n => "`" + n + "`"));
-        }
-
-        private static string RepoRoot()
-        {
-            string dir = AppDomain.CurrentDomain.BaseDirectory;
-            while (dir != null && !File.Exists(Path.Combine(dir, "PyLite.sln")))
-                dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
-            Assert.NotNull(dir);
-            return dir;
         }
     }
 }

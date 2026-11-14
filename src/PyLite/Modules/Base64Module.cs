@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 using Outbridge.PyLite.Modules.Support;
 
@@ -39,16 +38,21 @@ namespace Outbridge.PyLite.Modules
             return ctx.Values.Module("base64", m);
         }
 
-        // Accept bytes or an ASCII str.
+        // Accept bytes or an ASCII str. Every function here is linear in its input, so the input pays the
+        // steps: b32encode of 9 MB forty times ran 13 s on 155 steps.
         private static byte[] InBytes(EvalContext c, ScriptValue[] a, string fn)
         {
             Args.AtLeast(c, a, fn, 1);
             BytesValue bv = a[0] as BytesValue;
             if (bv != null)
+            {
+                c.Budget.ChargeLinear(bv.Data.Length);
                 return bv.Data;
+            }
             StrValue sv = a[0] as StrValue;
             if (sv != null)
             {
+                c.Budget.ChargeLinear(sv.Value.Length);
                 var buf = new byte[sv.Value.Length];
                 for (int i = 0; i < sv.Value.Length; i++)
                 {
@@ -59,6 +63,15 @@ namespace Outbridge.PyLite.Modules
                 return buf;
             }
             throw Raise.TypeError(c, "argument should be a bytes-like object or ASCII string, not '" + a[0].PyTypeName + "'");
+        }
+
+        // the encoders take bytes only, as binascii does
+        private static byte[] EncodeInput(EvalContext c, ScriptValue[] a, string fn)
+        {
+            Args.AtLeast(c, a, fn, 1);
+            if (a[0] is StrValue)
+                throw Raise.TypeError(c, "a bytes-like object is required, not 'str'");
+            return InBytes(c, a, fn);
         }
 
         private static readonly byte[] UrlSafe = { (byte)'-', (byte)'_' };
@@ -78,55 +91,117 @@ namespace Outbridge.PyLite.Modules
         {
             Args.Between(c, a, fn, 1, fixedPair == null && fn == "b64encode" ? 2 : 1);
             byte[] alt = AltChars(c, a, fn, fixedPair);
-            string s = Convert.ToBase64String(InBytes(c, a, fn));
+            byte[] data = EncodeInput(c, a, fn);
+            c.Values.CheckStrLen((data.Length + 2L) / 3 * 4);   // refused before it is built
+            string s = Convert.ToBase64String(data);
             if (alt != null)
                 s = s.Replace('+', (char)alt[0]).Replace('/', (char)alt[1]);
             return c.Values.Bytes(Ascii(s));
         }
 
-        // CPython's b64decode: without validate, characters outside the alphabet (after altchars are mapped
-        // back) are discarded; with it, any such character is a binascii.Error.
+        // binascii.a2b_base64, strict_mode=validate (3.11+). altchars are mapped to '+' and '/' first, which
+        // stay valid themselves (bytes.translate). Without validate, characters outside the alphabet are
+        // skipped and a full pad sequence ends the data.
         private static ScriptValue B64Decode(EvalContext c, ScriptValue[] a, string fn, byte[] fixedPair)
         {
             Args.Between(c, a, fn, 1, fixedPair == null && fn == "b64decode" ? 3 : 1);
             byte[] alt = AltChars(c, a, fn, fixedPair);
-            bool validate = a.Length >= 3 && a[2].IsTruthy(c);
+            bool strict = a.Length >= 3 && a[2].IsTruthy(c);
             byte[] data = InBytes(c, a, fn);
-            var sb = new StringBuilder(data.Length);
-            foreach (byte b in data)
+            var output = new List<byte>(data.Length / 4 * 3 + 3);
+            if (strict && data.Length > 0 && data[0] == '=')
+                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Leading padding not allowed");
+            int quadPos = 0, leftChar = 0, pads = 0;
+            bool paddingStarted = false;
+            for (int i = 0; i < data.Length; i++)
             {
-                char ch = (char)b;
-                if (alt != null && b == alt[0])
-                    ch = '+';
-                else if (alt != null && b == alt[1])
-                    ch = '/';
-                else if (alt != null && (ch == '+' || ch == '/'))
-                    ch = '\0';   // replaced by the alternative alphabet
-                bool inAlphabet = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '+' || ch == '/' || ch == '=';
-                if (inAlphabet)
-                    sb.Append(ch);
-                else if (validate)
-                    throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Only base64 data is allowed");
+                byte ch = data[i];
+                if (alt != null && ch == alt[0])
+                    ch = (byte)'+';
+                else if (alt != null && ch == alt[1])
+                    ch = (byte)'/';
+                if (ch == '=')
+                {
+                    paddingStarted = true;
+                    if (strict && quadPos == 0)
+                        throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Excess padding not allowed");
+                    if (quadPos >= 2 && quadPos + ++pads >= 4)
+                    {
+                        if (strict && i + 1 < data.Length)
+                            throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Excess data after padding");
+                        return c.Values.Bytes(output.ToArray());
+                    }
+                    continue;
+                }
+                int v = B64Value(ch);
+                if (v < 0)
+                {
+                    if (strict)
+                        throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Only base64 data is allowed");
+                    continue;
+                }
+                if (strict && paddingStarted)
+                    throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Discontinuous padding not allowed");
+                pads = 0;
+                switch (quadPos)
+                {
+                    case 0:
+                        quadPos = 1;
+                        leftChar = v;
+                        break;
+                    case 1:
+                        quadPos = 2;
+                        output.Add((byte)((leftChar << 2) | (v >> 4)));
+                        leftChar = v & 0x0f;
+                        break;
+                    case 2:
+                        quadPos = 3;
+                        output.Add((byte)((leftChar << 4) | (v >> 2)));
+                        leftChar = v & 0x03;
+                        break;
+                    default:
+                        quadPos = 0;
+                        output.Add((byte)((leftChar << 6) | v));
+                        break;
+                }
             }
-            try
-            {
-                return c.Values.Bytes(Convert.FromBase64String(sb.ToString()));
-            }
-            catch (FormatException)
-            {
-                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Invalid base64-encoded string");
-            }
+            if (quadPos == 1)
+                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Invalid base64-encoded string: number of data characters ("
+                    + (output.Count / 3 * 4 + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ") cannot be 1 more than a multiple of 4");
+            if (quadPos != 0)
+                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Incorrect padding");
+            return c.Values.Bytes(output.ToArray());
+        }
+
+        private static int B64Value(byte ch)
+        {
+            if (ch >= 'A' && ch <= 'Z')
+                return ch - 'A';
+            if (ch >= 'a' && ch <= 'z')
+                return ch - 'a' + 26;
+            if (ch >= '0' && ch <= '9')
+                return ch - '0' + 52;
+            return ch == '+' ? 62 : ch == '/' ? 63 : -1;
         }
 
         private static ScriptValue B16Encode(EvalContext c, ScriptValue[] a)
         {
-            byte[] data = InBytes(c, a, "b16encode");
+            byte[] data = EncodeInput(c, a, "b16encode");
+            c.Values.CheckStrLen(2L * data.Length);
             return c.Values.Bytes(Hex.EncodeAscii(data, upper: true));
         }
 
         private static ScriptValue B16Decode(EvalContext c, ScriptValue[] a)
         {
             byte[] data = InBytes(c, a, "b16decode");
+            bool casefold = a.Length >= 2 && a[1] != null && a[1].IsTruthy(c);
+            for (int i = 0; i < data.Length; i++)
+            {
+                bool upper = (data[i] >= (byte)'0' && data[i] <= (byte)'9') || (data[i] >= (byte)'A' && data[i] <= (byte)'F');
+                if (!upper && !(casefold && data[i] >= (byte)'a' && data[i] <= (byte)'f'))
+                    throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Non-base16 digit found");   // lower case only with casefold
+            }
             if ((data.Length & 1) != 0)
                 throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Odd-length string");
             var buf = new byte[data.Length / 2];
@@ -148,8 +223,10 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue B32Encode(EvalContext c, ScriptValue[] a)
         {
-            byte[] data = InBytes(c, a, "b32encode");
-            var sb = new StringBuilder();
+            byte[] data = EncodeInput(c, a, "b32encode");
+            long outLen = (data.Length + 4L) / 5 * 8;
+            c.Values.CheckStrLen(outLen);   // refused before it is built
+            var sb = new StringBuilder((int)outLen);
             for (int i = 0; i < data.Length; i += 5)
             {
                 int n = Math.Min(5, data.Length - i);
@@ -171,16 +248,17 @@ namespace Outbridge.PyLite.Modules
             return c.Values.Bytes(Ascii(sb.ToString()));
         }
 
-        // b32decode(s, casefold=False, map01=None): lower case is always accepted; map01 reads 0 as O and 1 as
-        // the given letter, as CPython does.
+        // b32decode(s, casefold=False, map01=None), base64.py's: upper case unless casefold, whole quanta, padding counted.
         private static ScriptValue B32Decode(EvalContext c, ScriptValue[] a)
         {
             byte[] data = InBytes(c, a, "b32decode");
+            if (data.Length % 8 != 0)
+                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Incorrect padding");
             if (a.Length >= 3 && a[2].Kind != ValueKind.None)
             {
                 byte[] map01 = InBytes(c, new[] { a[2] }, "b32decode");
                 if (map01.Length != 1)
-                    throw Raise.ValueError(c, "map01 must be a single character");
+                    throw Raise.Make(c, PyExceptionTypes.AssertionError, a[2].Repr(c));
                 data = (byte[])data.Clone();
                 for (int i = 0; i < data.Length; i++)
                 {
@@ -190,26 +268,38 @@ namespace Outbridge.PyLite.Modules
                         data[i] = map01[0];
                 }
             }
-            var outB = new List<byte>();
-            for (int i = 0; i < data.Length; i += 8)
+            bool casefold = a.Length >= 2 && PyOps.Truth(a[1], c);
+            int kept = data.Length;
+            while (kept > 0 && data[kept - 1] == (byte)'=')
+                kept--;
+            int pad = data.Length - kept;
+            var outB = new List<byte>((kept + 7) / 8 * 5);
+            ulong acc = 0;
+            for (int i = 0; i < kept; i += 8)
             {
-                ulong buf = 0;
-                int bits = 0;
-                for (int k = 0; k < 8 && i + k < data.Length; k++)
+                acc = 0;
+                for (int k = i; k < kept && k < i + 8; k++)
                 {
-                    byte ch = data[i + k];
-                    if (ch == '=')
-                        break;
-                    int v = B32.IndexOf(char.ToUpperInvariant((char)ch));
+                    int ch = data[k];
+                    if (casefold && ch >= 'a' && ch <= 'z')
+                        ch -= 32;
+                    int v = ch < 128 ? B32.IndexOf((char)ch) : -1;
                     if (v < 0)
                         throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Non-base32 digit found");
-                    buf = (buf << 5) | (uint)v;
-                    bits += 5;
+                    acc = (acc << 5) + (uint)v;
                 }
-                int fullBytes = bits / 8;
-                buf <<= (40 - bits);
-                for (int k = 0; k < fullBytes; k++)
-                    outB.Add((byte)((buf >> (32 - k * 8)) & 0xFF));
+                for (int k = 32; k >= 0; k -= 8)
+                    outB.Add((byte)(acc >> k));   // a short last quantum is cut below, or refused by its padding
+            }
+            if (pad != 0 && pad != 1 && pad != 3 && pad != 4 && pad != 6)
+                throw Raise.Make(c, PyExceptionTypes.BinasciiError, "Incorrect padding");
+            if (pad != 0 && outB.Count > 0)
+            {
+                acc <<= 5 * pad;
+                outB.RemoveRange(outB.Count - 5, 5);
+                int leftover = (43 - 5 * pad) / 8;
+                for (int k = 0; k < leftover; k++)
+                    outB.Add((byte)(acc >> (32 - k * 8)));
             }
             return c.Values.Bytes(outB.ToArray());
         }

@@ -132,9 +132,22 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             if (!Builtins.IsInstanceOf(subject, tv))
                 return false;
-            if (cp.Positional.Count > 0)
+            NamedTupleValue nt = subject as NamedTupleValue;
+            if (nt != null && ReferenceEquals(nt.NtInfo.Class, tv) && cp.Positional.Count > 0)
             {
-                if (!IsSelfMatching(tv.Name))
+                // A namedtuple's __match_args__ is its fields.
+                string[] fields = nt.NtInfo.Fields;
+                if (cp.Positional.Count > fields.Length)
+                    throw Raise.TypeError(ctx, tv.Name + "() accepts " + fields.Length + " positional sub-patterns (" + cp.Positional.Count + " given)");
+                for (int i = 0; i < cp.Positional.Count; i++)
+                {
+                    if (!TryMatch(cp.Positional[i], nt.Items[i], env, ctx))
+                        return false;
+                }
+            }
+            else if (cp.Positional.Count > 0)
+            {
+                if (tv.IsNamedByScript || !IsSelfMatching(tv.Name))
                     throw Raise.TypeError(ctx, tv.Name + "() accepts 0 positional sub-patterns (" + cp.Positional.Count + " given)");
                 if (cp.Positional.Count > 1)
                     throw Raise.TypeError(ctx, tv.Name + "() accepts 1 positional sub-pattern (" + cp.Positional.Count + " given)");
@@ -198,16 +211,28 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private bool MatchSequence(SequencePattern seq, ScriptValue subject, Environment env, EvalContext ctx)
         {
-            // Only list/tuple/range match a sequence pattern (str/dict/set never do).
+            // list, tuple, range and deque match a sequence pattern (str/dict/set never do); a deque is read
+            // into a tuple first, as CPython unpacks it
+            if (subject is DequeValue)
+                subject = ctx.Values.Tuple(Modules.Support.Iter.ToArray(ctx, subject));
             if (subject.Kind != ValueKind.List && subject.Kind != ValueKind.Tuple && subject.Kind != ValueKind.Range)
                 return false;
             long len = PyOps.Length(subject, ctx);
             int count = seq.Elements.Count;
+            ctx.Budget.ChargeParts(count);
+            if (seq.StarIndex < 0 ? len != count : len < count - 1)
+                return false;
+            // CPython unpacks the subject before any sub-pattern runs (UNPACK_SEQUENCE / UNPACK_EX): a
+            // sub-pattern's __eq__ that shrinks the list reads the unpacked items, never past the live end.
+            ListValue asList = subject as ListValue;
+            if (asList != null)
+            {
+                ctx.Budget.ChargeLinear(len);
+                subject = ctx.Values.Tuple(asList.Items.ToArray());
+            }
 
             if (seq.StarIndex < 0)
             {
-                if (len != count)
-                    return false;
                 for (int i = 0; i < count; i++)
                     if (!TryMatch(seq.Elements[i], SeqItem(subject, i, ctx), env, ctx))
                         return false;
@@ -228,6 +253,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (starTarget != null)
             {
                 long midLen = len - nBefore - nAfter;
+                ctx.Values.EnsureCollectionSize(midLen);   // `case [a, *rest]` on range(2**40): capped and charged
+                ctx.Budget.ChargeLinear(midLen);           // before the copy, not one step for all of it
                 ListValue mid = ctx.Values.List((int)(midLen < 0 ? 0 : midLen));
                 for (long i = nBefore; i < len - nAfter; i++)
                     mid.Add(SeqItem(subject, i, ctx), ctx);
@@ -238,7 +265,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private bool MatchMapping(MappingPattern m, ScriptValue subject, Environment env, EvalContext ctx)
         {
-            DictValue dict = subject as DictValue;
+            ChainMapValue chain = subject as ChainMapValue;
+            DictValue dict = chain != null ? chain.Merged(ctx) : subject as DictValue;
             if (dict == null)
                 return false;
             var matchedKeys = new List<ScriptValue>(m.Keys.Count);

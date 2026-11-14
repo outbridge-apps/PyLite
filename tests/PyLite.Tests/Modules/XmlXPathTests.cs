@@ -50,7 +50,7 @@ namespace Outbridge.PyLite.Tests.Modules
         public void RegisterNamespaceReservedPrefixRaises()
         {
             var ex = Assert.Throws<Outbridge.PyLite.Runtime.Errors.ScriptException>(
-                () => Ev.Run(P + "ET.register_namespace('xmlbad', 'uri')\n"));
+                () => Ev.Run(P + "ET.register_namespace('ns7', 'uri')\n"));
             Assert.Equal("ValueError", ex.Value.ExcType.Name);
         }
 

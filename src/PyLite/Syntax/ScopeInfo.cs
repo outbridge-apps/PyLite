@@ -25,6 +25,13 @@ namespace Outbridge.PyLite.Syntax
         public readonly HashSet<string> FreeVars = new HashSet<string>(System.StringComparer.Ordinal);
         public readonly List<string> FreeOrder = new List<string>();
 
+        // PEP 572 checks while collecting: iterable expressions and class bodies being walked, whether this
+        // comprehension sits in a class body, and the names its walruses bind in the enclosing scope.
+        public int IterExprDepth;
+        public int ClassBodyDepth;
+        public bool InClassBody;
+        public HashSet<string> WalrusTargets;
+
         // Parameter metadata (function/lambda scopes)
         public readonly List<string> ParamNames = new List<string>();
         public int PositionalCount;

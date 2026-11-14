@@ -24,6 +24,7 @@ namespace Outbridge.PyLite.Modules
         private sealed class Format
         {
             public bool BigEndian;
+            public bool Native;   // no prefix or '@': 'f' converts as C does, an overflow to inf
             public List<Item> Items;
             public int Size;
             public int ValueCount;   // pack args / unpack results (x consumes none, s is one value)
@@ -34,7 +35,7 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["pack"] = BuiltinFunctionValue.Make("pack", Args.Positional("pack", 1, int.MaxValue, (s, a, kw, c) => Pack(c, a)));
             m["unpack"] = BuiltinFunctionValue.Make("unpack", Args.Positional("unpack", 2, 2, (s, a, kw, c) => Unpack(c, a)));
-            m["unpack_from"] = BuiltinFunctionValue.Make("unpack_from", UnpackFrom);
+            m["unpack_from"] = BuiltinFunctionValue.Make("unpack_from", Args.LeadKeywords("unpack_from", UnpackFrom, 2, "format", "buffer", "offset"));
             m["calcsize"] = BuiltinFunctionValue.Make("calcsize", Args.Positional("calcsize", 1, 1, (s, a, kw, c) => c.Values.Int(Parsed(c, FmtArg(c, a)).Size)));
             m["iter_unpack"] = BuiltinFunctionValue.Make("iter_unpack", Args.Positional("iter_unpack", 2, 2, (s, a, kw, c) => IterUnpack(c, a)));
             m["error"] = ModuleKit.ExceptionClass(PyExceptionTypes.StructError);
@@ -63,7 +64,7 @@ namespace Outbridge.PyLite.Modules
             switch (code)
             {
                 case 'x': case 'c': case 'b': case 'B': case '?': case 's': return 1;
-                case 'h': case 'H': return 2;
+                case 'h': case 'H': case 'e': return 2;
                 case 'i': case 'I': case 'l': case 'L': case 'f': return 4;
                 case 'q': case 'Q': case 'd': return 8;
                 default: throw Err(ctx, "bad char in struct format");
@@ -94,6 +95,7 @@ namespace Outbridge.PyLite.Modules
                 return f;
             }
             f = ParseFormat(ctx, fmt);
+            ctx.Values.PreCharge(16L * f.Items.Count);   // kept in the per-run cache: 28 formats of 4M codes held 1.4 GB
             if (cache.Count < FormatCacheEntries)
                 cache[fmt] = f;
             return f;
@@ -101,11 +103,12 @@ namespace Outbridge.PyLite.Modules
 
         private static Format ParseFormat(EvalContext ctx, string fmt)
         {
-            var f = new Format { BigEndian = false, Items = new List<Item>() };
+            var f = new Format { BigEndian = false, Native = true, Items = new List<Item>() };
             int i = 0;
             if (fmt.Length > 0 && (fmt[0] == '@' || fmt[0] == '=' || fmt[0] == '<' || fmt[0] == '>' || fmt[0] == '!'))
             {
                 f.BigEndian = fmt[0] == '>' || fmt[0] == '!';
+                f.Native = fmt[0] == '@';
                 i = 1;
             }
             while (i < fmt.Length)
@@ -141,7 +144,7 @@ namespace Outbridge.PyLite.Modules
                     f.ValueCount += 1;             // one bytes value of length n
                 else if (c != 'x')
                     f.ValueCount += n;
-                ctx.Values.EnsureCollectionSize(f.Size);
+                ctx.Values.EnsureCollectionSize(Math.Max(f.Size, Math.Max(f.ValueCount, f.Items.Count)));   // '0s' * 6M: no bytes, 6M values
             }
             return f;
         }
@@ -177,13 +180,13 @@ namespace Outbridge.PyLite.Modules
                 for (int r = 0; r < item.Count; r++)
                 {
                     ctx.Budget.Step();
-                    PackOne(ctx, buf, ref pos, item.Code, a[argIdx++], f.BigEndian);
+                    PackOne(ctx, buf, ref pos, item.Code, a[argIdx++], f.BigEndian, f.Native);
                 }
             }
             return ctx.Values.Bytes(buf);
         }
 
-        private static void PackOne(EvalContext ctx, byte[] buf, ref int pos, char code, ScriptValue v, bool be)
+        private static void PackOne(EvalContext ctx, byte[] buf, ref int pos, char code, ScriptValue v, bool be, bool native)
         {
             switch (code)
             {
@@ -207,19 +210,45 @@ namespace Outbridge.PyLite.Modules
                 case 'f':
                 {
                     double dv = AsDoubleArg(ctx, v);
-                    if (!double.IsInfinity(dv) && !double.IsNaN(dv) && Math.Abs(dv) > float.MaxValue)
+                    float fv = (float)dv;
+                    // standard sizes refuse a finite value that rounds to inf (PyFloat_Pack4); native mode is
+                    // C's cast, as in CPython: inf
+                    if (!native && float.IsInfinity(fv) && !double.IsInfinity(dv))
+                    {
+                        if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
+                            throw Err(ctx, "int too large to convert");   // CPython 3.14's struct.error for an int
                         throw Raise.Overflow(ctx, "float too large to pack with f format");
-                    PackBytes(buf, ref pos, BitConverter.GetBytes((float)dv), be);
+                    }
+                    PackBytes(buf, ref pos, BitConverter.GetBytes(fv), be);
+                    return;
+                }
+                case 'e':
+                {
+                    ushort hb = ToHalf(ctx, AsDoubleArg(ctx, v), v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool);
+                    PackBytes(buf, ref pos, BitConverter.GetBytes(hb), be);
                     return;
                 }
                 default: PackBytes(buf, ref pos, BitConverter.GetBytes(AsDoubleArg(ctx, v)), be); return;   // 'd'
             }
         }
 
+        // CPython packs anything with __float__ (a Fraction, a Decimal) and turns a failed conversion, a huge
+        // int's included, into struct.error.
         private static double AsDoubleArg(EvalContext ctx, ScriptValue v)
         {
+            FloatValue fv = v as FloatValue;
+            if (fv != null)
+                return fv.Value;
+            IntValue iv = v as IntValue;
+            if (iv != null)
+            {
+                double x = iv.ToDouble();
+                if (double.IsInfinity(x))
+                    throw Err(ctx, "required argument is not a float");
+                return x;
+            }
             double d;
-            if (Coerce.TryToReal(ctx, v, false, out d))
+            if (Coerce.TryToReal(ctx, v, true, out d))
                 return d;
             throw Err(ctx, "required argument is not a float");
         }
@@ -278,6 +307,51 @@ namespace Outbridge.PyLite.Modules
             pos += data.Length;
         }
 
+        // IEEE 754 binary16 rounded half to even, as PyFloat_Pack2 (both modes): a finite value that rounds past
+        // 65504 is an OverflowError. Scaling by a power of two is exact, so Math.Round sees the true tie.
+        private static ushort ToHalf(EvalContext ctx, double x, bool fromInt)
+        {
+            ushort sign = (ushort)(BitConverter.DoubleToInt64Bits(x) < 0 ? 0x8000 : 0);
+            if (double.IsNaN(x))
+            {
+                int payload = (int)((BitConverter.DoubleToInt64Bits(x) >> 42) & 0x3ff);   // the top mantissa bits, as CPython 3.14
+                return (ushort)(sign | 0x7c00 | (payload == 0 ? 0x200 : payload));
+            }
+            double a = Math.Abs(x);
+            if (double.IsInfinity(a))
+                return (ushort)(sign | 0x7c00);
+            if (a < Pow2(-14))
+                return (ushort)(sign | (int)Math.Round(a * Pow2(24), MidpointRounding.ToEven));   // 1024 is the first normal
+            int e = (int)((BitConverter.DoubleToInt64Bits(a) >> 52) & 0x7ff) - 1023;
+            int m = (int)Math.Round((a * Pow2(-e) - 1) * 1024, MidpointRounding.ToEven);
+            if (m == 1024)
+            {
+                m = 0;
+                e++;
+            }
+            if (e > 15)
+            {
+                if (fromInt)
+                    throw Err(ctx, "int too large to convert");   // as for 'f'
+                throw Raise.Overflow(ctx, "float too large to pack with e format");
+            }
+            return (ushort)(sign | ((e + 15) << 10) | m);
+        }
+
+        private static double FromHalf(int h)
+        {
+            int e = (h >> 10) & 0x1f, m = h & 0x3ff;
+            if (e == 31 && m != 0)   // NaN: built from its bits, so the sign and payload survive (double.NaN is negative in .NET)
+                return BitConverter.Int64BitsToDouble(((long)(h & 0x8000) << 48) | (0x7ffL << 52) | ((long)m << 42));
+            double v = e == 0 ? m * Pow2(-24) : e == 31 ? double.PositiveInfinity : (1024 + m) * Pow2(e - 25);
+            return (h & 0x8000) != 0 ? -v : v;
+        }
+
+        private static double Pow2(int k)
+        {
+            return BitConverter.Int64BitsToDouble((long)(k + 1023) << 52);
+        }
+
         // ---- unpack ----
 
         private static ScriptValue Unpack(EvalContext ctx, ScriptValue[] a)
@@ -299,7 +373,7 @@ namespace Outbridge.PyLite.Modules
                 throw Err(ctx, "cannot iteratively unpack with a struct of length 0");
             if (data.Length % f.Size != 0)
                 throw Err(ctx, "iterative unpacking requires a buffer of a multiple of " + f.Size + " bytes");
-            return ctx.Values.Iterator(new StructRecordIterator(f, data), "unpack_iterator");
+            return ctx.Values.EngineIterator(new StructRecordIterator(f, data), "unpack_iterator");
         }
 
         private sealed class StructRecordIterator : ScriptIteratorBase
@@ -337,7 +411,12 @@ namespace Outbridge.PyLite.Modules
             if (kw.TryGet("offset", out okw))
                 ov = okw;
             if (ov != null && ov.Kind != ValueKind.None)
-                offset = Support.Coerce.ToInt32(ctx, ov, "'" + ov.PyTypeName + "' object cannot be interpreted as an integer");
+            {
+                System.Numerics.BigInteger big = Support.Coerce.ToIndex(ctx, ov, "'" + ov.PyTypeName + "' object cannot be interpreted as an integer");
+                if (big > long.MaxValue || big < long.MinValue)
+                    throw Raise.Overflow(ctx, "Python int too large to convert to C ssize_t");
+                offset = Support.Coerce.Clamp32(big);
+            }
             if (offset < 0)
                 offset += data.Length;
             if (offset < 0 || data.Length - offset < f.Size)
@@ -415,6 +494,8 @@ namespace Outbridge.PyLite.Modules
                     if (!BitConverter.IsLittleEndian)
                         Array.Reverse(scratch);
                     return ctx.Values.Float(BitConverter.ToSingle(scratch, 0));
+                case 'e':
+                    return ctx.Values.Float(FromHalf((int)ReadBits(data, ref pos, 2, be)));
                 default:
                     return ctx.Values.Float(BitConverter.Int64BitsToDouble((long)ReadBits(data, ref pos, 8, be)));   // 'd'
             }

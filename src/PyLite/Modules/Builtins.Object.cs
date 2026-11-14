@@ -18,18 +18,18 @@ namespace Outbridge.PyLite.Modules
             Add(d, "hash", 1, 1, (self, args, kw, c) => c.Values.Int(Args.One(c, args, "hash").PyHash(c)));
             Add(d, "len", 1, 1, (self, args, kw, c) => LenBuiltin(c, args));
             Add(d, "repr", 1, 1, (self, args, kw, c) => c.Values.Str(Args.One(c, args, "repr").Repr(c)));
-            Add(d, "ascii", 1, 1, (self, args, kw, c) => c.Values.Str(Support.PyFormat.AsciiEscape(Args.One(c, args, "ascii").Repr(c))));
+            Add(d, "ascii", 1, 1, (self, args, kw, c) => c.Values.Str(Support.PyFormat.AsciiEscape(c, Args.One(c, args, "ascii").Repr(c))));
             d["Ellipsis"] = EllipsisValue.Instance;
             Add(d, "callable", 1, 1, (self, args, kw, c) => c.Values.Bool(Args.One(c, args, "callable").IsCallable));
             Add(d, "id", 1, 1, (self, args, kw, c) => c.Values.Int(c.Values.IdOf(Args.One(c, args, "id"))));
             AddType(d, "type", 1, 3, (self, args, kw, c) => TypeBuiltin(c, args));
-            Add(d, "super", (self, args, kw, c) => SuperBuiltin(c, args, kw));
+            Add(d, "super", SuperFn);
             Add(d, "dir", 0, 1, (self, args, kw, c) => DirBuiltin(c, args));
             Add(d, "getattr", (self, args, kw, c) => GetAttrBuiltin(c, args, kw));
             Add(d, "hasattr", (self, args, kw, c) => HasAttrBuiltin(c, args, kw));
             Add(d, "setattr", (self, args, kw, c) => SetAttrBuiltin(c, args, kw));
             Add(d, "iter", 1, 2, (self, args, kw, c) => IterBuiltin(c, args));
-            Add(d, "next", 1, 2, (self, args, kw, c) => NextBuiltin(c, args));
+            AddQuiet(d, "next", NextOrError);
             AddType(d, "slice", 1, 3, (self, args, kw, c) => SliceBuiltin(c, args));
             Add(d, "format", 1, 2, (self, args, kw, c) => FormatBuiltin(c, args));
         }
@@ -55,6 +55,13 @@ namespace Outbridge.PyLite.Modules
         {
             ScriptValue x = Args.One(c, args, "ord");
             StrValue s = x as StrValue;
+            BytesValue b = x as BytesValue;
+            if (b != null)
+            {
+                if (b.Data.Length == 1)
+                    return c.Values.Int(b.Data[0]);
+                throw Raise.TypeError(c, "ord() expected a character, but string of length " + b.Data.Length + " found");
+            }
             if (s == null)
                 throw Raise.TypeError(c, "ord() expected string of length 1, but " + x.PyTypeName + " found");
             string str = s.Value;
@@ -72,12 +79,9 @@ namespace Outbridge.PyLite.Modules
             if (x.TryLengthWithContextCore(c, out ctxLen))   // ChainMap key-union
                 return c.Values.Int(ctxLen);
             long small;
-            if (x.TryLengthCore(out small))   // no BigInteger for the usual length (P8)
+            if (x.TryLengthCore(out small))   // no BigInteger for the usual length
                 return c.Values.Int(small);
-            BigInteger len;
-            if (x.TryLengthBig(out len))
-                return c.Values.Int(len);
-            throw Raise.TypeError(c, "object of type '" + x.PyTypeName + "' has no len()");
+            return c.Values.Int(PyOps.Length(x, c));   // a range longer than ssize_t is an OverflowError
         }
 
         private static ScriptValue TypeBuiltin(EvalContext c, ScriptValue[] args)
@@ -94,14 +98,37 @@ namespace Outbridge.PyLite.Modules
             if (em != null)
                 return em.Class;
             NamedTupleValue nt = args[0] as NamedTupleValue;
-            if (nt != null && nt.NtInfo.Class != null)
-                return nt.NtInfo.Class;   // a script-named type: never through the process-wide name cache
-            return TypeObjectFor(args[0].PyTypeName);
+            if (nt != null)
+            {
+                TypeValue ntClass = nt.NtInfo.Class ?? c.Values.RunTypeFor(nt.NtInfo.InstanceType);   // urllib's and statistics' have one per run
+                if (ntClass != null)
+                    return ntClass;
+            }
+            if (args[0] is RecordClassValue)
+                return TypeObjectFor(TypeValue.MetaTypeInfo, c);   // a class is a type, whatever it is named
+            return TypeObjectFor(args[0].TypeInfo, c);
+        }
+
+        // The builtin, known by its delegate: a call site may run super().m(...) without making the super object
+        // (CallMachinery). A static method, so the delegate made from it compares equal wherever it is made.
+        internal static ScriptValue SuperFn(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext c)
+        {
+            return SuperBuiltin(c, args, kw);
         }
 
         // super(Class, obj). The parser writes super() in a method as super(<its class>, <first parameter>),
         // so a bare super() here is one outside a method, or in a function nested in one: CPython's error.
         private static ScriptValue SuperBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
+        {
+            RecordClassValue k;
+            RecordInstanceValue inst;
+            ResolveSuper(c, args, kw, out k, out inst);
+            c.Values.ChargeObject(2);
+            return new SuperValue(k, inst);
+        }
+
+        // super(Class, obj)'s checks; k is the class of obj's chain that is Class.
+        internal static void ResolveSuper(EvalContext c, ScriptValue[] args, KwArgs kw, out RecordClassValue k, out RecordInstanceValue inst)
         {
             if (kw.Count > 0)
                 throw Raise.TypeError(c, "super() takes no keyword arguments");
@@ -120,11 +147,11 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(c, "super() with one argument is not supported in this dialect; use super() or super(Class, self)");
             if (args[1].Kind == ValueKind.RecordClass)
                 throw Raise.TypeError(c, "super(type, type2) is not supported in this dialect (no classmethods)");
-            RecordInstanceValue inst = args[1] as RecordInstanceValue;
-            for (RecordClassValue k = inst == null ? null : inst.Class; k != null; k = k.Base)
+            inst = args[1] as RecordInstanceValue;
+            for (k = inst == null ? null : inst.Class; k != null; k = k.Base)
             {
                 if (k.SameClass(cls))
-                    return new SuperValue(k, inst);
+                    return;
             }
             throw Raise.TypeError(c, "super(type, obj): obj must be an instance or subtype of type");
         }
@@ -203,14 +230,8 @@ namespace Outbridge.PyLite.Modules
             string name = AttrName(c, args[1]);
             if (args.Length == 2)
                 return PyOps.GetAttr(args[0], name, c);
-            try
-            {
-                return PyOps.GetAttr(args[0], name, c);
-            }
-            catch (ScriptException se) when (se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
-            {
-                return args[2];
-            }
+            ScriptValue v;
+            return PyOps.TryGetAttr(args[0], name, c, out v) ? v : args[2];
         }
 
         private static ScriptValue HasAttrBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
@@ -218,15 +239,8 @@ namespace Outbridge.PyLite.Modules
             Args.NoKw(c, kw, "hasattr");
             Args.Unpack(c, args, "hasattr", 2, 2);
             string name = AttrName(c, args[1]);
-            try
-            {
-                PyOps.GetAttr(args[0], name, c);
-                return c.Values.Bool(true);
-            }
-            catch (ScriptException se) when (se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
-            {
-                return c.Values.Bool(false);
-            }
+            ScriptValue v;
+            return c.Values.Bool(PyOps.TryGetAttr(args[0], name, c, out v));
         }
 
         private static ScriptValue SetAttrBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
@@ -244,20 +258,34 @@ namespace Outbridge.PyLite.Modules
                 // iter(callable, sentinel): call until the result equals the sentinel.
                 if (!args[0].IsCallable)
                     throw Raise.TypeError(c, "iter(v, w): v must be callable");
-                return c.Values.Iterator(new CallableIterator(args[0], args[1]), "callable_iterator");
+                return c.Values.EngineIterator(new CallableIterator(args[0], args[1]), "callable_iterator");
             }
             ScriptValue x = Args.One(c, args, "iter");
             if (x.Kind == ValueKind.Iterator)
                 return x;   // iter(it) is it
             if (x is ILineFile)
                 return x;   // an in-memory file is its own iterator
+            RecordInstanceValue rec = x as RecordInstanceValue;
+            FunctionValue iterFn = rec != null ? rec.Class.Dunder(RecordDunder.Iter) : null;
+            if (iterFn != null)
+            {
+                // What __iter__ returned, itself: iter(r) is r when it returns self.
+                ScriptValue made = c.CallHook1(iterFn, rec);
+                RecordInstanceValue madeRec = made as RecordInstanceValue;
+                if (made.Kind == ValueKind.Iterator || made is ILineFile || (madeRec != null && madeRec.Class.Dunder(RecordDunder.Next) != null))
+                    return made;
+                throw Raise.TypeError(c, "iter() returned non-iterator of type '" + made.PyTypeName + "'");
+            }
             IScriptIterator it = PyOps.GetIterator(x, c);
-            return c.Values.Iterator(it, IteratorTypeName(x));
+            return c.Values.EngineIterator(it, IteratorTypeName(x));
         }
 
         // CPython iterator type names: dict and its views share dict_key/value/itemiterator, frozenset uses set_iterator.
+        // A script-named type gets a fixed name: iterator type names key a table that outlives the run.
         private static string IteratorTypeName(ScriptValue x)
         {
+            if (x.TypeInfo.IsNamedByScript)
+                return x is NamedTupleValue ? "tuple_iterator" : "iterator";
             switch (x.PyTypeName)
             {
                 case "dict": case "dict_keys": return "dict_keyiterator";
@@ -265,10 +293,6 @@ namespace Outbridge.PyLite.Modules
                 case "dict_items": return "dict_itemiterator";
                 case "frozenset": return "set_iterator";
                 default:
-                    if (x is NamedTupleValue)
-                        return "tuple_iterator";
-                    if (x is RecordInstanceValue)
-                        return "iterator";   // a script-chosen class name must not key the static type cache
                     return x.PyTypeName + "_iterator";
             }
         }
@@ -286,7 +310,16 @@ namespace Outbridge.PyLite.Modules
                 value = null;
                 if (_done)
                     return false;
-                ScriptValue v = ctx.CallHook(_fn, System.Array.Empty<ScriptValue>(), Runtime.Evaluator.KwArgs.Empty);
+                ScriptValue v;
+                try
+                {
+                    v = ctx.CallHook(_fn, System.Array.Empty<ScriptValue>(), Runtime.Evaluator.KwArgs.Empty);
+                }
+                catch (ScriptException e) when (e.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration))
+                {
+                    _done = true;   // CPython's calliter drops the callable on a StopIteration
+                    return false;
+                }
                 if (PyOps.Equals(v, _sentinel, ctx, 0))
                 {
                     _done = true;   // exhausted for good (never revives), like a StopIteration'd iterator
@@ -297,8 +330,15 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
-        private static ScriptValue NextBuiltin(EvalContext c, ScriptValue[] args)
+        // next(); the StopIteration of an exhausted iterator without a default comes back in `error`
+        private static ScriptValue NextOrError(ScriptValue[] args, KwArgs kw, EvalContext c, out ScriptException error)
         {
+            error = null;
+            if (kw.Count != 0 || args.Length < 1 || args.Length > 2)
+            {
+                Args.NoKw(c, kw, "next");
+                Args.CheckPositional(c, args, "next", 1, 2);
+            }
             IteratorValue it = args[0] as IteratorValue;
             ScriptValue v;
             ILineFile file = args[0] as ILineFile;
@@ -308,15 +348,34 @@ namespace Outbridge.PyLite.Modules
                     return v;
                 if (args.Length == 2)
                     return args[1];
-                throw Raise.StopIteration(c);
+                error = Raise.StopIteration(c);
+                return null;
+            }
+            RecordInstanceValue rec = args[0] as RecordInstanceValue;
+            FunctionValue nextFn = rec != null ? rec.Class.Dunder(RecordDunder.Next) : null;
+            if (nextFn != null)
+            {
+                if (args.Length == 1)
+                    return c.CallHook1(nextFn, rec);   // its StopIteration, with its arguments, is the caller's
+                try
+                {
+                    return c.CallHook1(nextFn, rec);
+                }
+                catch (ScriptException e) when (e.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration))
+                {
+                    return args[1];
+                }
             }
             if (it == null)
                 throw Raise.TypeError(c, "'" + args[0].PyTypeName + "' object is not an iterator");
+            c.CaughtStop = null;
             if (it.Iterator.MoveNext(c, out v))
                 return v;
             if (args.Length == 2)
                 return args[1];
-            throw Raise.StopIteration(c);
+            // From a deeper call it is a loop inside a callback that ended, and the callback went on: not this stop.
+            error = c.CaughtStop != null && c.CaughtStopDepth == c.CallDepth ? new ScriptException(c.CaughtStop) : Raise.StopIteration(c);
+            return null;
         }
 
         private static ScriptValue SliceBuiltin(EvalContext c, ScriptValue[] args)

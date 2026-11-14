@@ -9,10 +9,13 @@ namespace Outbridge.PyLite.Runtime
     // Slot-based environment. Locals/cells are index-addressed (the Resolver assigns
     // slots); module globals are a DictValue with the seeded hash; builtins are a frozen table. Bound to
     // one EvalContext so the throwing accessors need no ctx parameter.
+    // A struct element: storing into it skips the covariant array-store check a ScriptValue[] pays.
+    internal struct LocalSlot { public ScriptValue V; }
+
     internal sealed class Environment
     {
         private readonly EvalContext _ctx;
-        private readonly ScriptValue[] _locals;   // null element = unbound slot
+        private readonly LocalSlot[] _locals;   // null element = unbound slot
         private readonly Cell[] _cells;           // this frame's own cells
         private readonly Cell[] _freeCells;       // captured enclosing-frame cells (closure)
         private readonly DictValue _globals;
@@ -23,7 +26,7 @@ namespace Outbridge.PyLite.Runtime
         public FunctionInfo Scope;
         public Environment ModuleEnv;   // the run's module env (self for the module env)
 
-        private Environment(EvalContext ctx, ScriptValue[] locals, Cell[] cells, Cell[] freeCells,
+        private Environment(EvalContext ctx, LocalSlot[] locals, Cell[] cells, Cell[] freeCells,
             DictValue globals, HostFunctionTable builtins)
         {
             _ctx = ctx;
@@ -49,12 +52,12 @@ namespace Outbridge.PyLite.Runtime
             return 64 + 8L * (localCount + cellCount + freeCount);
         }
 
-        // The frame skeleton is charged here (A8-#7); the arrays are not script values but must be counted.
+        // The frame skeleton is charged here; the arrays are not script values but must be counted.
         public static Environment CreateFunction(EvalContext ctx, int localCount, int cellCount,
             Cell[] freeCells, Environment moduleEnv, FunctionInfo scope = null)
         {
             ctx.Budget.ChargeAllocation(FrameCharge(localCount, cellCount, freeCells.Length));
-            var locals = new ScriptValue[localCount];
+            var locals = new LocalSlot[localCount];
             var cells = new Cell[cellCount];
             for (int i = 0; i < cellCount; i++)
             {
@@ -69,12 +72,14 @@ namespace Outbridge.PyLite.Runtime
         // Frame-pool release: locals must read as unbound on the next call (UnboundLocalError parity).
         internal void ClearLocals()
         {
-            System.Array.Clear(_locals, 0, _locals.Length);
+            LocalSlot[] l = _locals;
+            for (int i = 0; i < l.Length; i++)
+                l[i].V = null;
         }
 
         public ScriptValue GetLocal(int slot, string nameForError)
         {
-            ScriptValue v = _locals[slot];
+            ScriptValue v = _locals[slot].V;
             if (v == null)
             {
                 throw Raise.UnboundLocal(_ctx, nameForError);
@@ -84,20 +89,20 @@ namespace Outbridge.PyLite.Runtime
 
         // Raw slot read for the fused comprehension leaf: null = unbound — the caller falls back to
         // the general path, which raises the canonical UnboundLocalError with the variable's name.
-        internal ScriptValue PeekLocal(int slot) { return _locals[slot]; }
+        internal ScriptValue PeekLocal(int slot) { return _locals[slot].V; }
 
         public void SetLocal(int slot, ScriptValue v)
         {
-            _locals[slot] = v;
+            _locals[slot].V = v;
         }
 
         public void DelLocal(int slot, string nameForError)
         {
-            if (_locals[slot] == null)
+            if (_locals[slot].V == null)
             {
                 throw Raise.UnboundLocal(_ctx, nameForError);
             }
-            _locals[slot] = null;
+            _locals[slot].V = null;
         }
 
         public ScriptValue GetCell(int idx, string nameForError)
@@ -115,9 +120,20 @@ namespace Outbridge.PyLite.Runtime
             ScriptValue v = _freeCells[idx].Value;
             if (v == null)
             {
-                throw Raise.FreeVariable(_ctx, nameForError);
+                throw UnboundFree(nameForError);
             }
             return v;
+        }
+
+        // PEP 709: a list, set or dict comprehension runs inside its function, where the name is a local.
+        private ScriptException UnboundFree(string name)
+        {
+            FunctionInfo owner = Scope;
+            if (owner == null || owner.InlinedInto == null)
+                return Raise.FreeVariable(_ctx, name);
+            while (owner.InlinedInto != null)
+                owner = owner.InlinedInto;
+            return owner.FreeIndexOf(name) < 0 ? Raise.UnboundLocal(_ctx, name) : Raise.FreeVariable(_ctx, name);
         }
 
         public void SetCell(int idx, ScriptValue v)
@@ -137,7 +153,7 @@ namespace Outbridge.PyLite.Runtime
 
         // The closure cells a nested scope captures from this (the defining) frame. Where each free variable
         // sits here depends only on the two scopes, so the positions are found once per nested scope and kept
-        // on its FunctionInfo (P16); a frame of another scope (never expected) is answered by name.
+        // on its FunctionInfo; a frame of another scope (never expected) is answered by name.
         internal Cell[] CaptureClosure(FunctionInfo nested)
         {
             IReadOnlyList<string> free = nested.FreeVars;
@@ -149,13 +165,13 @@ namespace Outbridge.PyLite.Runtime
                 map = new int[free.Count];
                 for (int i = 0; i < map.Length; i++)
                 {
-                    int ci = IndexOf(Scope.CellVars, free[i]);
+                    int ci = Scope.CellIndexOf(free[i]);
                     if (ci >= 0)
                     {
                         map[i] = ci;   // one of this frame's own cells
                         continue;
                     }
-                    int fi = IndexOf(Scope.FreeVars, free[i]);
+                    int fi = Scope.FreeIndexOf(free[i]);
                     if (fi < 0)
                         throw new System.InvalidOperationException("no closure cell for '" + free[i] + "'");
                     map[i] = ~fi;      // one of the cells this frame captured itself
@@ -172,22 +188,6 @@ namespace Outbridge.PyLite.Runtime
             return cells;
         }
 
-        // Capture the Cell for a nested function's free variable `name` from THIS (the defining) frame:
-        // the name is either one of this frame's own cells or one of its own captured free cells.
-        public Cell GetClosureCell(string name)
-        {
-            int ci = IndexOf(Scope.CellVars, name);
-            if (ci >= 0)
-            {
-                return _cells[ci];
-            }
-            int fi = IndexOf(Scope.FreeVars, name);
-            if (fi >= 0)
-            {
-                return _freeCells[fi];
-            }
-            throw new System.InvalidOperationException("no closure cell for '" + name + "'");
-        }
 
         public void DelCell(int idx, string nameForError)
         {
@@ -217,11 +217,11 @@ namespace Outbridge.PyLite.Runtime
             idx = -1;
             if (Scope == null || Scope.Kind == ScopeKind.Module)
                 return ScopeSlot.Global;
-            if ((idx = IndexOf(Scope.CellVars, name)) >= 0)
+            if ((idx = Scope.CellIndexOf(name)) >= 0)
                 return ScopeSlot.Cell;
-            if ((idx = IndexOf(Scope.FreeVars, name)) >= 0)
+            if ((idx = Scope.FreeIndexOf(name)) >= 0)
                 return ScopeSlot.Free;
-            if ((idx = IndexOf(Scope.LocalNames, name)) >= 0)
+            if ((idx = Scope.LocalIndexOf(name)) >= 0)
                 return ScopeSlot.Local;
             return ScopeSlot.Global;
         }
@@ -232,7 +232,7 @@ namespace Outbridge.PyLite.Runtime
             {
                 case ScopeSlot.Cell: _cells[i].Value = value; return;
                 case ScopeSlot.Free: _freeCells[i].Value = value; return;
-                case ScopeSlot.Local: _locals[i] = value; return;
+                case ScopeSlot.Local: _locals[i].V = value; return;
                 default: SetGlobal(name, value); return;
             }
         }
@@ -244,7 +244,7 @@ namespace Outbridge.PyLite.Runtime
             {
                 case ScopeSlot.Cell: _cells[i].Value = null; return;
                 case ScopeSlot.Free: _freeCells[i].Value = null; return;
-                case ScopeSlot.Local: _locals[i] = null; return;
+                case ScopeSlot.Local: _locals[i].V = null; return;
             }
             ScriptValue key = Key(name);
             ScriptValue tmp;
@@ -252,18 +252,6 @@ namespace Outbridge.PyLite.Runtime
             {
                 _globals.DelItemOrThrow(key, _ctx);
             }
-        }
-
-        private static int IndexOf(IReadOnlyList<string> names, string name)
-        {
-            for (int i = 0; i < names.Count; i++)
-            {
-                if (names[i] == name)
-                {
-                    return i;
-                }
-            }
-            return -1;
         }
 
         // Global-name keys intern through a per-run table: the StrValue (with its seeded hash cached

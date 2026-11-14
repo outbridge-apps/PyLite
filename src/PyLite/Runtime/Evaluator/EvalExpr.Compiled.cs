@@ -4,7 +4,7 @@ using Outbridge.PyLite.Syntax.Ast;
 namespace Outbridge.PyLite.Runtime.Evaluator
 {
     // A comprehension body is re-evaluated once per element; the closure compiler turns its
-    // expression tree into linked delegates ONCE (T2.1), so each element skips the per-node
+    // expression tree into linked delegates ONCE, so each element skips the per-node
     // dispatch switch and counters. Every leaf calls the SAME helper the tree-walk path calls
     // (EvalLiteral/EvalName/TrySmallIntBinOp/BinaryOp/CompareOne/Truth), so results, errors and
     // charges are identical by construction. Closures capture only immutable AST/binding data plus
@@ -22,7 +22,61 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (ctx.InterpretOnly)
                 return null;
             object c = cache;
-            return c != null ? c as CompiledEval : Store(ref cache, TryCompileExpr(e));
+            return c != null ? c as CompiledEval : Store(ref cache, Charged(TryCompileExpr(e), e));
+        }
+
+        // The tree walk charges a NodeBatch per 64 nodes it visits; a compiled root charges the same for its
+        // whole tree on every evaluation (a 65,000-term `or` or a 200,000-leaf sum was one step per element).
+        private static CompiledEval Charged(CompiledEval fn, ExprNode e)
+        {
+            if (fn == null)
+                return null;
+            int cost = CompiledSize(e) >> 6;
+            if (cost == 0)
+                return fn;
+            return (ev, env, ctx) =>
+            {
+                ctx.Budget.Step(cost);
+                return fn(ev, env, ctx);
+            };
+        }
+
+        // Nodes of the kinds the compiled and fused tiers take (their children only through those kinds).
+        internal static int CompiledSize(ExprNode root)
+        {
+            var stack = new System.Collections.Generic.Stack<ExprNode>();
+            stack.Push(root);
+            int n = 0;
+            while (stack.Count > 0)
+            {
+                ExprNode e = stack.Pop();
+                n++;
+                switch (e.NodeKind)
+                {
+                    case NodeKind.BinOp:
+                        stack.Push(((BinOpNode)e).Left);
+                        stack.Push(((BinOpNode)e).Right);
+                        break;
+                    case NodeKind.UnaryOp:
+                        stack.Push(((UnaryOpNode)e).Operand);
+                        break;
+                    case NodeKind.CompareChain:
+                        stack.Push(((CompareChainNode)e).Left);
+                        foreach (ExprNode x in ((CompareChainNode)e).Comparators)
+                            stack.Push(x);
+                        break;
+                    case NodeKind.BoolOp:
+                        foreach (ExprNode x in ((BoolOpNode)e).Values)
+                            stack.Push(x);
+                        break;
+                    case NodeKind.IfExp:
+                        stack.Push(((IfExpNode)e).Test);
+                        stack.Push(((IfExpNode)e).Body);
+                        stack.Push(((IfExpNode)e).OrElse);
+                        break;
+                }
+            }
+            return n;
         }
 
         // Every tier caches on the shared AST node: the built delegate, or NotCompilable when there is none.

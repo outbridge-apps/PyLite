@@ -2,8 +2,8 @@
 
 PyLite runs a Python dialect, not CPython. The contract is the same syntax and the same public API
 doing the same thing; byte-for-byte equality is not a goal, and in the places listed here the
-behaviour is knowingly different. Everything below was run on the engine at version 1.1.0 — the
-outputs are what it actually prints, not what it is meant to print.
+behaviour is knowingly different. Everything below was run on the engine at version 1.2.0 — the
+outputs are what it actually prints, not what it is meant to print. The reference is CPython 3.14.
 
 What is missing entirely — language features, builtins and module APIs — is in
 [modules.md](modules.md). This file is about things that exist and behave differently.
@@ -47,15 +47,47 @@ characters and the precomposed letter is one, here and in CPython alike — thos
 not a surrogate pair.
 
 Case mapping is Unicode 16.0 and includes the mappings that change length: `'straße'.upper()` is
-`'STRASSE'`, so `len(s.upper()) == len(s)` does not hold — as in CPython.
+`'STRASSE'`, so `len(s.upper()) == len(s)` does not hold — as in CPython. `unicodedata` reads the
+same Unicode 16.0 data for names, lookup and normalization, but `category`, `numeric`, `decimal` and
+`digit` read the platform's older tables, so a character added after Unicode 8 is `'Cn'` there
+(`unicodedata.category('\U0001E030')`, `'Lm'` in CPython). Lone surrogates do not leave the engine:
+the `surrogatepass` error handler does not exist.
+
+## Regular expressions
+
+`re` runs on .NET's regex engine through a translation of the pattern, so most of sre's behaviour
+holds and a few corners do not:
+
+- Matching is in UTF-16 units (see Text): `.` matches each half of an astral character, and a class
+  range over astral characters is `bad character range`.
+- An empty match right after the previous match follows .NET's rule: `re.sub('a*?', '-', 'aa')` is
+  `'-a-a-'`, where CPython gives `'-----'`.
+- With `re.IGNORECASE`, a literal, an escaped letter (`\x6b`) and a single class member fold as sre
+  folds them (the Kelvin sign matches `k`, `ı` and `İ` match `i`); a class range, a backreference, an
+  octal or named escape and an astral letter fold the way .NET folds them.
+- In a `re.VERBOSE` pattern, a raw vertical tab (`chr(11)`) is a literal character, where sre skips
+  it as white space; the escapes `\v` and `\x0b` and every other white-space character behave as in
+  CPython.
+- Bytes patterns are not supported: `re.search(b'a', b'xa')` is a `TypeError`; decode to `str`.
+
+A regex that would backtrack forever stops on its own time budget, and compiling a pattern charges the
+memory it keeps to the run (see What stops a run).
 
 ## Numbers
 
 `int` is arbitrary precision and bounded only by the run's limit (a million bits by default):
-`10 ** 100000` is fine. `float` is IEEE-754 double, `repr` round-trips, and rounding is
-half-to-even (`round(2.5)` is `2`, `round(3.5)` is `4`) exactly as in CPython. The shortest-repr
-algorithm differs, so a trailing digit can differ from CPython's for some values; the value always
-reads back as itself.
+`10 ** 100000` is fine. Its decimal text is limited as in CPython: `str()` of an int of more than
+4,300 digits is a `ValueError`, and since there is no `sys`, the limit cannot be raised; `hex()`
+has no limit. `float` is IEEE-754 double, and since 1.2.0 `repr` is CPython's: the shortest digits
+that read back (`0.1 + 0.2` is `0.30000000000000004`, `2.675` is `2.675`), and parsing a float is
+correctly rounded. Rounding is half-to-even (`round(2.5)` is `2`, `round(3.5)` is `4`) exactly as in
+CPython.
+
+There is no `complex`: `(-8.0) ** (1/3)` is `ValueError: negative number cannot be raised to a
+fractional power`. `math.sin`, `cos`, `tan`, `expm1`, `erf` and `erfc` use fdlibm's code on every
+platform, and `gamma` and `lgamma` CPython's code over .NET's `exp` and `pow`; CPython uses the
+platform's C library, so a last bit can differ between the two, as it does between two C libraries.
+`random.seed(n)` gives a stream of its own, not CPython's Mersenne Twister sequence.
 
 **`decimal` has a range, and it is small.** The type is backed by the platform's 128-bit decimal:
 28–29 significant digits, largest value `79228162514264337593543950335`, smallest non-zero
@@ -69,7 +101,8 @@ Decimal('1e-40')          # decimal.Underflow
 Decimal(10) ** 40         # decimal.Overflow
 ```
 
-This covers money, which is what the type is for here, and does not cover scientific work. The
+This covers money, which is what the type is for here, and does not cover scientific work. There
+are no special values: `Decimal('Infinity')` and `Decimal('NaN')` are `InvalidOperation`. The
 context object carries `prec` and `rounding` only — there is no `Emax`, `Emin`, flags or traps;
 `localcontext()` and `setcontext()` work with those two. A literal with more significant digits than
 the backend holds is rounded to the places that fit, where CPython keeps it exact:
@@ -163,8 +196,10 @@ ends the same way, and `__exit__` is not called with it.
 control flow. Hashing or comparing containers nested deeper than 128 raises a catchable
 `RecursionError: maximum recursion depth exceeded in comparison`, and `json.dumps` of such data
 `RecursionError: maximum recursion depth exceeded while encoding a JSON object`, as CPython does past
-its recursion limit of about 1000. `repr` is not bounded that way — it walks its own stack and
-prints a list nested 3000 deep, where CPython raises `RecursionError`.
+its recursion limit of about 1000. `repr` of lists, dicts and tuples is not bounded that way — it
+walks its own stack and prints a list nested 3000 deep, where CPython raises `RecursionError`; `repr`
+of a `deque`, a `ChainMap` or another container whose `repr` calls back into script values counts
+two levels for each, so such containers nested 65 deep raise `RecursionError`.
 
 The defaults a host starts from: 200,000,000 steps, a 20-second deadline, 256 MB allocated,
 200 frames of call depth, 128 of data depth, 16,000,000 characters in one string, 5,000,000 items
@@ -175,7 +210,23 @@ per limit with the result it gets.
 
 A regex that would backtrack forever stops on its own budget:
 `re.match(r'(a+)+b', 'a' * 40)` ends the run with `regular expression exceeded time limit` instead
-of hanging. Flags, back-references and look-behind all work.
+of hanging. Flags, back-references and look-behind all work. A compiled pattern is charged the memory
+.NET keeps for it while the pattern is alive, so a script that keeps many large patterns meets
+`MaxAllocBytes`; the charge errs on the high side.
+
+Some things are capped where CPython has no cap, because without one a single call could run past
+the deadline or take the host's memory:
+
+- `functools.lru_cache(maxsize=None)`, `functools.cache` and a `maxsize` above 4,096 keep at most
+  4,096 entries, evicting the least recently used; `cache_info().maxsize` reports 4096.
+- An XML start tag with more than 10,000 attributes is a `ParseError`; walking an XML tree that
+  contains itself (`a.append(a)`) ends on `MaxCollectionItems` instead of looping.
+- `struct.unpack`, `itertools.product(..., repeat=r)` and `combinations_with_replacement` stop at
+  `MaxCollectionItems` items per result, and so do slice assignment and `list.insert`.
+- `traceback.format_exc()` and its kind end the run on `MaxStrChars` like any other string.
+- Private names in class bodies whose mangled forms come to more than 2,097,152 characters in one
+  source are a `SyntaxError`, and blocks nest at most 64 deep
+  (`statement too deeply nested (limit 64)`, where CPython takes 99).
 
 A traceback carries script frames only, at most 32, with `[... N more frames omitted ...]` in the
 middle.
@@ -210,8 +261,8 @@ Dictionaries keep insertion order, so a parsed object preserves the document's k
 `GzipFile` and no `open`, because there is no file system. The streams are valid and decode
 anywhere, but they are not byte-identical to the canonical zlib output — round-trip and
 interoperation are the contract, not the bytes. `level=` maps onto the platform's three settings
-rather than ten, and `gzip.compress` writes `mtime=0` by default, so the same input gives the same
-bytes every time.
+rather than ten, and `gzip.compress` writes `mtime=0` by default, as CPython 3.14 does, so the same
+input gives the same bytes every time.
 
 Decompressing a bomb is bounded like everything else: inflation charges the memory budget as it
 goes, and a zip bomb ends the run instead of the process.
@@ -242,8 +293,45 @@ goes, and a zip bomb ends the run instead of the process.
   `parsedate_tz`, `parsedate_to_datetime`, `mktime_tz`), CPython's code; the current time and the
   local zone are the engine clock's, as for `time` and `datetime`.
 
+## Other modules
+
+- **`xml.etree.ElementTree`**: `iterparse` reads the whole source before the first event (a source is
+  an object with `read()`, so the text is in memory anyway) and gives CPython's events for a document
+  read in one chunk; the memory the `root.clear()` idiom saves in CPython is not saved, because the
+  tree is held until the loop ends. `ParseError` maps the common faults (mismatched tag, no element
+  found, undefined entity, duplicate attribute, junk after the document, invalid character number,
+  unclosed token) to expat's text and code; any other fault is `not well-formed (invalid token)`.
+  `e[3:1] = [x]` inserts as a list does, where CPython's C code loses a child and doubles another.
+- **`copy`**: `copy.copy` of a list, tuple, str, bytes, range, dict, set, deque or reversed iterator
+  gives an independent iterator at the same position. Of a `map`, `filter`, `zip` or `enumerate`
+  object, an `hmac` object or a `ZipFile` it gives the object itself; CPython gives a new object over
+  the same source, so both advance it either way. What CPython cannot copy (generators, `itertools`
+  objects, hash objects, `csv` readers and writers) is a `TypeError`, as in CPython.
+- **`typing`** is a runtime stub: annotations are not evaluated, `List[int]` is a new alias each time
+  (`==` and `hash` agree), `get_args` is `()` and `get_origin` is `None`, and a `TypedDict` is made by
+  the functional form only. A bare annotation `x: int` in a function binds nothing, so a nested
+  `nonlocal x` does not find it.
+- **`zoneinfo`** reads the Windows time zone database: offsets and names are kept only as far back as
+  Windows holds them, so some past years read today's rules (Berlin 1975 is `CEST`).
+- **`uuid.uuid1()`** draws a random multicast node once per run instead of using the hardware
+  address: runs of different tenants share one process.
+- **`time.strftime('%Z', time.gmtime(0))`** is `''`: the struct carries no zone name. `datetime`
+  with a `tzinfo` gives CPython's name.
+- **`heapq.merge`** over items whose comparison raises `StopIteration` lets that exception out, where
+  CPython's generator turns it into `RuntimeError`.
+- **`traceback.print_exc(file=f)`** writes the whole text in one `write` call.
+- **`deque.insert`** and **`remove`** in the middle of a long deque are O(n), about 40 ms per call at
+  a million items.
+
 ## Smaller things
 
+- A `set` iterates and prints in insertion order, as a `dict` does: `{3, 1}` prints `{3, 1}`, where
+  CPython prints `{1, 3}`. CPython documents no order, so code that depends on it is fragile either way.
+- The dialect's syntax is the 3.14 syntax minus what it leaves out: `async`, `except*`,
+  `import *`, relative imports, `type X = ...`, generic `def f[T]()`, generator functions, complex
+  literals and t-strings are a `SyntaxError` with the dialect's own text. A statement that starts
+  `match(`, `match[`, `match -`, `match +` or `match *` with `match` a variable is read as a match
+  statement. An exception class has no `__mro__`.
 - `hash()` of a string is stable across engines and processes by default, where CPython randomises
   it per process. Determinism was worth more here than hash-flood resistance, which the step budget
   bounds anyway. The host can turn randomisation on by setting `EngineOptions.StrHashSeed` to `null`.

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Outbridge.PyLite.Runtime.Values;
-using Outbridge.PyLite.Modules.Support;
 
 namespace Outbridge.PyLite.Runtime.Errors
 {
@@ -12,7 +11,7 @@ namespace Outbridge.PyLite.Runtime.Errors
     public sealed class ExceptionValue : ScriptValue
     {
         public PyExceptionType ExcType { get; }
-        public ScriptValue[] Args { get; }
+        public ScriptValue[] Args { get; private set; }
         public ExceptionValue Context { get; internal set; }
         public ExceptionValue Cause { get; internal set; }
         internal bool SuppressContext;   // set by `raise ... from X` (CPython __suppress_context__)
@@ -40,6 +39,21 @@ namespace Outbridge.PyLite.Runtime.Errors
         // msg/doc/pos/lineno/colno); null for the rest. Read-only from the script, like args.
         internal Dictionary<string, ScriptValue> Data;
 
+        // The name an engine-raised AttributeError or NameError is about: e.name when no Data gives one.
+        internal string MissingName;
+
+        // An exception the engine raised is charged when the script can keep it (bound by `except ... as`,
+        // handed to __exit__), not at the raise: a loop catching a million KeyErrors keeps none of them.
+        internal bool Uncharged;
+
+        internal void ChargeIfKept(EvalContext ctx)
+        {
+            if (!Uncharged)
+                return;
+            Uncharged = false;
+            ctx.Budget.ChargeAllocation(64 + 8L * Args.Length);
+        }
+
         private static readonly IDictionary<string, SlotDescriptor> Slots = BuildSlots();
         private readonly ScriptTypeInfo _type;
 
@@ -47,7 +61,7 @@ namespace Outbridge.PyLite.Runtime.Errors
         {
             ExcType = excType;
             Args = args ?? Array.Empty<ScriptValue>();
-            _type = excType.InstanceTypeInfo ?? (excType.InstanceTypeInfo = new ScriptTypeInfo(excType.Name, Slots));   // one per type (P2)
+            _type = excType.InstanceTypeInfo ?? (excType.InstanceTypeInfo = new ScriptTypeInfo(excType.Name, Slots, excType.IsScriptClass));   // one per type
         }
 
         private static IDictionary<string, SlotDescriptor> BuildSlots()
@@ -80,9 +94,16 @@ namespace Outbridge.PyLite.Runtime.Errors
 
         public string GetMessageText(EvalContext ctx)
         {
+            return GetMessageText(ctx, 0);
+        }
+
+        // depth: the nesting str(e) is rendered at, so an exception wrapping an exception wrapping ... ends
+        // as RecursionError at MaxDataDepth like every other leaf.
+        internal string GetMessageText(EvalContext ctx, int depth)
+        {
             if (ReferenceEquals(ExcType, PyExceptionTypes.KeyError) && Args.Length == 1)
             {
-                string r = Args[0].Repr(ctx);
+                string r = Args[0].Repr(ctx, depth + 1);
                 return r.Length > KeyErrorReprCap ? r.Substring(0, KeyErrorReprCap) + "..." : r;
             }
             if (Args.Length == 5 && ExcType.IsUnicodeCodecError)
@@ -94,8 +115,23 @@ namespace Outbridge.PyLite.Runtime.Errors
             if (Args.Length == 0)
                 return "";
             if (Args.Length == 1)
-                return Args[0].Str(ctx);
-            return ArgsTuple(ctx);
+                return Args[0].Str(ctx, depth + 1);
+            return ArgsTuple(ctx, depth);
+        }
+
+        // CPython keeps start and end as Py_ssize_t, so a larger int is refused here; kept, its text was minutes of BigInteger.
+        internal static ScriptValue[] CheckedCodecArgs(EvalContext ctx, ScriptValue[] args)
+        {
+            if (args.Length == 5)
+            {
+                for (int i = 2; i <= 3; i++)
+                {
+                    IntValue v = args[i] as IntValue;
+                    if (v != null && !v.IsSmall)
+                        throw Raise.Overflow(ctx, "Python int too large to convert to C ssize_t");
+                }
+            }
+            return args;
         }
 
         // "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte" (single unit) or
@@ -108,20 +144,29 @@ namespace Outbridge.PyLite.Runtime.Errors
             IntValue end = Args[3] as IntValue;
             if (enc == null || reason == null || start == null || end == null)
                 return null;
+            if (!start.IsSmall || !end.IsSmall)
+                return null;   // args assigned past ssize_t: the plain args text, whose ints are charged and capped
             bool decode = ReferenceEquals(ExcType, PyExceptionTypes.UnicodeDecodeError);
             string verb = decode ? "decode" : "encode";
             string head = "'" + enc.Value + "' codec can't " + verb + " ";
+            BytesValue bv = Args[1] as BytesValue;
+            StrValue sv = Args[1] as StrValue;
             if (end.Value == start.Value + 1 && start.Value >= 0)
             {
                 string unit = null;
-                BytesValue bv = Args[1] as BytesValue;
-                StrValue sv = Args[1] as StrValue;
                 if (decode && bv != null && start.Value < bv.Data.Length)
                     unit = "byte 0x" + bv.Data[(int)start.Value].ToString("x2");
                 else if (!decode && sv != null && start.Value < sv.Value.Length)
                     unit = "character " + CharEscape(sv.Value[(int)start.Value]);
                 if (unit != null)
                     return head + unit + " in position " + start.Value + ": " + reason.Value;
+            }
+            // positions count UTF-16 units: an astral character is two, and alone in the run it is one character
+            if (!decode && sv != null && end.Value == start.Value + 2 && start.Value >= 0 && end.Value <= sv.Value.Length
+                && char.IsSurrogatePair(sv.Value[(int)start.Value], sv.Value[(int)start.Value + 1]))
+            {
+                int cp = char.ConvertToUtf32(sv.Value[(int)start.Value], sv.Value[(int)start.Value + 1]);
+                return head + "character '\\U" + cp.ToString("x8") + "' in position " + start.Value + ": " + reason.Value;
             }
             return head + (decode ? "bytes" : "characters") + " in position " + start.Value + "-" + (end.Value - 1) + ": " + reason.Value;
         }
@@ -131,17 +176,27 @@ namespace Outbridge.PyLite.Runtime.Errors
             return c < 0x100 ? "'\\x" + ((int)c).ToString("x2") + "'" : "'\\u" + ((int)c).ToString("x4") + "'";
         }
 
-        private string ArgsTuple(EvalContext ctx)
+        private string ArgsTuple(EvalContext ctx, int depth)
         {
             var sb = new StringBuilder("(");
             for (int i = 0; i < Args.Length; i++)
             {
                 if (i > 0)
                     sb.Append(", ");
-                sb.Append(Args[i].Repr(ctx));
+                sb.Append(Args[i].Repr(ctx, depth + 1));
             }
             sb.Append(')');
             return sb.ToString();
+        }
+
+        // e.args = iterable stores a tuple of it (CPython); every other attribute stays read-only.
+        protected internal override bool TrySetAttrCore(string name, ScriptValue value, EvalContext ctx)
+        {
+            if (name != "args")
+                return false;
+            TupleValue t = value as TupleValue;
+            Args = t != null && t.GetType() == typeof(TupleValue) ? t.Items : Modules.Support.Iter.ToArray(ctx, value, adoptedByCaller: true);
+            return true;
         }
 
         protected internal override bool IsTruthyCore(EvalContext ctx) { return true; }
@@ -149,7 +204,7 @@ namespace Outbridge.PyLite.Runtime.Errors
 
         protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            sb.Append(GetMessageText(ctx));
+            sb.Append(GetMessageText(ctx, depth));
         }
 
         // repr(e): Name(args...) — modern form, no trailing comma for a single argument (3.7+ dropped the

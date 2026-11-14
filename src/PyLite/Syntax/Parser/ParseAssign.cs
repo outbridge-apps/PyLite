@@ -5,9 +5,17 @@ namespace Outbridge.PyLite.Syntax
 {
     internal sealed partial class Parser
     {
+        // The right of an assignment and an f-string field take a yield in the grammar: its error, not bad syntax.
+        private void NoYieldHere()
+        {
+            if (_cur.Kind == TokenKind.KwYield)
+                throw ForbiddenInFunction();
+        }
+
         // expr_stmt = testlist_star_expr ( augassign testlist | { '=' testlist_star_expr } )
         private StmtNode ParseExprStmt()
         {
+            bool parenthesized = _cur.Kind == TokenKind.LeftParen;   // `(x): int` is no simple target
             ExprNode lhs = ParseTestListStarExpr();
 
             if (_cur.Kind == TokenKind.At)
@@ -17,22 +25,27 @@ namespace Outbridge.PyLite.Syntax
                 // PEP 526 annotated target 'lhs : annotation [= value]'. The annotation is parsed and
                 // discarded; a bare 'x: int' has no runtime effect and binds nothing (documented
                 // simplification — annotation-only names do not become locals in this dialect).
+                if (lhs is TupleNode || lhs is ListNode)
+                    throw ErrorAtSrc(lhs.Src, "only single target (not " + ExprName(lhs) + ") can be annotated");
+                if (!(lhs is NameNode || lhs is AttributeNode || lhs is IndexNode))
+                    throw ErrorAtSrc(lhs.Src, "illegal target for annotation");
                 Take();          // ':'
                 ParseTest();     // annotation, discarded
-                if (lhs is TupleNode || lhs is ListNode)
-                    throw Error("only single target (not tuple) can be annotated");
                 ValidateAssignTarget(lhs);
+                string simple = !parenthesized && lhs is NameNode ? ((NameNode)lhs).Id : null;
                 if (Match(TokenKind.Assign))
                 {
-                    ExprNode value = ParseTestListStarExpr();
-                    return new AssignNode(lhs.Src, AstList.Freeze(new List<ExprNode> { lhs }), value);
+                    NoYieldHere();
+                    ExprNode value = NotLoneStar(ParseTestListStarExpr());
+                    return new AssignNode(lhs.Src, AstList.Freeze(new List<ExprNode> { lhs }), value) { AnnotatedName = simple };
                 }
-                return new PassNode(lhs.Src);
+                return new PassNode(lhs.Src) { AnnotatedName = simple };
             }
 
             if (IsAugAssign(_cur.Kind))
             {
                 Token op = Take();
+                NoYieldHere();
                 ExprNode rhs = ParseTestList();
                 ValidateAugTarget(lhs);
                 return new AugAssignNode(lhs.Src, lhs, AugBinOp(op.Kind), rhs);
@@ -45,15 +58,46 @@ namespace Outbridge.PyLite.Syntax
                     lhs
                 };
                 while (Match(TokenKind.Assign))
+                {
+                    NoYieldHere();
                     chain.Add(ParseTestListStarExpr());
-                ExprNode value = chain[chain.Count - 1];
+                }
+                ExprNode value = NotLoneStar(chain[chain.Count - 1]);
                 chain.RemoveAt(chain.Count - 1);
+                if (chain.Count == 1 && IsComparable(lhs))
+                    throw ErrorAtSrc(lhs.Src, "cannot assign to " + ExprName(lhs) + " here. Maybe you meant '==' instead of '='?");
                 foreach (var t in chain)
                     ValidateAssignTarget(t);
                 return new AssignNode(lhs.Src, AstList.Freeze(chain), value);
             }
 
-            return new ExprStmtNode(lhs.Src, lhs);
+            return new ExprStmtNode(lhs.Src, NotLoneStar(lhs));
+        }
+
+        // CPython's invalid_named_expression: `x = 1` meant as a comparison - an invalid target that is a
+        // bitwise_or (not a display, a constant True/None/False, a comparison or a boolean expression).
+        private static bool IsComparable(ExprNode t)
+        {
+            if (t is NameNode || t is AttributeNode || t is IndexNode || t is TupleNode || t is ListNode || t is StarredNode
+                || t is CompareChainNode || t is BoolOpNode || t is IfExpNode || t is LambdaNode || t is NamedExprNode)
+                return false;
+            UnaryOpNode u = t as UnaryOpNode;
+            if (u != null && u.Op == UnaryOp.Not)
+                return false;
+            ComprehensionNode c = t as ComprehensionNode;
+            if (c != null && c.Kind == CompKind.Generator)
+                return false;
+            LiteralNode lit = t as LiteralNode;
+            return lit == null || (lit.Kind != LiteralKind.None && lit.Kind != LiteralKind.Bool);
+        }
+
+        // A starred expression outside a list or tuple: the parser kept it and the evaluator had no reading for
+        // it (`x = *a`, `*a`), an engine fault.
+        private ExprNode NotLoneStar(ExprNode e)
+        {
+            if (e is StarredNode)
+                throw ErrorAtSrc(e.Src, "can't use starred expression here");
+            return e;
         }
 
         private ExprNode ParseTestListStarExpr()

@@ -1,4 +1,3 @@
-using System;
 
 namespace Outbridge.PyLite.Modules.Support
 {
@@ -46,6 +45,13 @@ namespace Outbridge.PyLite.Modules.Support
         public static bool IsLeap(int year)
         {
             return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        }
+
+        // A 53-week ISO year starts on a Thursday, or on a Wednesday when leap (ordinal 1 is a Monday: % 7 == 1).
+        public static bool HasIsoWeek53(int year)
+        {
+            int firstWeekday = Ymd2Ord(year, 1, 1) % 7;
+            return firstWeekday == 4 || (firstWeekday == 3 && IsLeap(year));
         }
 
         public static int DaysInMonth(int year, int month)

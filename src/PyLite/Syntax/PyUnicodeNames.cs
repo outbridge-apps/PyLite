@@ -184,22 +184,6 @@ namespace Outbridge.PyLite.Syntax
             return new Reverse { CodePoints = cps, Offsets = offs, Blocks = blocks, PageStart = pageStart };
         }
 
-        // The block holding the record is the last one that starts at or before it; the names are
-        // rebuilt from that head up to the record itself.
-        private static string DecodeAt(int offset)
-        {
-            int lo = 0, hi = NameIndex.Length - 1;
-            while (lo < hi)
-            {
-                int mid = (lo + hi + 1) >> 1;
-                if (NameIndex[mid] <= offset)
-                    lo = mid;
-                else
-                    hi = mid - 1;
-            }
-            return DecodeAt(offset, NameIndex[lo]);
-        }
-
         [System.ThreadStatic] private static char[] _decodeBuf;
         [System.ThreadStatic] private static byte[] _scanBuf;
 

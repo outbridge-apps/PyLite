@@ -56,7 +56,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private ExecSignal ExecFor(ForNode n, Environment env, EvalContext ctx)
         {
             ScriptValue iterable = EvalExpr(n.Iter, env, ctx);
-            // P5: `for <name> in range(...)` with long-fitting bounds walks a long counter directly —
+            // `for <name> in range(...)` with long-fitting bounds walks a long counter directly —
             // no iterator allocation, no virtual MoveNext per step. Quarter-range keeps += overflow-free.
             if (iterable.Kind == ValueKind.Range && n.Target.NodeKind == NodeKind.Name && !ctx.InterpretOnly)
             {
@@ -142,8 +142,15 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private ExecSignal ExecReturn(ReturnNode n, Environment env, EvalContext ctx)
         {
-            ScriptValue v = n.Value == null ? ctx.Values.None : EvalExpr(n.Value, env, ctx);
-            return ExecSignal.Return(v);
+            if (n.Value == null)
+                return ExecSignal.Return(ctx.Values.None);
+            if (n.Value.QuietValue)
+            {
+                ExceptionValue raised;
+                ScriptValue v = ValueOrRaised(n.Value, env, ctx, out raised);
+                return raised == null ? ExecSignal.Return(v) : ExecSignal.Raise(raised);
+            }
+            return ExecSignal.Return(EvalExpr(n.Value, env, ctx));
         }
 
         private ExecSignal ExecAssert(AssertNode n, Environment env, EvalContext ctx)

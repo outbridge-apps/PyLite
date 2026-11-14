@@ -126,6 +126,13 @@ namespace Outbridge.PyLite.Modules.Support
             _on = false;   // proved valid: nothing left to check
         }
 
+        // After the last token: anything but JSON whitespace hands the document to the scan.
+        internal void End()
+        {
+            if (_on && !Blank(_end, _s.Length))
+                Verdict();
+        }
+
         // An error of our own at a position the scan did not reach.
         internal ScriptException Fail(string msg, int pos)
         {

@@ -113,7 +113,9 @@ namespace Outbridge.PyLite.Runtime
                 {
                     return pkg;
                 }
-                throw Raise.Import(ctx, "No module named '" + name + "'");
+                ScriptException missing = Raise.Make(ctx, PyExceptionTypes.ModuleNotFoundError, "No module named '" + name + "'");
+                missing.Value.Data = new Dictionary<string, ScriptValue>(1, StringComparer.Ordinal) { ["name"] = ctx.Values.Str(name) };
+                throw missing;
             }
             if (!ctx.ModulesInitializing.Add(name))
             {

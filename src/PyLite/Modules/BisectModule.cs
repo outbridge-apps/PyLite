@@ -116,10 +116,16 @@ namespace Outbridge.PyLite.Modules
             throw Raise.TypeError(ctx, name + "() argument 1 must be a list or a tuple, not " + seq.PyTypeName);
         }
 
+        // CPython reads a[mid] live (PySequence_GetItem): a key or __lt__ that shrank the list makes it an
+        // IndexError, as it is there.
         private static ScriptValue ItemAt(EvalContext ctx, ScriptValue seq, int i)
         {
             ListValue l = seq as ListValue;
-            return l != null ? l.Items[i] : ((TupleValue)seq).Items[i];
+            if (l == null)
+                return ((TupleValue)seq).Items[i];
+            if (i >= l.Items.Count)
+                throw Raise.IndexError(ctx, "list index out of range");
+            return l.Items[i];
         }
 
         private static int Index(EvalContext ctx, ScriptValue v, string what) { return Coerce.ToInt32(ctx, v, what); }

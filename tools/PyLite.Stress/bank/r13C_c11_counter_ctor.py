@@ -1,0 +1,33 @@
+from collections import Counter, deque, ChainMap
+out = []
+def t(name, f):
+    try:
+        r = f()
+        out.append(name + '=' + repr(r)[:90])
+    except Exception as e:
+        out.append(name + '!' + type(e).__name__ + ':' + str(e)[:80])
+t('kw_str', lambda: Counter(a='x'))
+t('kw_mixed', lambda: Counter(a=1, b='x'))
+t('map_str', lambda: Counter({'a': 'x'}))
+t('map_mixed', lambda: Counter({'a': 1, 'b': 'x'}))
+t('map_list_vals', lambda: Counter({'a': [1]}))
+t('map_none', lambda: Counter({'a': None}))
+t('map_then_kw', lambda: Counter({'a': 1}, a='x'))
+t('update_nonempty_str', lambda: [c := Counter(a=1), c.update({'b': 'x'}), c][2])
+t('setitem_str', lambda: [c := Counter(), c.__setitem__('a', 'x') if False else None, c][2])
+t('repr_mixed_via_set', lambda: [c := Counter(a=1), c.update(b=2), repr(c)][2])
+t('fromdict_float', lambda: Counter({'a': 1.5, 'b': 2}))
+t('repr_float', lambda: repr(Counter({'a': 1.5, 'b': 2})))
+t('most_common_float', lambda: Counter({'a': 1.5, 'b': 2}).most_common())
+t('reversed_mut', lambda: [d := deque(range(5)), it := reversed(d), next(it), d.pop(), next(it)][4])
+t('reversed_mut_append', lambda: [d := deque(range(5)), it := reversed(d), next(it), d.append(9), next(it)][4])
+t('reversed_list_mut', lambda: [d := list(range(5)), it := reversed(d), next(it), d.pop(), next(it)][4])
+t('cm_or', lambda: ChainMap({'a': 1}) | {'b': 2})
+t('cm_ror', lambda: {'b': 2} | ChainMap({'a': 1}))
+t('cm_ior', lambda: [c := ChainMap({'a': 1}), c.update({'b': 2}), c][2])
+t('dq_maxlen_2_31', lambda: deque([1], maxlen=2**31).maxlen)
+t('dq_maxlen_2_31m1', lambda: deque([1], maxlen=2**31 - 1).maxlen)
+t('dq_rotate_2_63', lambda: deque([1, 2]).rotate(2**63))
+t('elements_float', lambda: list(Counter({'a': 2.0}).elements()))
+t('elements_float_frac', lambda: list(Counter({'a': 2.5}).elements()))
+print(chr(10).join(out))

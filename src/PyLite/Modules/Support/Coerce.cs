@@ -34,14 +34,14 @@ namespace Outbridge.PyLite.Modules.Support
             return b > int.MaxValue ? int.MaxValue : b < int.MinValue ? int.MinValue : (int)b;
         }
 
-        // int|bool|float -> double with an unchecked cast (a huge int becomes inf; a caller that cares
-        // checks it). With `rationals`, a Fraction or Decimal converts too, as statistics answers them.
+        // int|bool|float -> double; an int past double is CPython's OverflowError (no caller checked the inf
+        // this used to give). With `rationals`, a Fraction or Decimal converts too, as statistics answers them.
         internal static bool TryToReal(EvalContext ctx, ScriptValue v, bool rationals, out double d)
         {
             switch (v)
             {
                 case FloatValue fv: d = fv.Value; return true;
-                case IntValue iv: d = (double)iv.Value; return true;
+                case IntValue iv: d = iv.IsSmall ? iv.Small : NumericOps.ToDoubleChecked(iv.Value, ctx); return true;
                 case BoolValue bv: d = bv.Value ? 1.0 : 0.0; return true;
             }
             if (rationals)
@@ -55,7 +55,7 @@ namespace Outbridge.PyLite.Modules.Support
                 DecimalValue dv = v as DecimalValue;
                 if (dv != null)
                 {
-                    d = (double)dv.Value;
+                    d = NearestDouble.FromDecimal(dv.Value);
                     return true;
                 }
             }
@@ -83,6 +83,20 @@ namespace Outbridge.PyLite.Modules.Support
         internal static int ToSsize(EvalContext ctx, BigInteger n)
         {
             return ToCRange(ctx, n, "C ssize_t");
+        }
+
+        // A count that only bounds how far something may grow (batched's n, a deque's rotate): CPython's
+        // 64-bit range decides the error, and past int.MaxValue nothing here grows that far anyway.
+        internal static int ToSsizeBound(EvalContext ctx, BigInteger n)
+        {
+            return Clamp32(ToSsize64(ctx, n));
+        }
+
+        internal static long ToSsize64(EvalContext ctx, BigInteger n)
+        {
+            if (n > long.MaxValue || n < long.MinValue)
+                throw Raise.Overflow(ctx, "Python int too large to convert to C ssize_t");
+            return (long)n;
         }
 
         internal static int ToCInt(EvalContext ctx, ScriptValue v, string context)
@@ -131,12 +145,7 @@ namespace Outbridge.PyLite.Modules.Support
                 return fv.Value;
             IntValue iv = v as IntValue;
             if (iv != null)
-            {
-                double d = (double)iv.Value;
-                if (double.IsInfinity(d))
-                    throw Raise.Overflow(ctx, "long int too large to convert to float");
-                return d;
-            }
+                return iv.IsSmall ? iv.Small : NumericOps.ToDoubleChecked(iv.Value, ctx);
             BoolValue bv = v as BoolValue;
             if (bv != null)
                 return bv.Value ? 1.0 : 0.0;

@@ -33,8 +33,11 @@ namespace Outbridge.PyLite.Modules
             BytesValue key = slots[0] as BytesValue;
             if (key == null)
                 throw Raise.TypeError(ctx, "key: expected bytes, not '" + slots[0].PyTypeName + "'");
-            string algo = ReferenceEquals(slots[2], ArgSpec.MISSING) ? "md5" : AlgoName(ctx, slots[2]);
-            var h = new HmacObjectValue((byte[])key.Data.Clone(), algo);
+            if (ReferenceEquals(slots[2], ArgSpec.MISSING) || slots[2].Kind == ValueKind.None)
+                throw Raise.TypeError(ctx, "Missing required argument 'digestmod'.");   // no md5 default since 3.8
+            string algo = AlgoName(ctx, slots[2]);
+            ctx.Budget.ChargeLinear(key.Data.Length);
+            var h = new HmacObjectValue(HashAlgos.MacKey(algo, key.Data), algo);
             if (!ReferenceEquals(slots[1], ArgSpec.MISSING) && slots[1].Kind != ValueKind.None)
                 h.Update(ctx, slots[1]);
             return h;
@@ -56,6 +59,8 @@ namespace Outbridge.PyLite.Modules
         internal static ScriptValue CompareDigest(EvalContext ctx, ScriptValue[] a)
         {
             Args.Exactly(ctx, a, "compare_digest", 2);
+            if ((a[0] is StrValue) != (a[1] is StrValue))
+                throw Raise.TypeError(ctx, "a bytes-like object is required, not 'str'");   // two str or two bytes
             byte[] x = AsBytes(ctx, a[0]), y = AsBytes(ctx, a[1]);
             int diff = x.Length ^ y.Length;
             int n = Math.Max(x.Length, y.Length);
@@ -74,7 +79,11 @@ namespace Outbridge.PyLite.Modules
             {
                 var buf = new byte[s.Value.Length];
                 for (int i = 0; i < s.Value.Length; i++)
+                {
+                    if (s.Value[i] > 0x7F)
+                        throw Raise.TypeError(ctx, "comparing strings with non-ASCII characters is not supported");
                     buf[i] = (byte)s.Value[i];
+                }
                 return buf;
             }
             throw Raise.TypeError(ctx, "unsupported operand types(s) or combination of types");
@@ -87,8 +96,8 @@ namespace Outbridge.PyLite.Modules
 
         private readonly byte[] _key;
 
-        internal HmacObjectValue(byte[] key, string algo) : this(key, algo, new List<byte>()) { }
-        private HmacObjectValue(byte[] key, string algo, List<byte> msg) : base(algo, msg) { _key = key; }
+        internal HmacObjectValue(byte[] key, string algo) : this(key, algo, new List<byte[]>()) { }
+        private HmacObjectValue(byte[] key, string algo, List<byte[]> msg) : base(algo, msg) { _key = key; }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
 
@@ -97,13 +106,9 @@ namespace Outbridge.PyLite.Modules
             return "expected bytes, not '" + data.PyTypeName + "'";
         }
 
-        protected override byte[] Hash(byte[] message)
-        {
-            using (KeyedHashAlgorithm mac = HashAlgos.NewMac(Algo, _key))
-                return mac.ComputeHash(message);
-        }
+        protected override HashAlgorithm NewHash() { return HashAlgos.NewMac(Algo, _key); }
 
-        protected override BufferedDigestValue CloneWith(List<byte> buffer) { return new HmacObjectValue(_key, Algo, buffer); }
+        protected override BufferedDigestValue CloneWith(List<byte[]> chunks) { return new HmacObjectValue(_key, Algo, chunks); }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {

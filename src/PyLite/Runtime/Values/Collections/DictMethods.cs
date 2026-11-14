@@ -136,10 +136,38 @@ namespace Outbridge.PyLite.Runtime.Values
             DictValue srcDict = source as DictValue;
             if (srcDict != null)
             {
-                IScriptIterator kit = new DictKeyIterator(srcDict.Table);
-                ScriptValue key;
-                while (kit.MoveNext(c, out key))
-                    d.SetItem(key, srcDict.GetItemOrThrow(key, c), c);
+                // CPython's dict_merge: the source's entries with their stored hashes, never a lookup of its own
+                // keys again (a colliding key's __eq__ ran once per probe, and a mutating one turned it into a
+                // KeyError); a source that changes size under the target's __eq__ is an error.
+                OrderedTable src = srcDict.Table;
+                int used = src.EntriesUsed;
+                bool fresh = d.Count == 0 && d.Table.EntriesUsed == 0 && !ReferenceEquals(d, srcDict);   // CPython clones: no __eq__ at all
+                for (int p = 0; p < used; p++)
+                {
+                    c.Budget.Step();
+                    long h;
+                    ScriptValue key, value;
+                    if (!src.TryGetEntryAt(p, out h, out key, out value))
+                        continue;
+                    if (fresh)
+                    {
+                        d.Table.InsertAbsent(key, h, value, c);
+                        continue;
+                    }
+                    d.Table.InsertOrUpdate(key, h, value, c, 0);
+                    if (src.EntriesUsed != used)
+                        throw Raise.RuntimeError(c, "dict mutated during update");
+                }
+                return;
+            }
+            ScriptValue keysFn;
+            if (source is RecordInstanceValue && PyOps.TryGetAttr(source, "keys", c, out keysFn))
+            {
+                // CPython's PyDict_Merge: anything with keys() is a mapping, read through its __getitem__.
+                IScriptIterator keys = PyOps.GetIterator(c.CallHook(keysFn, Array.Empty<ScriptValue>(), KwArgs.Empty), c);
+                ScriptValue mapKey;
+                while (keys.MoveNext(c, out mapKey))
+                    d.SetItem(mapKey, PyOps.GetItem(source, mapKey, c), c);
                 return;
             }
             IScriptIterator it = PyOps.GetIterator(source, c);

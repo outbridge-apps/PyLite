@@ -21,7 +21,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static bool NumericEquals(ScriptValue a, ScriptValue b)
         {
-            // P1 fast path: both long-backed ints.
+            // Fast path: both long-backed ints.
             IntValue ia = a as IntValue, ib = b as IntValue;
             if (ia != null && ib != null && ia.IsSmall && ib.IsSmall)
                 return ia.Small == ib.Small;
@@ -48,7 +48,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static bool NumericCompareOp(PyCmpOp op, ScriptValue a, ScriptValue b)
         {
-            // P1 fast path: both long-backed ints.
+            // Fast path: both long-backed ints.
             IntValue ia = a as IntValue, ib = b as IntValue;
             if (ia != null && ib != null && ia.IsSmall && ib.IsSmall)
                 return ApplyCmp(op, ia.Small < ib.Small ? -1 : (ia.Small > ib.Small ? 1 : 0));

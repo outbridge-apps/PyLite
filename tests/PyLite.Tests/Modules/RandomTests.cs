@@ -30,6 +30,13 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("random.seed(1) or all(random.getrandbits(1) in (0, 1) for _ in range(50))")]
         [InlineData("random.seed(1) or random.getrandbits(64) < 2**64")]
         [InlineData("random.seed(1) or random.getrandbits(33).bit_length() <= 33")]
+        // the words of a draw are laid out in one pass now (and a machine-size one without an array); the
+        // values are the ones the shift-and-or loop gave
+        [InlineData("random.seed('hello') or [random.getrandbits(k) for k in (31, 32, 33, 64, 65)] == [2011926043, 3388335666, 5082931709, 16799796018265190311, 7022245277525015446]")]
+        [InlineData("random.seed(2 ** 200 + 12345) or [random.getrandbits(k) for k in (31, 64, 65)] == [375059634, 3727209400456827425, 13512437058369478759]")]
+        [InlineData("random.seed(7) or random.getrandbits(1000000).bit_length() <= 1000000")]
+        // seed(str) builds its number in one pass (byte-at-a-time n * 256 + b was quadratic in the string)
+        [InlineData("random.seed('x' * 3000000) or random.getrandbits(40) == 129675614595")]
         [InlineData("random.seed(1) or all(0 <= random.randrange(10) < 10 for _ in range(50))")]
         [InlineData("random.seed(1) or all(5 <= random.randrange(5, 10) < 10 for _ in range(50))")]
         [InlineData("random.seed(1) or all(random.randrange(0, 10, 2) % 2 == 0 for _ in range(50))")]
@@ -65,7 +72,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("random.seed(1)\ns = random.sample(range(10**8), 3)\nr = (len(set(s)) == 3)\n")]
         [InlineData("p = [1,2,3]\nrandom.seed(1)\nrandom.sample(p, 2)\nr = (p == [1,2,3])\n")]
         [InlineData("r = (random.sample([1,2,3], 0) == [])\n")]
-        [InlineData("random.seed(1)\nx = list(range(6))\nrandom.shuffle(x, random=lambda: 0.5)\nr = (sorted(x) == list(range(6)))\n")]
+        [InlineData("x = list(range(6))\ntry:\n    random.shuffle(x, random=lambda: 0.5)\n    r = False\nexcept TypeError:\n    r = True\n")]   // gone in 3.11
         public void RandomDeterminism(string body)
         {
             Assert.Equal("True", Body(body));

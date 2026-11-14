@@ -4,14 +4,22 @@ using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // The sanctioned way for a host function (a HostFunctionTable builtin) to raise an error the SCRIPT can
-    // catch with try/except. A host delegate that throws an arbitrary C# exception becomes
-    // an uncatchable HostError; throwing one of these instead produces an ordinary script exception that the
-    // evaluator's except dispatcher handles (and, if uncaught, surfaces as RuntimeError — not HostError).
+    /// <summary>
+    /// How a host function raises an exception the script can catch. Any other exception a host function throws
+    /// ends the run as an uncatchable <see cref="ScriptErrorKind.HostError"/>; one of these is an ordinary script
+    /// exception (and, uncaught, a <see cref="ScriptErrorKind.RuntimeError"/>). The host writes
+    /// <c>throw ScriptExceptions.ValueError("...")</c>.
+    /// </summary>
     public static class ScriptExceptions
     {
-        // Build (do NOT throw — the host code writes `throw ScriptExceptions.PyError(...)`). pythonType must be
-        // a concrete script exception name; the budget/engine channels cannot be forged.
+        /// <summary>
+        /// An exception of a script exception class, to throw. The limits' and the engine's own failures cannot be
+        /// raised this way.
+        /// </summary>
+        /// <param name="pythonType">The class name, as scripts spell it ("ValueError", "LookupError", ...).</param>
+        /// <param name="message">Its text; null for none.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="pythonType"/> is null.</exception>
+        /// <exception cref="PyLiteEngineException">No script exception class has that name.</exception>
         public static Exception PyError(string pythonType, string message)
         {
             if (pythonType == null)
@@ -26,25 +34,28 @@ namespace Outbridge.PyLite.Hosting
             ScriptValue[] args = message == null
                 ? Array.Empty<ScriptValue>()
                 : new ScriptValue[] { new StrValue(message) };
-            return new ScriptException(new ExceptionValue(type, args));
+            return new HostScriptException(new ExceptionValue(type, args));   // copied into each run that raises it
         }
 
+        /// <summary>A <c>ValueError</c> to throw.</summary>
         public static Exception ValueError(string message)
         {
             return PyError("ValueError", message);
         }
 
+        /// <summary>A <c>TypeError</c> to throw.</summary>
         public static Exception TypeError(string message)
         {
             return PyError("TypeError", message);
         }
 
+        /// <summary>A <c>RuntimeError</c> to throw.</summary>
         public static Exception RuntimeError(string message)
         {
             return PyError("RuntimeError", message);
         }
 
-        // The message text becomes repr(key) (== 'key' for a string), matching CPython's KeyError.
+        /// <summary>A <c>KeyError</c> for a missing str key, to throw; its text is the key's repr, as CPython's.</summary>
         public static Exception KeyError(string key)
         {
             return PyError("KeyError", key);

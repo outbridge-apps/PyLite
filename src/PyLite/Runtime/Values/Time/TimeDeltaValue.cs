@@ -58,7 +58,7 @@ namespace Outbridge.PyLite.Runtime.Values
             BigInteger days = FloorDivBig(us, CalendarMath.UsPerDay);
             BigInteger rem = us - days * CalendarMath.UsPerDay;   // 0 <= rem < UsPerDay
             if (days > 999999999 || days < -999999999)
-                throw Raise.Overflow(ctx, "days=" + days.ToString(CultureInfo.InvariantCulture) + "; must have magnitude <= 999999999");
+                throw DaysOverflow(ctx, days);
             int seconds = (int)(rem / CalendarMath.UsPerSecond);
             int micro = (int)(rem % CalendarMath.UsPerSecond);
             return FromNormalized(ctx, (int)days, seconds, micro);
@@ -184,9 +184,17 @@ namespace Outbridge.PyLite.Runtime.Values
             d += days3;
 
             if (d > 999999999 || d < -999999999)
-                throw Raise.Overflow(ctx, "days=" + d.ToString(CultureInfo.InvariantCulture) + "; must have magnitude <= 999999999");
+                throw DaysOverflow(ctx, d);
 
             return FromNormalized(ctx, (int)d, (int)sFinal, (int)usFinal);
+        }
+
+        // Past a C int CPython has no number to print, and the text of a huge one was 3.5e8 steps.
+        private static Exception DaysOverflow(EvalContext ctx, BigInteger days)
+        {
+            if (days > int.MaxValue || days < int.MinValue)
+                return Raise.Overflow(ctx, "Python int too large to convert to C int");
+            return Raise.Overflow(ctx, "days=" + ((int)days).ToString(System.Globalization.CultureInfo.InvariantCulture) + "; must have magnitude <= 999999999");
         }
 
         // ---- component parsing (int/bool -> exact, float -> promoted) ----
@@ -262,7 +270,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return new Num { IsFloat = false, I = a.I + b.I };
         }
 
-        private static double AsDouble(Num n) { return n.IsFloat ? n.F : (double)n.I; }
+        private static double AsDouble(Num n) { return n.IsFloat ? n.F : Modules.Support.NearestDouble.FromBigInteger(n.I); }
 
         // ---- arithmetic ----
 
@@ -287,7 +295,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     if (reflected || td == null)
                         return null;
                     if (td.ToUs().IsZero)
-                        throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     return FromUs(ctx, FloorModBig(ToUs(), td.ToUs()));
                 default:
                     return null;
@@ -341,14 +349,14 @@ namespace Outbridge.PyLite.Runtime.Values
             if (td != null)
             {
                 if (td.ToUs().IsZero)
-                    throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                    throw Raise.ZeroDivision(ctx, "division by zero");
                 return ctx.Values.Int(FloorDivBig(ToUs(), td.ToUs()));
             }
             BigInteger n;
             if (TryAsInt(other, out n))
             {
                 if (n.IsZero)
-                    throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                    throw Raise.ZeroDivision(ctx, "division by zero");
                 return FromUs(ctx, FloorDivBig(ToUs(), n));
             }
             return null;
@@ -379,7 +387,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 return null;
             BigInteger bUs = td.ToUs();
             if (bUs.IsZero)
-                throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                throw Raise.ZeroDivision(ctx, "division by zero");
             BigInteger aUs = ToUs();
             ScriptValue q = ctx.Values.Int(FloorDivBig(aUs, bUs));
             ScriptValue r = FromUs(ctx, FloorModBig(aUs, bUs));
@@ -406,7 +414,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        // Immutable, so hashed once; the first time through the same tuple as before.
         private long _hash;
         private bool _hashed;
 

@@ -47,28 +47,31 @@ namespace Outbridge.PyLite.Runtime.Values
             return new TimezoneValue(offsetUs, name, false);
         }
 
+        private static readonly ArgSpec CtorSpec = ArgSpec.Create("timezone").Req("offset").Opt("name", ArgSpec.MISSING).Seal();
+
         // Script-level timezone(offset[, name]).
         internal static TimezoneValue Construct(EvalContext ctx, ScriptValue[] args, KwArgs kw)
         {
             ctx.Budget.Step();
-            if (args.Length < 1 || args.Length > 2)
-                throw Raise.TypeError(ctx, "timezone() takes from 1 to 2 positional arguments but " + args.Length + " were given");
-            TimeDeltaValue offset = args[0] as TimeDeltaValue;
+            var bound = new ScriptValue[CtorSpec.SlotCount];
+            ScriptValue[] star;
+            CtorSpec.Bind(ctx, args, kw, bound, out star);
+            TimeDeltaValue offset = bound[0] as TimeDeltaValue;
             if (offset == null)
-                throw Raise.TypeError(ctx, "timezone() argument 'offset' must be a timedelta, not " + args[0].PyTypeName);
+                throw Raise.TypeError(ctx, "timezone() argument 1 must be datetime.timedelta, not " + bound[0].PyTypeName);
 
             string name = null;
-            if (args.Length == 2)
+            if (!ReferenceEquals(bound[1], ArgSpec.MISSING))
             {
-                StrValue s = args[1] as StrValue;
+                StrValue s = bound[1] as StrValue;
                 if (s == null)
-                    throw Raise.TypeError(ctx, "timezone() argument 'name' must be str, not " + args[1].PyTypeName);
+                    throw Raise.TypeError(ctx, "timezone() argument 2 must be str, not " + bound[1].PyTypeName);
                 name = s.Value;
             }
 
             BigInteger us = offset.ToUs();
             if (us <= -86400000000L || us >= 86400000000L)
-                throw Raise.ValueError(ctx, "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).");
+                throw Raise.ValueError(ctx, "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not " + offset.Repr(ctx));
             if (us.IsZero && name == null)
                 return Utc;   // timezone(timedelta(0)) is the utc singleton in CPython
 

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reflection;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -19,11 +19,40 @@ namespace Outbridge.PyLite.Runtime.Values
 
         public readonly string Key;
         private readonly TimeZoneInfo _zone;
+        private readonly TimeZoneInfo.AdjustmentRule[] _rules;
 
         private ZoneInfoValue(string key, TimeZoneInfo zone)
         {
             Key = key;
             _zone = zone;
+            _rules = zone.GetAdjustmentRules();
+        }
+
+        private ZoneInfoValue(string key, TimeZoneInfo zone, TimeZoneInfo.AdjustmentRule[] rules)
+        {
+            Key = key;
+            _zone = zone;
+            _rules = rules;
+        }
+
+        // AdjustmentRule.BaseUtcOffsetDelta is internal on .NET Framework; without it the standard offset is
+        // today's base, as before.
+        private static readonly Func<TimeZoneInfo.AdjustmentRule, TimeSpan> BaseDelta = MakeBaseDelta();
+
+        private static Func<TimeZoneInfo.AdjustmentRule, TimeSpan> MakeBaseDelta()
+        {
+            try
+            {
+                PropertyInfo p = typeof(TimeZoneInfo.AdjustmentRule).GetProperty("BaseUtcOffsetDelta",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MethodInfo get = p == null || p.PropertyType != typeof(TimeSpan) ? null : p.GetGetMethod(true);
+                return get == null ? null : (Func<TimeZoneInfo.AdjustmentRule, TimeSpan>)Delegate.CreateDelegate(
+                    typeof(Func<TimeZoneInfo.AdjustmentRule, TimeSpan>), get);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
@@ -35,6 +64,9 @@ namespace Outbridge.PyLite.Runtime.Values
             ZoneInfoValue z;
             if (cached && Cache.TryGetValue(key, out z))
                 return z;
+            // A no_cache instance is a new object over the same rules: a copy of them per call was megabytes, uncharged.
+            if (!cached && Cache.TryGetValue(key, out z))
+                return new ZoneInfoValue(key, z._zone, z._rules);
             string windowsId;
             if (!WindowsZones.TryMap(key, out windowsId))
                 throw NotFound(ctx, key);
@@ -52,9 +84,8 @@ namespace Outbridge.PyLite.Runtime.Values
                 throw NotFound(ctx, key);
             }
             z = new ZoneInfoValue(key, zone);
-            if (cached)
-                z = Cache.GetOrAdd(key, z);
-            return z;
+            ZoneInfoValue shared = Cache.GetOrAdd(key, z);
+            return cached ? shared : new ZoneInfoValue(key, shared._zone, shared._rules);
         }
 
         private static ScriptException NotFound(EvalContext ctx, string key)
@@ -159,9 +190,54 @@ namespace Outbridge.PyLite.Runtime.Values
             return off == lo.Ticks / 10 ? 1 : 0;
         }
 
+        // The standard offset in force at a wall time whose offset is known: the base plus the delta of the rule that
+        // covers it (Moscow kept +04 as standard time in 2012, Asuncion -04 in 2020; the base alone is today's).
+        // Windows keeps a mid-year change of standard time as "daylight" of a whole-year rule: such an interval touches
+        // the year's start or end, and runs on from the standard offset of the year beside it (Pyongyang's +09 until
+        // August 2015, Minsk's +03 from March 2011, Asuncion's -03 from October 2024). Its offset is the standard one.
+        private long StandardUsAt(long naiveUs, long offsetUs)
+        {
+            if (BaseDelta == null)
+                return _zone.BaseUtcOffset.Ticks / 10;
+            DateTime day = Wall(naiveUs).Date;
+            TimeZoneInfo.AdjustmentRule r = RuleAt(day);
+            long std = RuleStandardUs(r);
+            if (r == null || offsetUs == std)
+                return std;
+            TimeZoneInfo.TransitionTime s = r.DaylightTransitionStart, e = r.DaylightTransitionEnd;
+            bool wraps = s.Month > e.Month;   // a southern year: daylight at both of its ends
+            bool touchesStart = StartsTheYear(s) || (wraps && day.Month <= e.Month);
+            bool touchesEnd = StartsTheYear(e) || (wraps && day.Month >= s.Month);
+            if (touchesStart && r.DateStart > DateTime.MinValue && RuleStandardUs(RuleAt(r.DateStart.AddDays(-1))) == offsetUs)
+                return offsetUs;
+            if (touchesEnd && r.DateEnd < DateTime.MaxValue.Date && RuleStandardUs(RuleAt(r.DateEnd.AddDays(1))) == offsetUs)
+                return offsetUs;
+            return std;
+        }
+
+        private static bool StartsTheYear(TimeZoneInfo.TransitionTime t)
+        {
+            return t.Month == 1 && t.TimeOfDay.TimeOfDay == TimeSpan.Zero && !t.IsFixedDateRule && t.Week == 1;
+        }
+
+        private TimeZoneInfo.AdjustmentRule RuleAt(DateTime day)
+        {
+            foreach (TimeZoneInfo.AdjustmentRule r in _rules)
+            {
+                if (r.DateStart <= day && day <= r.DateEnd)
+                    return r;
+            }
+            return null;
+        }
+
+        private long RuleStandardUs(TimeZoneInfo.AdjustmentRule r)
+        {
+            return (_zone.BaseUtcOffset.Ticks + (r == null ? 0 : BaseDelta(r).Ticks)) / 10;
+        }
+
         private bool IsDaylightAt(DateTimeValue dt)
         {
-            return OffsetUsForWall(dt.ToNaiveUsLong(), dt.Fold) != _zone.BaseUtcOffset.Ticks / 10;
+            return DstUsAt(dt) != 0;
         }
 
         // tzdata's abbreviation (CET/CEST, EST/EDT, ...) where it has one, else the numeric form (+04).
@@ -177,7 +253,9 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (dt == null)
                 return null;
-            return OffsetUsForWall(dt.ToNaiveUsLong(), dt.Fold) - _zone.BaseUtcOffset.Ticks / 10;
+            long naive = dt.ToNaiveUsLong();
+            long offset = OffsetUsForWall(naive, dt.Fold);
+            return offset - StandardUsAt(naive, offset);
         }
 
         // ---- equality / hash / repr ----
@@ -190,7 +268,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
         {
-            return StringComparer.Ordinal.GetHashCode(Key);
+            return NumericHash.HashString(Key, ctx.StrHashSeed);   // the engine's str hash: string.GetHashCode differs per process
         }
 
         protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)

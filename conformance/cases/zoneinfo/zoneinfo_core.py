@@ -62,7 +62,7 @@ try:
     datetime(2024, 1, 1, fold=2)
     assert False
 except ValueError as e:
-    assert str(e) == 'fold must be either 0 or 1'
+    assert str(e) == 'fold must be either 0 or 1, not 2'
 
 assert 'Europe/Amsterdam' in available_timezones() and len(available_timezones()) > 300
 assert issubclass(ZoneInfoNotFoundError, KeyError)

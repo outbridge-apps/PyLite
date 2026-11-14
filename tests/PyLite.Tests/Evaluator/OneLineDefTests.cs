@@ -23,7 +23,7 @@ namespace Outbridge.PyLite.Tests.Evaluator
             Assert.Equal("Traceback (most recent call last):\n"
                 + "  File \"<script>\", line 6, in <module>\n"
                 + "  File \"<script>\", line 4, in f\n"
-                + "ZeroDivisionError: integer division or modulo by zero", r.Error.ScriptTraceback);
+                + "ZeroDivisionError: division by zero", r.Error.ScriptTraceback);
         }
 
         [Fact]
@@ -61,6 +61,15 @@ namespace Outbridge.PyLite.Tests.Evaluator
         public void AStepLimitStillStopsALoopOfCalls()
         {
             RunResult r = Run("def f(x):\n    return x + 1\nn = 0\nwhile True:\n    n = f(n)\n", ResourceLimits.Default.With(maxSteps: 200_000));
+            Assert.Equal("MaxSteps", r.Error.LimitName);
+        }
+
+        // Each evaluation is charged for the whole tree, as a lambda's is: 3,089 steps paid for 6 seconds before.
+        [Fact]
+        public void AWideBodyIsChargedPerEvaluation()
+        {
+            string body = "x" + string.Concat(System.Linq.Enumerable.Repeat(" or x", 20000));
+            RunResult r = Run("def f(x):\n    return " + body + "\nfor i in range(1000):\n    r = f(1)\n", ResourceLimits.Default.With(maxSteps: 100_000));
             Assert.Equal("MaxSteps", r.Error.LimitName);
         }
     }

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
@@ -34,12 +33,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static DateValue Construct(EvalContext ctx, int year, int month, int day)
         {
-            if (year < 1 || year > 9999)
-                throw Raise.ValueError(ctx, "year is out of range");
-            if (month < 1 || month > 12)
-                throw Raise.ValueError(ctx, "month must be in 1..12");
-            if (day < 1 || day > CalendarMath.DaysInMonth(year, month))
-                throw Raise.ValueError(ctx, "day is out of range for month");
+            DtArgs.CheckDate(ctx, year, month, day);
             ctx.Values.PreCharge(48);
             return new DateValue(year, (byte)month, (byte)day);
         }
@@ -60,12 +54,32 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal int ToOrdinalInt() { return CalendarMath.Ymd2Ord(Year, Month, Day); }
 
+        // The proleptic Gregorian year of an ordinal past 9999 (CPython's ord_to_ymd, year part).
+        private static long YearOfOrdinal(long n)
+        {
+            long r = n - 1;
+            long n400 = r / 146097;
+            r %= 146097;
+            long n100 = r / 36524;
+            r %= 36524;
+            long n4 = r / 1461;
+            r %= 1461;
+            long n1 = r / 365;
+            long year = n400 * 400 + n100 * 100 + n4 * 4 + n1 + 1;
+            return n1 == 4 || n100 == 4 ? year - 1 : year;
+        }
+
         internal static DateValue FromOrdinal(EvalContext ctx, BigInteger n)
         {
+            // CPython reads the ordinal as a C int first, then names the year it would fall in
+            if (n > long.MaxValue || n < long.MinValue)
+                throw Raise.Overflow(ctx, "Python int too large to convert to C long");
+            if (n > int.MaxValue || n < int.MinValue)
+                throw Raise.Overflow(ctx, n > 0 ? "signed integer is greater than maximum" : "signed integer is less than minimum");
             if (n < 1)
                 throw Raise.ValueError(ctx, "ordinal must be >= 1");
             if (n > CalendarMath.MaxOrdinal)
-                throw Raise.ValueError(ctx, "year is out of range");
+                throw Raise.ValueError(ctx, "year must be in 1..9999, not " + YearOfOrdinal((long)n).ToString(System.Globalization.CultureInfo.InvariantCulture));
             int y, m, d;
             CalendarMath.Ord2Ymd((int)n, out y, out m, out d);
             return Construct(ctx, y, m, d);
@@ -146,7 +160,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        // Immutable, so hashed once; the first time through the same tuple as before.
         private long _hash;
         private bool _hashed;
 
@@ -198,9 +212,9 @@ namespace Outbridge.PyLite.Runtime.Values
             var slots = new ScriptValue[ReplaceSpec.SlotCount];
             ScriptValue[] star;
             ReplaceSpec.Bind(ctx, args, kw, slots, out star);
-            int y = ReferenceEquals(slots[0], ArgSpec.MISSING) ? Year : DtArgs.IntField(ctx, slots[0], "year is out of range");
-            int m = ReferenceEquals(slots[1], ArgSpec.MISSING) ? Month : DtArgs.IntField(ctx, slots[1], "month must be in 1..12");
-            int d = ReferenceEquals(slots[2], ArgSpec.MISSING) ? Day : DtArgs.IntField(ctx, slots[2], "day is out of range for month");
+            int y = ReferenceEquals(slots[0], ArgSpec.MISSING) ? Year : DtArgs.IntFieldReplace(ctx, slots[0]);
+            int m = ReferenceEquals(slots[1], ArgSpec.MISSING) ? Month : DtArgs.IntFieldReplace(ctx, slots[1]);
+            int d = ReferenceEquals(slots[2], ArgSpec.MISSING) ? Day : DtArgs.IntFieldReplace(ctx, slots[2]);
             return Construct(ctx, y, m, d);
         }
 

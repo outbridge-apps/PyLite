@@ -52,7 +52,7 @@ namespace Outbridge.PyLite.Tests.Runtime
             var reg = new ModuleRegistry();
             reg.Freeze();
             var ex = Assert.Throws<ScriptException>(() => reg.Import("foo", ctx));
-            Assert.Same(PyExceptionTypes.ImportError, ex.Value.ExcType);
+            Assert.Same(PyExceptionTypes.ModuleNotFoundError, ex.Value.ExcType);   // an ImportError, as in CPython
             Assert.Equal("No module named 'foo'", ex.Value.GetMessageText(ctx));
         }
 

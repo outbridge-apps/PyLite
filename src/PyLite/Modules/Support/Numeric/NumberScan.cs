@@ -10,16 +10,17 @@ namespace Outbridge.PyLite.Modules.Support
 
         internal enum Exp { Absent, Read, Malformed }
 
+        // As CPython's numeric_as_ascii: any Unicode decimal digit reads as its ASCII twin, and Unicode spaces are trimmed
+        // (Decimal of Arabic-Indic '12.5' is 12.5, as float() of it already was).
         internal NumberScan(string original)
         {
-            _s = Trim(original);
+            _s = Trim(Builtins.AsciiDigits(original));
             _i = 0;
         }
 
         internal string Text { get { return _s; } }
         internal int Pos { get { return _i; } }
         internal bool AtEnd { get { return _i >= _s.Length; } }
-        internal char Cur { get { return _i < _s.Length ? _s[_i] : '\0'; } }
 
         // An optional '+' or '-'; true when it was '-'.
         internal bool Sign()
@@ -101,7 +102,7 @@ namespace Outbridge.PyLite.Modules.Support
 
         private static bool IsSpace(char c)
         {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+            return PyUnicode.IsPythonSpace(c);
         }
     }
 }

@@ -154,13 +154,8 @@ namespace Outbridge.PyLite.Modules.Support
                         throw Raise.ValueError(ctx, "Unknown format code '" + f.Type + "' for object of type 'str'");
                     return ctx.Values.StrPrecharged(ApplyStringSpec(ctx, ((StrValue)value).Value, f));
                 }
-                case ValueKind.Bool:
-                {
-                    FormatSpec f = ParseSpec(ctx, spec);
-                    if (f.Type == '\0' || f.Type == 's')
-                        return ctx.Values.StrPrecharged(ApplyStringSpec(ctx, ((BoolValue)value).Value ? "True" : "False", f));
-                    return ctx.Values.StrPrecharged(FormatInt(ctx, ((BoolValue)value).Value ? BigInteger.One : BigInteger.Zero, f));
-                }
+                case ValueKind.Bool:   // int.__format__: only an empty spec spells True
+                    return ctx.Values.StrPrecharged(FormatInt(ctx, ((BoolValue)value).Value ? BigInteger.One : BigInteger.Zero, ParseSpec(ctx, spec)));
                 case ValueKind.Int:
                     return ctx.Values.StrPrecharged(FormatInt(ctx, ((IntValue)value).Value, ParseSpec(ctx, spec)));
                 case ValueKind.Float:
@@ -188,7 +183,10 @@ namespace Outbridge.PyLite.Modules.Support
             if (f.AltForm)
                 throw Raise.ValueError(ctx, "Alternate form (#) not allowed in string format specifier");
             if (f.Precision >= 0 && s.Length > f.Precision)
+            {
+                ctx.Values.EnsureStrLen(f.Precision);   // a new string the caller takes as charged
                 s = s.Substring(0, f.Precision);
+            }
             return Pad(ctx, s, f.Fill, f.Align, f.Width, '<');
         }
 
@@ -215,10 +213,8 @@ namespace Outbridge.PyLite.Modules.Support
             char type = f.Type;
             if (type == 'e' || type == 'E' || type == 'f' || type == 'F' || type == 'g' || type == 'G' || type == '%')
             {
-                double d = (double)v;   // 'f'/'e'/'g'/'%' on an int: precision belongs to the float path
-                if (double.IsInfinity(d))
-                    throw Raise.Overflow(ctx, "long int too large to convert to float");
-                return FormatFloat(ctx, d, f);
+                // 'f'/'e'/'g'/'%' on an int: precision belongs to the float path
+                return FormatFloat(ctx, NumericOps.ToDoubleChecked(v, ctx), f);
             }
             if (f.Precision >= 0)
                 throw Raise.ValueError(ctx, "Precision not allowed in integer format specifier");
@@ -314,7 +310,7 @@ namespace Outbridge.PyLite.Modules.Support
                         break;
                     default:   // '\0'
                         if (f.Precision >= 0)
-                            body = FloatRepr.FormatGeneral(ctx, Math.Abs(v), f.Precision, upper, f.AltForm, false);
+                            body = FloatRepr.FormatGeneral(ctx, Math.Abs(v), f.Precision, upper, f.AltForm, false, true);
                         else
                             body = FloatRepr.Repr(Math.Abs(v));
                         break;
@@ -326,11 +322,8 @@ namespace Outbridge.PyLite.Modules.Support
             if (f.GroupChar != '\0' && !special)
                 body = GroupFloat(body, f.GroupChar);
             if (special)
-            {
-                // nan/inf: ZeroPad ignored, aligned right by default
-                return Pad(ctx, sign + body, ' ', f.Align == '\0' ? '>' : f.Align, f.Width, '>');
-            }
-            return PadNumeric(ctx, sign, "", body, f);
+                f.GroupChar = '\0';   // the zero padding of nan/inf has no separators either
+            return PadNumeric(ctx, sign, "", body, f);   // nan/inf pad as any number, '0' included (CPython 3.14)
         }
 
         private static bool SignBit(double v) { return BitConverter.DoubleToInt64Bits(v) < 0L; }
@@ -382,35 +375,55 @@ namespace Outbridge.PyLite.Modules.Support
 
         // ascii() / !a / %a: repr text with every non-ASCII char escaped (\xhh / \uhhhh / \Uhhhhhhhh).
         // The repr pass has already escaped controls and quotes; this only rewrites chars >= 0x7F.
-        internal static string AsciiEscape(string repr)
+        // The escapes are up to six times the text, so the length is counted first and refused past
+        // MaxStrChars before anything is built (15M chars took 90 MB and 8 s, then failed on the cap).
+        internal static string AsciiEscape(EvalContext ctx, string repr)
         {
-            StringBuilder sb = null;
+            long len = 0;
+            int first = -1;
             for (int i = 0; i < repr.Length; i++)
             {
                 char c = repr[i];
                 if (c < 0x7F)
                 {
-                    if (sb != null)
-                        sb.Append(c);
+                    len++;
                     continue;
                 }
-                if (sb == null)
-                    sb = new StringBuilder(repr.Length + 8).Append(repr, 0, i);
+                if (first < 0)
+                    first = i;
                 if (char.IsHighSurrogate(c) && i + 1 < repr.Length && char.IsLowSurrogate(repr[i + 1]))
                 {
-                    sb.Append("\\U").Append(char.ConvertToUtf32(c, repr[i + 1]).ToString("x8", CultureInfo.InvariantCulture));
+                    len += 10;
                     i++;
-                }
-                else if (c <= 0xFF)
-                {
-                    sb.Append("\\x").Append(((int)c).ToString("x2", CultureInfo.InvariantCulture));
                 }
                 else
                 {
-                    sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    len += c <= 0xFF ? 4 : 6;
                 }
             }
-            return sb == null ? repr : sb.ToString();
+            if (first < 0)
+                return repr;
+            ctx.Values.CheckStrLen(len);
+            var sb = new StringBuilder((int)len).Append(repr, 0, first);
+            for (int i = first; i < repr.Length; i++)
+            {
+                char c = repr[i];
+                if (c < 0x7F)
+                    sb.Append(c);
+                else if (char.IsHighSurrogate(c) && i + 1 < repr.Length && char.IsLowSurrogate(repr[i + 1]))
+                    AppendHex(sb.Append("\\U"), char.ConvertToUtf32(c, repr[++i]), 8);
+                else if (c <= 0xFF)
+                    AppendHex(sb.Append("\\x"), c, 2);
+                else
+                    AppendHex(sb.Append("\\u"), c, 4);
+            }
+            return sb.ToString();
+        }
+
+        private static void AppendHex(StringBuilder sb, int v, int digits)
+        {
+            for (int shift = (digits - 1) * 4; shift >= 0; shift -= 4)
+                sb.Append("0123456789abcdef"[(v >> shift) & 15]);
         }
 
         // Group the integer part of a positive decimal body (Decimal.__format__ reuse; comma, /3).

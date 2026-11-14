@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -32,7 +32,7 @@ namespace Outbridge.PyLite.Modules
                 ["punctuation"] = ctx.Values.Str(Punctuation),
                 ["printable"] = ctx.Values.Str(Digits + Lower + Upper + Punctuation + Whitespace),
                 ["whitespace"] = ctx.Values.Str(Whitespace),
-                ["capwords"] = BuiltinFunctionValue.Make("capwords", Capwords),
+                ["capwords"] = BuiltinFunctionValue.Make("capwords", Args.LeadKeywords("capwords", Capwords, 1, "s", "sep")),
             };
             ModuleValue template = PythonSourceModules.Load(ctx, "Outbridge.PyLite.string_template.py", "string");
             m["Template"] = template.Members["Template"];
@@ -60,17 +60,49 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.TypeError(ctx, "sep must be str or None, not " + sepArg.PyTypeName);
                 sep = ss.Value;
             }
-            string[] words = sep == null
-                ? sv.Value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
-                : sv.Value.Split(new[] { sep }, StringSplitOptions.None);
-            var sb = new StringBuilder(sv.Value.Length);
-            for (int i = 0; i < words.Length; i++)
+            if (sep != null && sep.Length == 0)
+                throw Raise.ValueError(ctx, "empty separator");
+            // Word by word with a charge for each: the whitespace split made all 8M words at once, uncharged,
+            // and the loop over them charged nothing either.
+            var sb = new BudgetStringBuilder(ctx);
+            if (sep == null)
             {
-                if (i > 0)
-                    sb.Append(sep ?? " ");
-                sb.Append(PyUnicodeCase.Capitalize(words[i]));
+                string s = sv.Value;
+                int i = 0;
+                while (true)
+                {
+                    while (i < s.Length && Support.PyUnicode.IsPythonSpace(s[i]))
+                        i++;   // str.split()'s whitespace: \x1c-\x1f and \x85 too, as CPython's
+                    if (i >= s.Length)
+                        break;
+                    int j = i;
+                    while (j < s.Length && !Support.PyUnicode.IsPythonSpace(s[j]))
+                        j++;
+                    ctx.Budget.ChargeLinear(j - i);
+                    if (sb.Length > 0)
+                        sb.Append(' ');
+                    sb.Append(PyUnicodeCase.Capitalize(s.Substring(i, j - i)));
+                    i = j;
+                }
             }
-            ctx.Values.EnsureStrLen(sb.Length);
+            else
+            {
+                // piece by piece through the bounded search, with no list of the pieces
+                string s = sv.Value;
+                int start = 0;
+                while (true)
+                {
+                    int at = PySearch.IndexOf(ctx, s, sep, start, s.Length - start);
+                    int end = at < 0 ? s.Length : at;
+                    ctx.Budget.ChargeLinear(end - start);
+                    if (start > 0)
+                        sb.Append(sep);
+                    sb.Append(PyUnicodeCase.Capitalize(s.Substring(start, end - start)));
+                    if (at < 0)
+                        break;
+                    start = at + sep.Length;
+                }
+            }
             return ctx.Values.Str(sb.ToString());
         }
     }

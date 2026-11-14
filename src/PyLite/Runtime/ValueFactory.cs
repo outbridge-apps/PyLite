@@ -16,6 +16,8 @@ namespace Outbridge.PyLite.Runtime
         private readonly ResourceLimits _limits;
         private long _identitySeq;
         internal EvalContext OwnerCtx;   // set by EvalContext ctor; used to build OrderedTable-backed values
+        private Dictionary<ScriptTypeInfo, TypeValue> _runTypesByInfo;
+        private Dictionary<string, TypeValue> _runTypesByName;
 
         private static readonly StrValue[] AsciiCache = BuildAscii();
 
@@ -40,7 +42,7 @@ namespace Outbridge.PyLite.Runtime
         {
             if (v >= IntValue.CacheLow && v <= IntValue.CacheHigh)
                 return IntValue.Cached(v);
-            // P1 fast path: same MaxIntBits gate + allocation charge as the BigInteger route, no BigInteger.
+            // Machine-int fast path: same MaxIntBits gate + allocation charge as the BigInteger route, no BigInteger.
             long bits = NumericOps.BitLengthLong(v);
             if (bits > _limits.MaxIntBits)
                 throw _budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", _limits.MaxIntBits, bits);
@@ -96,13 +98,27 @@ namespace Outbridge.PyLite.Runtime
             return new BytesValue(data);
         }
 
+        // Iterator, Type and BuiltinFunction are what host code makes for a script: what it calls in them is fenced
+        // like a HostFunctionTable.Set function (a host failure is a HostError, a ScriptExceptions object is raised
+        // as each run's own copy). The engine makes its own through EngineIterator and EngineType.
         public IteratorValue Iterator(IScriptIterator it, string typeName)
+        {
+            return EngineIterator(new Hosting.FencedIterator(it, typeName), typeName);
+        }
+
+        public IteratorValue Iterator(IScriptIterator it, string typeName,
+            System.Collections.Generic.IDictionary<string, SlotDescriptor> slots)
+        {
+            return EngineIterator(new Hosting.FencedIterator(it, typeName), typeName, slots);
+        }
+
+        internal IteratorValue EngineIterator(IScriptIterator it, string typeName)
         {
             _budget.ChargeAllocation(48);
             return new IteratorValue(it, typeName, NextIdentitySeq());
         }
 
-        public IteratorValue Iterator(IScriptIterator it, string typeName,
+        internal IteratorValue EngineIterator(IScriptIterator it, string typeName,
             System.Collections.Generic.IDictionary<string, SlotDescriptor> slots)
         {
             _budget.ChargeAllocation(48);
@@ -238,7 +254,7 @@ namespace Outbridge.PyLite.Runtime
             int slots = (defaults != null ? defaults.Length : 0)
                 + (kwDefaults != null ? kwDefaults.Length : 0)
                 + (closure != null ? closure.Length : 0);
-            _budget.ChargeAllocation(64 + 8L * slots);
+            _budget.ChargeAllocation(64 + 8L * slots + (annotations != null ? 32L * annotations.Length : 0));
             return new FunctionValue(name, info, defaults, kwDefaults, closure, globalsToken, program, body, lambdaBody, NextIdentitySeq(), annotations);
         }
 
@@ -248,10 +264,17 @@ namespace Outbridge.PyLite.Runtime
             return new BoundMethodValue(self, d);
         }
 
+        // a.m of a record, an enum member or super(): made per access, so a list of them is charged as objects are
+        internal BoundUserMethodValue BoundUserMethod(ScriptValue self, FunctionValue f)
+        {
+            _budget.ChargeAllocation(32);
+            return new BoundUserMethodValue(self, f);
+        }
+
         public BuiltinFunctionValue BuiltinFunction(string name, BuiltinDelegate fn)
         {
             _budget.ChargeAllocation(48);
-            return new BuiltinFunctionValue(name, fn, NextIdentitySeq());
+            return new BuiltinFunctionValue(name, fn, NextIdentitySeq(), true);
         }
 
         public ModuleValue Module(string name, IReadOnlyDictionary<string, ScriptValue> members)
@@ -263,8 +286,53 @@ namespace Outbridge.PyLite.Runtime
         public TypeValue Type(string name, BuiltinDelegate constructor, ScriptTypeInfo describes,
             IReadOnlyDictionary<string, ScriptValue> staticSlots, Outbridge.PyLite.Runtime.Errors.PyExceptionType excType = null)
         {
+            BuiltinDelegate fenced = constructor == null ? null
+                : (BuiltinDelegate)((self, args, kw, c) => Hosting.HostCallGuard.Invoke(name, constructor, c, args, kw));
+            return EngineType(name, fenced, describes, staticSlots, excType);
+        }
+
+        // A class the script makes (namedtuple, NamedTuple, TypedDict): its values reach it without the run's type
+        // table below, which kept each of a loop's 80K classes to the end of the run.
+        internal TypeValue ScriptMadeType(string name, BuiltinDelegate constructor, ScriptTypeInfo describes,
+            IReadOnlyDictionary<string, ScriptValue> staticSlots, Outbridge.PyLite.Runtime.Errors.PyExceptionType excType = null)
+        {
             _budget.ChargeAllocation(48);
             return new TypeValue(name, constructor, describes, staticSlots, excType, NextIdentitySeq());
+        }
+
+        internal TypeValue EngineType(string name, BuiltinDelegate constructor, ScriptTypeInfo describes,
+            IReadOnlyDictionary<string, ScriptValue> staticSlots, Outbridge.PyLite.Runtime.Errors.PyExceptionType excType = null)
+        {
+            TypeValue tv = ScriptMadeType(name, constructor, describes, staticSlots, excType);
+            if (excType == null)
+            {
+                if (describes != null)
+                {
+                    if (_runTypesByInfo == null)
+                        _runTypesByInfo = new Dictionary<ScriptTypeInfo, TypeValue>();
+                    if (!_runTypesByInfo.ContainsKey(describes))
+                        _runTypesByInfo[describes] = tv;
+                }
+                else
+                {
+                    if (_runTypesByName == null)
+                        _runTypesByName = new Dictionary<string, TypeValue>(StringComparer.Ordinal);
+                    if (!_runTypesByName.ContainsKey(name))
+                        _runTypesByName[name] = tv;
+                }
+            }
+            return tv;
+        }
+
+        // The class object this run's module made for a value type, so `type(d) is datetime.date` holds.
+        internal TypeValue RunTypeFor(ScriptTypeInfo ti)
+        {
+            TypeValue tv;
+            if (_runTypesByInfo != null && _runTypesByInfo.TryGetValue(ti, out tv))
+                return tv;
+            if (_runTypesByName != null && _runTypesByName.TryGetValue(ti.Name, out tv))
+                return tv;
+            return null;
         }
 
         // --------- PreCharge protocol: cap-check BEFORE any allocation ----------
@@ -319,7 +387,7 @@ namespace Outbridge.PyLite.Runtime
             return new StrValue(s);
         }
 
-        // ---------- charged working buffers (A8-#7): cumulative, no release ----------
+        // ---------- charged working buffers: cumulative, no release ----------
 
         public System.Text.StringBuilder RentBuilder(int capacityHint)
         {
@@ -334,6 +402,7 @@ namespace Outbridge.PyLite.Runtime
         // Call BEFORE Append; charges the growth of the builder's backing store.
         public void ChargeBuilderGrow(System.Text.StringBuilder sb, int addedChars)
         {
+            CheckStrLen((long)sb.Length + addedChars);   // f"{s}{s}" made a 32M-char str past the 16M cap
             _budget.ChargeAllocation(2L * addedChars);
         }
 
@@ -348,8 +417,28 @@ namespace Outbridge.PyLite.Runtime
             return new ExceptionValue(t, args);
         }
 
+        // One the engine raises: charged later, if the script keeps it (ExceptionValue.ChargeIfKept).
+        internal ExceptionValue RaisedException(PyExceptionType t, ScriptValue[] args)
+        {
+            return new ExceptionValue(t, args) { Uncharged = true };
+        }
+
+        // A function a module makes during a run (a decorator, an itemgetter, cmp_to_key's K): the object, its
+        // delegate and closure, and 8 bytes per value it holds. BuiltinFunctionValue.Make is for module tables;
+        // whatever a call makes comes here, so a chain of them (g = itemgetter(g)) is never free.
+        internal BuiltinFunctionValue Closure(string name, BuiltinDelegate fn, long heldValues = 0, bool argsWrapper = true)
+        {
+            // measured: an itemgetter with its Args wrapper ~250 B. One without the wrapper is charged as Function
+            // charges a def (`lambda o: o[1]` is its twin): 3.5 times that made a loop of getters a false limit.
+            _budget.ChargeAllocation((argsWrapper ? 224 : 64) + 8L * heldValues);
+            return BuiltinFunctionValue.Make(name, fn);
+        }
+
+        // Any other engine object a call makes that keeps script values alive (a cmp_to_key key, an lru_cache
+        // wrapper, super(), a QName): its header and fields.
+        internal void ChargeObject(long heldValues = 0) { _budget.ChargeAllocation(48 + 8L * heldValues); }
+
         public void PreCharge(long estimatedBytes) { _budget.PreCharge(estimatedBytes); }
-        internal void ChargeBytes(long bytes) { _budget.ChargeAllocation(bytes); }
         internal long NextIdentitySeq() { return ++_identitySeq; }
 
         // id(): a number handed out on first ask and remembered, so id(a) == id(b) exactly when `a is b`
@@ -369,7 +458,5 @@ namespace Outbridge.PyLite.Runtime
             _ids.Add(v, id);
             return id;
         }
-        internal Budget Budget { get { return _budget; } }
-        internal ResourceLimits Limits { get { return _limits; } }
     }
 }

@@ -121,16 +121,7 @@ namespace Outbridge.PyLite.Modules.Support
 
         public static bool IsNegZero(double x) { return BitConverter.DoubleToInt64Bits(x) == long.MinValue; }
 
-        // ---- part 2: expm1/log1p/asinh/acosh/atanh (net472 BCL lacks these) ----
-
-        public static double Expm1(double x)
-        {
-            if (x == 0.0)
-                return x;   // preserve -0.0
-            if (Math.Abs(x) < 1e-5)
-                return x + 0.5 * x * x + x * x * x / 6.0;
-            return Math.Exp(x) - 1.0;
-        }
+        // ---- part 2: log1p/asinh/acosh/atanh (net472 BCL lacks these) ----
 
         public static double Log1p(double x)
         {

@@ -40,10 +40,27 @@ namespace Outbridge.PyLite.Runtime.Values
             BytesValue o = other as BytesValue;
             if (o == null || o.Data.Length != Data.Length)
                 return false;
-            for (int i = 0; i < Data.Length; i++)
-                if (Data[i] != o.Data[i])
-                    return false;
-            return true;
+            if (ReferenceEquals(o.Data, Data))
+                return true;
+            return FirstDifference(Data, o.Data, Data.Length, ctx) < 0;
+        }
+
+        // The first index where a and b differ below n, or -1; a step per chunk, as PyOps.StrEquals charges:
+        // a tuple of a thousand 16 MB bytes compared on one step ran for minutes.
+        private static int FirstDifference(byte[] a, byte[] b, int n, EvalContext ctx)
+        {
+            for (int start = 0; start < n; start += BudgetCost.LinearChunkSize)
+            {
+                int end = Math.Min(n, start + BudgetCost.LinearChunkSize);
+                if (ctx != null && n > BudgetCost.LinearChunkSize)
+                    ctx.Budget.Step(BudgetCost.LinearChunk);
+                for (int i = start; i < end; i++)
+                {
+                    if (a[i] != b[i])
+                        return i;
+                }
+            }
+            return -1;
         }
 
         protected internal override bool TryCompareLeafCore(ScriptValue other, EvalContext ctx, int depth, out int cmp)
@@ -55,15 +72,8 @@ namespace Outbridge.PyLite.Runtime.Values
                 return false;
             }
             int n = Math.Min(Data.Length, o.Data.Length);
-            for (int i = 0; i < n; i++)
-            {
-                if (Data[i] != o.Data[i])
-                {
-                    cmp = Data[i] < o.Data[i] ? -1 : 1;
-                    return true;
-                }
-            }
-            cmp = Data.Length.CompareTo(o.Data.Length);
+            int at = ReferenceEquals(o.Data, Data) ? -1 : FirstDifference(Data, o.Data, n, ctx);
+            cmp = at >= 0 ? (Data[at] < o.Data[at] ? -1 : 1) : Data.Length.CompareTo(o.Data.Length);
             return true;
         }
 
@@ -83,11 +93,6 @@ namespace Outbridge.PyLite.Runtime.Values
                 return true;
             }
             throw Raise.TypeError(ctx, "a bytes-like object is required, not '" + item.PyTypeName + "'");
-        }
-
-        internal int IndexOf(EvalContext ctx, byte[] needle, int start)
-        {
-            return PySearch.IndexOf(ctx, Data, needle, start, Data.Length);
         }
 
         protected internal override ScriptValue BinaryOpCore(PyBinOp op, ScriptValue other, bool reflected, EvalContext ctx)
@@ -196,8 +201,10 @@ namespace Outbridge.PyLite.Runtime.Values
         }
     }
 
-    internal sealed class BytesIterator : ScriptIteratorBase
+    internal sealed class BytesIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly BytesValue _b;
         private readonly bool _reverse;
         private int _pos;   // forward: the next index; reverse: the count still to yield

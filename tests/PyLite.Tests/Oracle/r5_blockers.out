@@ -1,0 +1,34 @@
+StopIteration ()
+StopIteration ('boom',)
+StopIteration ('boom',)
+StopIteration ('boom',)
+StopIteration ()
+2
+StopIteration ()
+StopIteration ()
+OverflowError Python int too large to convert to C int
+OverflowError Python int too large to convert to C int
+OverflowError Python int too large to convert to C int
+OverflowError days=1000000000; must have magnitude <= 999999999
+OverflowError Python int too large to convert to C int
+OverflowError days=1999999998; must have magnitude <= 999999999
+OverflowError Python int too large to convert to C int
+OverflowError Python int too large to convert to C int
+'Exceeds the limit (4300 digits) for inte'
+OverflowError Python int too large to convert to C ssize_t
+"'utf-8' codec can't decode byte 0x62 in position 1: x"
+'a'
+1
+1
+'(?x:(a) # (\n)(?-x:#)'
+'a#'
+('b',)
+'aé'
+'aaa'
+'aaa'
+'aaa'
+PatternError ('missing ), unterminated comment at position 0',)
+'ab'
+'#a'
+'#a'
+'\n' '\n' '\n'

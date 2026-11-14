@@ -138,7 +138,11 @@ for bad in ('(', '[a', 'a**', '(?P<1>x)', r'\1', '(?P<n>a)(?P<n>b)', '*a', 'a{2,
         assert False, bad
     except re.error:
         pass
-assert re.search('(?<=a+)b', 'aaab') is not None                # dialect: variable-width lookbehind is accepted (.NET)
+try:
+    re.compile('(?<=a+)b')                                       # look-behind requires fixed-width pattern
+    assert False
+except re.error:
+    pass
 for bad in ():
     try:
         re.compile(bad)
@@ -214,9 +218,14 @@ assert re.compile('a').flags == re.U == 32 and re.compile('a', re.U).flags == 32
 assert re.compile('a', re.I).flags == re.I | re.U and re.compile('a', re.M | re.S | re.X).flags == 120
 assert re.compile('a', re.A).flags == re.A and re.compile('a', re.A | re.I).flags == re.A | re.I
 assert re.compile('(?a)a').flags == re.A | re.U and re.compile('(?i)a').flags == re.I | re.U
-for bad in (lambda: re.compile('x', re.A | re.U), lambda: re.compile('x', re.L), lambda: re.compile('(?L)x')):
+for bad in (lambda: re.compile('x', re.A | re.U), lambda: re.compile('x', re.L)):
     try:
         bad()
         assert False
     except ValueError:                          # a contradictory COMBINATION is ValueError, not re.error
         pass
+try:
+    re.compile('(?L)x')                         # inline, it is the parser's: bad inline flags ... at position 3
+    assert False
+except re.error:
+    pass

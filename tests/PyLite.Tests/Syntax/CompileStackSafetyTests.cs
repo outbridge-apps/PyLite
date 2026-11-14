@@ -2,12 +2,13 @@ using System;
 using System.Text;
 using System.Threading;
 using Outbridge.PyLite.Hosting;
+using Outbridge.PyLite.Syntax;
 using Xunit;
 
 namespace Outbridge.PyLite.Tests.Syntax
 {
-    // Compile runs on the CALLING thread (R-14 cache), so every compile-phase walker must convert a
-    // near-exhausted stack into a SyntaxError. An elif chain is the adversarial shape: it parses
+    // The engine compiles on a thread of its own (review 6), but the compiler itself must still turn a
+    // near-exhausted stack into a SyntaxError on any thread: these call it directly on a small one. An elif chain is the adversarial shape: it parses
     // ITERATIVELY (no suite nesting, so MaxStmtDepth/MaxExprDepth never trip) yet synthesizes IfNode
     // nesting as deep as the chain is long, which every later walker descends recursively. The
     // resolver/folder probed their walks, but ResolverValidate did not — a window just below the
@@ -31,7 +32,6 @@ namespace Outbridge.PyLite.Tests.Syntax
         [Fact]
         public void ElifChainLadderNeverCrashesASmallCompileThread()
         {
-            var engine = new ScriptEngine(new EngineOptions());
             for (int depth = 500; depth <= 12000; depth += 500)
             {
                 string src = ElifChain(depth);
@@ -41,7 +41,7 @@ namespace Outbridge.PyLite.Tests.Syntax
                 {
                     try
                     {
-                        engine.Compile(src, "elif-ladder");
+                        Compiler.Compile(src, "elif-ladder", SyntaxLimits.Default);
                         compiled = true;
                     }
                     catch (Exception ex)
@@ -52,7 +52,7 @@ namespace Outbridge.PyLite.Tests.Syntax
                 t.Start();
                 t.Join();
                 if (!compiled)
-                    Assert.True(seen is PyLiteSyntaxException,
+                    Assert.True(seen is PySyntaxErrorException,
                         "depth " + depth + ": expected clean SyntaxError, got " + (seen == null ? "nothing" : seen.GetType().Name));
             }
         }
@@ -71,12 +71,43 @@ namespace Outbridge.PyLite.Tests.Syntax
             Assert.Equal("250", res.ScalarsOut["r"]);
         }
 
-        // The oversized chain fails CLEANLY through the public Run(string, ...) path too (no throw,
-        // Kind == SyntaxError) — this is what a production host actually observes after the fix.
-        [Fact]
-        public void HugeElifChainYieldsSyntaxErrorThroughRun()
+        // A starred display element parses below ParseTest, so `[*[*[*...]]]` recursed with no depth count
+        // and 3,000 levels (9 KB of source) overflowed the caller's stack. Every starred shape now ends in
+        // the expression-depth SyntaxError.
+        [Theory]
+        [InlineData("x = ", "[*", "a", "]")]
+        [InlineData("x = ", "(*", "a", ",)")]
+        [InlineData("x = ", "{*", "a", "}")]
+        [InlineData("for ", "[*", "a", "]")]
+        public void NestedStarredElementsAreASyntaxErrorOnASmallThread(string head, string open, string leaf, string close)
         {
-            var engine = new ScriptEngine(new EngineOptions());
+            var sb = new StringBuilder(head);
+            for (int i = 0; i < 3000; i++)
+                sb.Append(open);
+            sb.Append(leaf);
+            for (int i = 0; i < 3000; i++)
+                sb.Append(close);
+            if (head == "for ")
+                sb.Append(" in []: pass");
+            string src = sb.ToString();
+            Exception seen = null;
+            var t = new Thread(() =>
+            {
+                try { Compiler.Compile(src, "starred", SyntaxLimits.Default); }
+                catch (Exception ex) { seen = ex; }
+            }, 256 * 1024);
+            t.Start();
+            t.Join();
+            // the depth limit or, on this small thread, the stack probe before it: both a clean SyntaxError
+            Assert.IsType<PySyntaxErrorException>(seen);
+        }
+
+        // Through the public Run(string, ...) path the chain compiles on the run's 32 MB thread (review 6, e1-02):
+        // no throw, and the same answer from a 256 KB caller as from any other, where it used to be a SyntaxError.
+        [Fact]
+        public void HugeElifChainRunsTheSameFromASmallThread()
+        {
+            var engine = new ScriptEngine(new EngineOptions { CompiledScriptCacheEntries = 0 });
             string src = ElifChain(40000);
             Exception seen = null;
             RunResult res = null;
@@ -88,8 +119,9 @@ namespace Outbridge.PyLite.Tests.Syntax
             t.Start();
             t.Join();
             Assert.Null(seen);
-            Assert.False(res.Succeeded);
-            Assert.Equal(ScriptErrorKind.SyntaxError, res.Error.Kind);
+            RunResult reference = engine.Run(src, new RunRequest());
+            Assert.True(res.Succeeded, res.Succeeded ? null : res.Error.Message);
+            Assert.Equal(reference.Succeeded, res.Succeeded);
         }
     }
 }

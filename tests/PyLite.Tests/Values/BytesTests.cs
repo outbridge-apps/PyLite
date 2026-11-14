@@ -163,7 +163,7 @@ namespace Outbridge.PyLite.Tests.Modern
         {
             var ex = Assert.Throws<ScriptException>(() => Ev.Run("x = '\\u20ac'.encode('cp866')\n"));
             Assert.Equal("UnicodeEncodeError", ex.Value.ExcType.Name);
-            Assert.Equal("'cp866' codec can't encode character '\\u20ac' in position 0: character maps to <undefined>",
+            Assert.Equal("'charmap' codec can't encode character '\\u20ac' in position 0: character maps to <undefined>",
                 ex.Value.GetMessageText(Rt.Ctx()));
         }
 
@@ -203,11 +203,11 @@ namespace Outbridge.PyLite.Tests.Modern
         // the code pages' undefined positions have no mapping, as in CPython (the framework's tables
         // round-trip them to the same-numbered C1 control)
         [InlineData("x = b'ab\\x98'.decode('cp1251')", "UnicodeDecodeError",
-            "'cp1251' codec can't decode byte 0x98 in position 2: character maps to <undefined>")]
+            "'charmap' codec can't decode byte 0x98 in position 2: character maps to <undefined>")]
         [InlineData("x = b'\\x81'.decode('cp1252')", "UnicodeDecodeError",
-            "'cp1252' codec can't decode byte 0x81 in position 0: character maps to <undefined>")]
+            "'charmap' codec can't decode byte 0x81 in position 0: character maps to <undefined>")]
         [InlineData("x = '\\u0448'.encode('cp1252')", "UnicodeEncodeError",
-            "'cp1252' codec can't encode character '\\u0448' in position 0: character maps to <undefined>")]
+            "'charmap' codec can't encode character '\\u0448' in position 0: character maps to <undefined>")]
         [InlineData("x = b'abc'.decode('utf-16')", "UnicodeDecodeError",
             "'utf-16' codec can't decode byte 0x63 in position 2: truncated data")]
         public void ExtraCodecErrors(string src, string excType, string message)
@@ -257,7 +257,7 @@ namespace Outbridge.PyLite.Tests.Modern
         [InlineData("x = '\\ud800'.encode('utf-16-le')", "UnicodeEncodeError",
             "'utf-16-le' codec can't encode character '\\ud800' in position 0: surrogates not allowed")]
         [InlineData("x = b'\\x00\\xd8'.decode('utf-16-le')", "UnicodeDecodeError",
-            "'utf-16-le' codec can't decode bytes in position 0-1: illegal encoding")]
+            "'utf-16-le' codec can't decode bytes in position 0-1: unexpected end of data")]
         // surrogateescape only round-trips what it could have escaped
         [InlineData("x = '\\xfc'.encode('ascii', 'surrogateescape')", "UnicodeEncodeError",
             "'ascii' codec can't encode character '\\xfc' in position 0: ordinal not in range(128)")]
@@ -309,7 +309,7 @@ namespace Outbridge.PyLite.Tests.Modern
         [InlineData("True.denominator", "1")]
         [InlineData("True.conjugate()", "1")]
         [InlineData("True.as_integer_ratio()", "(1, 1)")]
-        [InlineData("bool.from_bytes(b'\\x01', 'big')", "1")]
+        [InlineData("bool.from_bytes(b'\\x01', 'big')", "True")]   // cls(result): a bool, as in CPython
         [InlineData("type(True.real).__name__", "'int'")]
         [InlineData("type(True.conjugate()).__name__", "'int'")]
         [InlineData("type(True).__name__", "'bool'")]        // still its own type

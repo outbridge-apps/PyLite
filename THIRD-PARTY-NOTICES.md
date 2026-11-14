@@ -117,10 +117,34 @@ Agreement.
 "Python" is a trademark of the Python Software Foundation. PyLite is not affiliated with or
 endorsed by the Python Software Foundation.
 
+## fdlibm (Sun Microsystems)
+
+`src/PyLite/Modules/Support/Numeric/FdLibm.cs` (the `sin`, `cos`, `tan` and `expm1` kernels) and
+the `erf` and `erfc` functions of `src/PyLite/Modules/MathModule.Special.cs` (from `s_erf.c`) are
+C# ports of fdlibm. Its notice, which must be preserved:
+
+```
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunPro, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+```
+
+## fast_float (Daniel Lemire and contributors)
+
+`src/PyLite/Modules/Support/Numeric/NearestDouble.cs` follows the Eisel-Lemire algorithm of
+fast_float's `compute_float`, which is available under the MIT license or the Apache License 2.0.
+The algorithm was rewritten in C#; the table of powers of five is computed from exact integers
+rather than copied.
+
 ## Unicode Character Database and CLDR (Unicode, Inc.)
 
-The generated tables `PyUnicodeCase.Tables.g.cs`, `PyUnicodeProps.Tables.g.cs` and
-`PyUnicodeNames.Tables.g.cs` are derived from the Unicode Character Database, and
+The generated tables `PyUnicodeCase.Tables.g.cs`, `PyUnicodeProps.Tables.g.cs`,
+`PyUnicodeNames.Tables.g.cs` and `PyUnicodeClass.Tables.g.cs` (the character classes, read off
+CPython 3.14's `unicodedata`; CPython's own part is covered by the PSF section above) are derived
+from the Unicode Character Database, and
 `WindowsZones.g.cs` from the CLDR `windowsZones.xml` mapping. Both are used under the Unicode
 License v3:
 

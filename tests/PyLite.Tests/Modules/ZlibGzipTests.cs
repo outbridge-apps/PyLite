@@ -65,8 +65,8 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = gzip.decompress(gzip.compress(b'') + gzip.compress(b'x'))", "b'x'")]
         [InlineData("r = gzip.decompress(gzip.compress(b'a') + gzip.compress(b'') + gzip.compress(b'cd'))", "b'acd'")]
         [InlineData("r = gzip.decompress(gzip.compress(b'a'))", "b'a'")]
-        [InlineData("r = zlib.decompress(gzip.compress(b'a') + gzip.compress(b'b'), 47)", "b'ab'")]
-        [InlineData("r = zlib.decompress(gzip.compress(b'a') + gzip.compress(b'b'), 31)", "b'ab'")]
+        [InlineData("r = zlib.decompress(gzip.compress(b'a') + gzip.compress(b'b'), 47)", "b'a'")]   // one member, the rest ignored (CPython)
+        [InlineData("r = zlib.decompress(gzip.compress(b'a') + gzip.compress(b'b'), 31)", "b'a'")]   // one member, the rest ignored (CPython)
         // a payload that CONTAINS the gzip magic is not mistaken for a member boundary
         [InlineData("r = gzip.decompress(gzip.compress(b'\\x1f\\x8b\\x08' * 40)) == b'\\x1f\\x8b\\x08' * 40", "True")]
         [InlineData("g = gzip.compress(b'x' * 5000)\nr = len(gzip.decompress(g + g))", "10000")]
@@ -89,7 +89,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("x = gzip.decompress(b'nonsense!')", "BadGzipFile")]
         [InlineData("x = gzip.decompress(zlib.compress(b'zlib stream'))", "BadGzipFile")]
         [InlineData("g = gzip.compress(b'hello')\nx = gzip.decompress(g[:-5] + bytes([g[-5] ^ 1]) + g[-4:])", "BadGzipFile")]
-        [InlineData("g = gzip.compress(b'hello')\nx = gzip.decompress(g[:12])", "BadGzipFile")]
+        [InlineData("g = gzip.compress(b'hello')\nx = gzip.decompress(g[:12])", "EOFError")]
         [InlineData("x = gzip.compress(b'x', 10)", "ValueError")]
         [InlineData("x = gzip.compress(b'x', 1, 0)", "TypeError")]
         // Checksum-seed / mtime type confusion: these once leaked an InvalidCastException as an
@@ -100,19 +100,23 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("x = zlib.crc32(b'x', [1, 2])", "TypeError")]
         [InlineData("x = zlib.adler32(b'x', 'notanint')", "TypeError")]
         [InlineData("import binascii\nx = binascii.crc32(b'x', 'notanint')", "TypeError")]
-        [InlineData("x = gzip.compress(b'x', mtime='notanint')", "TypeError")]
+        // mtime goes through int() and struct's "<L", as CPython's header does
+        [InlineData("x = gzip.compress(b'x', mtime='notanint')", "ValueError")]
         [InlineData("x = gzip.compress(b'x', mtime=[1])", "TypeError")]
+        [InlineData("x = gzip.compress(b'x', mtime=10 ** 100)", "error")]
+        [InlineData("x = gzip.compress(b'x', mtime=-1)", "error")]
         public void Errors(string body, string excType)
         {
             Assert.Equal(excType, Raises(body).Value.ExcType.Name);
         }
 
-        // A huge/negative int seed is accepted (masked to 32 bits), like CPython.
+        // A huge/negative int seed is accepted (masked to 32 bits), like CPython; an mtime is packed "<L", not masked.
         [Theory]
         [InlineData("r = zlib.crc32(b'', 10 ** 100) == (10 ** 100) & 0xffffffff", "True")]
         [InlineData("r = zlib.crc32(b'', -5) == (-5) & 0xffffffff", "True")]
         [InlineData("r = zlib.adler32(b'', 10 ** 100) == (10 ** 100) & 0xffffffff", "True")]
-        [InlineData("g = gzip.compress(b'x', mtime=10 ** 100)\nr = len(g) > 0", "True")]
+        [InlineData("g = gzip.compress(b'x', mtime=2 ** 32 - 1)\nr = g[4:8].hex()", "'ffffffff'")]
+        [InlineData("g = gzip.compress(b'x', mtime=1.5)\nr = g[4:8].hex()", "'01000000'")]
         public void SeedAndMtimeMaskLargeInts(string body, string expected)
         {
             Assert.Equal(expected, Body(body));

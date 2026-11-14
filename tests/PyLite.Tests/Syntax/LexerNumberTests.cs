@@ -37,18 +37,18 @@ namespace Outbridge.PyLite.Tests.Syntax
 
         [Fact] public void ExactPastDouble() => Assert.Equal((BigInteger)9007199254740993L, Int("9007199254740993"));
 
+        // CPython 3.14's tokenizer texts
         [Theory]
-        [InlineData("0777")]
-        [InlineData("0x")]
-        [InlineData("0o8")]
-        [InlineData("0b2")]
-        [InlineData("1e")]
-        [InlineData("1e+")]
-        public void InvalidToken(string src)
+        [InlineData("0777", "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers")]
+        [InlineData("0x", "invalid hexadecimal literal")]
+        [InlineData("0o8", "invalid digit '8' in octal literal")]
+        [InlineData("0b2", "invalid digit '2' in binary literal")]
+        [InlineData("1e", "invalid decimal literal")]
+        [InlineData("1e+", "invalid decimal literal")]
+        public void InvalidNumber(string src, string message)
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go(src));
-            Assert.Equal("invalid token", e.Message);
-            Assert.Equal(1, e.Col);
+            Assert.Equal(message, e.Message);
         }
 
         [Theory]  // PEP 515 (RFC-003 §2.1): underscores between digits are accepted
@@ -124,6 +124,19 @@ namespace Outbridge.PyLite.Tests.Syntax
             new Lexer(new string('9', 4300), SyntaxLimits.Default).Next(); // ok
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go(new string('9', 4301)));
             Assert.Equal("integer literal too long (limit is 4300 digits)", e.Message);
+        }
+
+        // The power-of-two bases have no digit limit in CPython; the long ones are parsed in one linear pass.
+        [Theory]
+        [InlineData("0x", 'f', 16)]
+        [InlineData("0o", '7', 8)]
+        [InlineData("0b", '1', 2)]
+        public void RadixLiteralsHaveNoDigitCap(string prefix, char digit, int radix)
+        {
+            int log2 = radix == 16 ? 4 : radix == 8 ? 3 : 1;
+            var v = (System.Numerics.BigInteger)L.Go(prefix + new string(digit, 100000))[0].Value;
+            Assert.Equal((System.Numerics.BigInteger.One << (100000 * log2)) - 1, v);
+            Assert.Equal(new System.Numerics.BigInteger(0x2DF), (System.Numerics.BigInteger)L.Go(prefix == "0x" ? "0x2df" : prefix == "0o" ? "0o1337" : "0b1011011111")[0].Value);
         }
     }
 }

@@ -24,6 +24,6 @@ namespace Outbridge.PyLite.Tests.Runtime
         }
         [Fact] public void MemoryErrorAbsent() => Assert.Null(PyExceptionTypes.GetByName("MemoryError"));
         [Fact] public void KeyErrorParentIsLookup() => Assert.Equal("LookupError", PyExceptionTypes.GetByName("KeyError").Parent.Name);
-        [Fact] public void TotalTypeCount() => Assert.Equal(28, PyExceptionTypes.All.Count);   // + RecursionError (2026-09-11), EOFError (2026-10-28)
+        [Fact] public void TotalTypeCount() => Assert.Equal(38, PyExceptionTypes.All.Count);   // + RecursionError (2026-09-11), EOFError (2026-10-28), ten more (2026-11-08)
     }
 }

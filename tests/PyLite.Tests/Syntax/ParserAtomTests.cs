@@ -58,7 +58,7 @@ namespace Outbridge.PyLite.Tests.Syntax
         [InlineData("f'{x=!s}'", "(FStr 'x=' {x!s})")]
         public void FStrings(string src, string expected) => Assert.Equal(expected, AstDump.Of(src));
 
-        [Fact] public void StarredInGroupingRejected() => Assert.Equal("can't use starred expression here", Err("(*x)"));
+        [Fact] public void StarredInGroupingRejected() => Assert.Equal("cannot use starred expression here", Err("(*x)"));
         [Fact] public void InvalidConversion() => Assert.Contains("invalid conversion character", Err("f'{x!q}'"));
     }
 }

@@ -15,14 +15,15 @@ namespace Outbridge.PyLite.Modules
     {
         private static void AddModern(EvalContext ctx, Dictionary<string, ScriptValue> m)
         {
-            m["fmean"] = BuiltinFunctionValue.Make("fmean", FMean);
-            m["geometric_mean"] = Fn("geometric_mean", GeometricMean);
-            m["harmonic_mean"] = BuiltinFunctionValue.Make("harmonic_mean", HarmonicMean);
-            m["multimode"] = Fn("multimode", MultiMode);
+            m["fmean"] = BuiltinFunctionValue.Make("fmean", Args.LeadKeywords("fmean", FMean, 1, "data", "weights"));
+            m["geometric_mean"] = Fn("geometric_mean", GeometricMean, "data");
+            m["harmonic_mean"] = BuiltinFunctionValue.Make("harmonic_mean", Args.LeadKeywords("harmonic_mean", HarmonicMean, 1, "data", "weights"));
+            m["multimode"] = Fn("multimode", MultiMode, "data");
             m["quantiles"] = BuiltinFunctionValue.Make("quantiles", Quantiles);
-            m["correlation"] = BuiltinFunctionValue.Make("correlation", Correlation);
-            m["covariance"] = Fn("covariance", Covariance);
-            m["linear_regression"] = BuiltinFunctionValue.Make("linear_regression", LinearRegression);
+            m["correlation"] = BuiltinFunctionValue.Make("correlation", Args.KnownKeywords("correlation", 2, Correlation, "x", "y", "method"));
+            m["covariance"] = Fn("covariance", Covariance, "x", "y");
+            m["LinearRegression"] = LinearRegressionType(ctx);
+            m["linear_regression"] = BuiltinFunctionValue.Make("linear_regression", Args.KnownKeywords("linear_regression", 2, LinearRegression, "x", "y", "proportional"));
         }
 
         private static ScriptException StatsError(EvalContext ctx, string msg)
@@ -77,19 +78,63 @@ namespace Outbridge.PyLite.Modules
         }
 
         // ---- geometric_mean (3.8) ----
+        // CPython 3.14: fsum(map(log, positives)) and exp of the mean. Each item is logged as math.log does, so
+        // a 400-digit int has a log (it was inf); a zero makes the answer 0.0, a negative is an error.
         private static ScriptValue GeometricMean(EvalContext ctx, ScriptValue[] a)
         {
-            double[] xs = Doubles(ctx, Arg(ctx, a, 0));
-            if (xs.Length == 0)
-                throw StatsError(ctx, "geometric mean requires a non-empty dataset containing positive numbers");
-            var logs = new double[xs.Length];
-            for (int i = 0; i < xs.Length; i++)
+            List<ScriptValue> items = Materialize(ctx, Arg(ctx, a, 0));
+            ctx.Values.PreCharge(8L * items.Count);
+            var logs = new double[items.Count];   // the reading charged a step per item
+            int k = 0;
+            bool foundZero = false;
+            foreach (ScriptValue x in items)
             {
-                if (xs[i] <= 0.0)
-                    throw StatsError(ctx, "geometric mean requires a non-empty dataset containing positive numbers");
-                logs[i] = Math.Log(xs[i]);
+                FloatValue fv = x as FloatValue;
+                int sign = fv != null ? (fv.Value > 0.0 || double.IsNaN(fv.Value) ? 1 : fv.Value == 0.0 ? 0 : -1) : SignOf(ctx, x);
+                if (sign > 0)
+                    logs[k++] = fv != null ? Math.Log(fv.Value) : MathModule.LogHelperDouble(ctx, x, Ln);
+                else if (sign == 0)
+                    foundZero = true;
+                else
+                    throw Raise.Make(ctx, PyExceptionTypes.StatisticsError, new[] { (ScriptValue)ctx.Values.Str("No negative inputs allowed"), x });
             }
-            return ctx.Values.Float(Math.Exp(ShewchukSum.Sum(ctx, logs) / xs.Length));
+            if (items.Count == 0)
+                throw StatsError(ctx, "Must have a non-empty dataset");
+            if (k < logs.Length)
+                Array.Resize(ref logs, k);
+            double total = ShewchukSum.Sum(ctx, logs);
+            if (double.IsNaN(total))
+                return ctx.Values.Float(NumericOps.PyNaN);
+            if (foundZero)
+                return ctx.Values.Float(double.IsPositiveInfinity(total) ? NumericOps.PyNaN : 0.0);
+            double r = Math.Exp(total / items.Count);
+            if (double.IsInfinity(r) && !double.IsInfinity(total))
+                throw Raise.Overflow(ctx, "math range error");
+            return ctx.Values.Float(r);
+        }
+
+        // A value's sign for the negative and zero tests, exact for an int: a 400-digit int has no float, and
+        // CPython never converts it here (harmonic_mean([10**400, 1]) is 2.0).
+        private static double SignProbe(EvalContext ctx, ScriptValue v)
+        {
+            IntValue iv = v as IntValue;
+            return iv != null && !iv.IsSmall ? iv.Value.Sign : ToDouble(ctx, v);
+        }
+
+        private static readonly Func<double, double> Ln = Math.Log;
+
+        // geometric_mean's `x > 0.0 or math.isnan(x)` (1: logged), `x == 0.0` (0), else -1 for a non-float: an
+        // int directly, anything else through the script's own comparisons.
+        private static int SignOf(EvalContext ctx, ScriptValue x)
+        {
+            ctx.Budget.Step();   // the slow path may call the script's comparisons
+            IntValue iv = x as IntValue;
+            if (iv != null)
+                return iv.IsSmall ? Math.Sign(iv.Small) : iv.Value.Sign;
+            FloatValue zero = ctx.Values.Float(0.0);
+            if (PyOps.RichCompare(PyCmpOp.Gt, x, zero, ctx).IsTruthy(ctx) || double.IsNaN(MathModule.AsDouble(ctx, x)))
+                return 1;
+            return PyOps.RichCompare(PyCmpOp.Eq, x, zero, ctx).IsTruthy(ctx) ? 0 : -1;
         }
 
         // ---- harmonic_mean (3.6; weights= 3.10) ----
@@ -112,32 +157,38 @@ namespace Outbridge.PyLite.Modules
                 if (weights.Count != data.Count)
                     throw StatsError(ctx, "Number of weights does not match data size");
             }
+            if (data.Count == 1 && weights == null)
+            {
+                if (SignProbe(ctx, data[0]) < 0.0)
+                    throw StatsError(ctx, "harmonic mean does not support negative values");
+                return data[0];   // CPython returns the one value as it is
+            }
             var ignore = new SumInfo();
+            FractionValue one = FractionValue.Create(ctx, System.Numerics.BigInteger.One, System.Numerics.BigInteger.One);
             FractionValue total = FractionValue.Create(ctx, System.Numerics.BigInteger.Zero, System.Numerics.BigInteger.One);
-            FractionValue wTotal = FractionValue.Create(ctx, System.Numerics.BigInteger.Zero, System.Numerics.BigInteger.One);
+            FractionValue wTotal = total;
             for (int i = 0; i < data.Count; i++)
             {
                 ctx.Budget.Step();
-                double x = ToDouble(ctx, data[i]);
-                double w = weights != null ? ToDouble(ctx, weights[i]) : 1.0;
+                double x = SignProbe(ctx, data[i]);
+                double w = weights != null ? SignProbe(ctx, weights[i]) : 1.0;
                 if (x < 0.0 || w < 0.0)
                     throw StatsError(ctx, "harmonic mean does not support negative values");
+                FractionValue fx, fw = one;
+                if (weights != null && !ExactRatio(ctx, weights[i], out fw, ref ignore))
+                    return ctx.Values.Float(NumericOps.PyNaN);
+                wTotal = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, wTotal, fw, ctx);
+                if (w == 0.0 || double.IsPositiveInfinity(x))
+                    continue;                      // `w / x if w else 0`; w / inf is 0.0
                 if (x == 0.0)
-                    return ctx.Values.Float(0.0);
-                FractionValue fx, fw;
+                    return ctx.Values.Int(0);      // CPython answers its ZeroDivisionError with 0
                 if (!ExactRatio(ctx, data[i], out fx, ref ignore))
-                    return ctx.Values.Float(double.NaN);   // nan/inf input
-                if (weights != null)
-                {
-                    if (!ExactRatio(ctx, weights[i], out fw, ref ignore))
-                        return ctx.Values.Float(double.NaN);
-                }
-                else
-                    fw = FractionValue.Create(ctx, System.Numerics.BigInteger.One, System.Numerics.BigInteger.One);
+                    return ctx.Values.Float(NumericOps.PyNaN);   // a NaN
                 FractionValue recip = (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, fw, fx, ctx);
                 total = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, total, recip, ctx);
-                wTotal = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, wTotal, fw, ctx);
             }
+            if (total.Num.IsZero)
+                throw StatsError(ctx, "Weighted sum must be positive");
             FractionValue mean = (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, wTotal, total, ctx);
             return ctx.Values.Float(mean.AsDouble(ctx));
         }
@@ -157,7 +208,7 @@ namespace Outbridge.PyLite.Modules
             }
             System.Numerics.BigInteger best = 0;
             var t = counts.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
@@ -165,7 +216,7 @@ namespace Outbridge.PyLite.Modules
                     best = ((IntValue)v).Value;
             }
             ListValue result = ctx.Values.List(4);
-            for (int p = 0; p < t.EntriesUsed; p++)
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
@@ -199,7 +250,9 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 1; i < n; i++)
                 {
                     ctx.Budget.Step();
-                    int j = i * mm / n, delta = i * mm - j * n;
+                    long t = (long)i * mm;   // i * mm overflowed int past 2**31 (quantiles of 100001 points, n=30000)
+                    int j = (int)(t / n);
+                    long delta = t - (long)j * n;
                     result.Add(Interpolate(ctx, data[j], data[j + 1], n - delta, delta, nVal), ctx);
                 }
                 return result;
@@ -210,16 +263,17 @@ namespace Outbridge.PyLite.Modules
             for (int i = 1; i < n; i++)
             {
                 ctx.Budget.Step();
-                int j = i * m / n;
+                long t = (long)i * m;
+                int j = (int)(t / n);
                 j = j < 1 ? 1 : (j > ld - 1 ? ld - 1 : j);
-                int delta = i * m - j * n;
+                long delta = t - (long)j * n;
                 result.Add(Interpolate(ctx, data[j - 1], data[j], n - delta, delta, nVal), ctx);
             }
             return result;
         }
 
         // (lo*(n-delta) + hi*delta) / n
-        private static ScriptValue Interpolate(EvalContext ctx, ScriptValue lo, ScriptValue hi, int wLo, int wHi, IntValue n)
+        private static ScriptValue Interpolate(EvalContext ctx, ScriptValue lo, ScriptValue hi, long wLo, long wHi, IntValue n)
         {
             ScriptValue s = PyOps.BinaryOp(PyBinOp.Add,
                 PyOps.BinaryOp(PyBinOp.Mul, lo, ctx.Values.Int(wLo), ctx),
@@ -265,14 +319,51 @@ namespace Outbridge.PyLite.Modules
             return ShewchukSum.Sum(ctx, prod);
         }
 
+        // _rank(data, start=(n - 1) / -2): ties take the mean of their places. Centering first kept the order and the ties.
+        private static double[] CenteredRanks(EvalContext ctx, double[] xs)
+        {
+            ctx.Budget.ChargeLinear(xs.Length);
+            ctx.Values.PreCharge(12L * xs.Length);
+            int n = xs.Length;
+            var order = new int[n];
+            for (int i = 0; i < n; i++)
+                order[i] = i;
+            Array.Sort((double[])xs.Clone(), order);
+            var ranks = new double[n];
+            double start = (n - 1) / -2.0;
+            for (int i = 0; i < n;)
+            {
+                int j = i;
+                while (j + 1 < n && xs[order[j + 1]] == xs[order[i]])
+                    j++;
+                double rank = start + (i + j) / 2.0;
+                for (int k = i; k <= j; k++)
+                    ranks[order[k]] = rank;
+                i = j + 1;
+            }
+            return ranks;
+        }
+
         private static ScriptValue Correlation(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             Args.Exactly(ctx, a, "correlation", 2);
             ScriptValue mv;
-            if (kw.TryGet("method", out mv) && mv.Kind == ValueKind.Str && ((StrValue)mv).Value != "linear")
-                throw Raise.ValueError(ctx, "Unknown method: '" + ((StrValue)mv).Value + "'");   // ranked -> v3
+            bool ranked = false;
+            if (kw.TryGet("method", out mv))
+            {
+                string method = mv.Kind == ValueKind.Str ? ((StrValue)mv).Value : null;
+                ranked = method == "ranked";
+                if (!ranked && method != "linear")
+                    throw Raise.ValueError(ctx, "Unknown method: " + mv.Repr(ctx));
+            }
             double[] cx, cy;
             CenteredPair(ctx, a, "correlation", out cx, out cy);
+            if (ranked)
+            {
+                cx = CenteredRanks(ctx, cx);
+                cy = CenteredRanks(ctx, cy);
+            }
+
             double sxy = SumProducts(ctx, cx, cy);
             double sxx = SumProducts(ctx, cx, cx);
             double syy = SumProducts(ctx, cy, cy);
@@ -324,11 +415,17 @@ namespace Outbridge.PyLite.Modules
                 intercept = ybar - slope * xbar;
             }
             // LinearRegression(slope=..., intercept=...) namedtuple (CPython parity).
-            ScriptTypeInfo ti = NamedTupleValue.BuildInstanceType("LinearRegression", LinRegFields);
-            var info = new NamedTupleInfo("LinearRegression", LinRegFields, ti);
-            return new NamedTupleValue(info, new ScriptValue[] { ctx.Values.Float(slope), ctx.Values.Float(intercept) });
+            return new NamedTupleValue(LinRegInfo, new ScriptValue[] { ctx.Values.Float(slope), ctx.Values.Float(intercept) });
         }
 
         private static readonly string[] LinRegFields = { "slope", "intercept" };
+        private static readonly NamedTupleInfo LinRegInfo = new NamedTupleInfo("LinearRegression", LinRegFields,
+            NamedTupleValue.BuildInstanceType("statistics.LinearRegression", LinRegFields));
+
+        private static TypeValue LinearRegressionType(EvalContext ctx)
+        {
+            var statics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal) { ["_fields"] = NamedTupleValue.FieldsTuple(LinRegInfo, ctx) };
+            return ctx.Values.EngineType(LinRegInfo.InstanceType.Name, (s, a, k, c) => NamedTupleValue.Construct(LinRegInfo, a, k, c), LinRegInfo.InstanceType, statics);
+        }
     }
 }

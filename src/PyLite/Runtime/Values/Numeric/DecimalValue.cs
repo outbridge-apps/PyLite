@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
@@ -139,7 +138,51 @@ namespace Outbridge.PyLite.Runtime.Values
             FloatValue fv = v as FloatValue;
             if (fv != null)
                 return FromFloat(ctx, fv.Value);
+            if (v.Kind == ValueKind.Tuple || v.Kind == ValueKind.List)
+                return FromTuple(ctx, Modules.Support.Iter.ToArray(ctx, v));
             throw Raise.TypeError(ctx, "conversion from " + v.PyTypeName + " to Decimal is not supported");
+        }
+
+        // Decimal((sign, digits, exponent)), _decimal's checks and texts; written out and read as a string
+        private static ScriptValue FromTuple(EvalContext ctx, ScriptValue[] t)
+        {
+            if (t.Length != 3)
+                throw Raise.ValueError(ctx, "argument must be a sequence of length 3");
+            IntValue sign = t[0] as IntValue;
+            if (sign == null || !sign.IsSmall || (sign.Small != 0 && sign.Small != 1))
+                throw Raise.ValueError(ctx, "sign must be an integer with the value 0 or 1");
+            var text = new System.Text.StringBuilder(sign.Small == 1 ? "-" : "");
+            StrValue special = t[2] as StrValue;
+            if (special != null)
+            {
+                if (special.Value != "F" && special.Value != "n" && special.Value != "N")
+                    throw Raise.ValueError(ctx, "string argument in the third position must be 'F', 'n' or 'N'");
+                text.Append(special.Value == "F" ? "Infinity" : special.Value == "n" ? "NaN" : "sNaN");
+            }
+            else
+            {
+                if (!(t[2] is IntValue))
+                    throw Raise.ValueError(ctx, "exponent must be an integer");
+                BigInteger exponent = ((IntValue)t[2]).Value;
+                if (exponent < long.MinValue || exponent > long.MaxValue)   // before any text of it: ToString is quadratic
+                    throw Raise.Overflow(ctx, "Python int too large to convert to C ssize_t");
+                if (t[1].Kind != ValueKind.Tuple && t[1].Kind != ValueKind.List)
+                    throw Raise.ValueError(ctx, "coefficient must be a tuple of digits");
+                foreach (ScriptValue d in Modules.Support.Iter.ToArray(ctx, t[1]))
+                {
+                    IntValue digit = d as IntValue;
+                    if (digit == null || !digit.IsSmall || digit.Small < 0 || digit.Small > 9)
+                        throw Raise.ValueError(ctx, "coefficient must be a tuple of digits");
+                    ctx.Values.CheckStrLen(text.Length + 1L);
+                    text.Append((char)('0' + digit.Small));
+                }
+                if (text.Length == 0 || text[text.Length - 1] == '-')
+                    text.Append('0');
+                text.Append('E').Append(exponent.ToString(CultureInfo.InvariantCulture));
+            }
+            int exp;
+            decimal parsed = DecimalParse.Parse(ctx, text.ToString(), out exp);
+            return FromExp(ctx, parsed, exp);
         }
 
         // math.floor/ceil/trunc integrate through the value hooks (Decimal.__floor__ etc.).
@@ -147,14 +190,14 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override ScriptValue CeilCore(EvalContext ctx) { return ctx.Values.Int(new BigInteger(Math.Ceiling(Value))); }
         protected internal override ScriptValue TruncCore(EvalContext ctx) { return ctx.Values.Int(new BigInteger(Math.Truncate(Value))); }
 
-        // round(d) -> int, round(d, n) -> Decimal, both through the context rounding mode as in CPython.
-        // round(d, n) is a quantize to exponent -n, so it also PADS (round(Decimal('1.5'), 3) -> 1.500) and
+        // round(d) -> int rounds half-even whatever the context says; round(d, n) -> Decimal is a quantize
+        // to exponent -n in the context's mode, so it also PADS (round(Decimal('1.5'), 3) -> 1.500) and
         // a negative n lands on a positive exponent (round(Decimal('1234'), -2) -> 1.2E+3).
         protected internal override ScriptValue RoundCore(ScriptValue ndigits, EvalContext ctx)
         {
             RoundingMode mode = ctx.DecimalCtx.Mode;
             if (ndigits == null || ndigits.Kind == ValueKind.None)
-                return ctx.Values.Int(new BigInteger(((DecimalValue)DoQuantize(ctx, 0, mode)).Value));
+                return ctx.Values.Int(new BigInteger(((DecimalValue)DoQuantize(ctx, 0, RoundingMode.HalfEven)).Value));
             if (ndigits.Kind != ValueKind.Int && ndigits.Kind != ValueKind.Bool)
                 throw Raise.TypeError(ctx, "'" + ndigits.PyTypeName + "' object cannot be interpreted as an integer");
             BigInteger n = NumericOps.AsBigInteger(ndigits);
@@ -339,10 +382,116 @@ namespace Outbridge.PyLite.Runtime.Values
         }
 
         // The remainder itself is small, but CPython refuses it when the integer QUOTIENT does not fit.
-        private static void CheckQuotient(EvalContext ctx, decimal x, decimal y)
+        private static void CheckQuotient(EvalContext ctx, BigInteger q)
         {
-            if (!DecimalBits.FitsPrec(decimal.Truncate(x / y), ctx.DecimalCtx.Prec))
+            if (DecimalBits.SignificantDigits(q) > ctx.DecimalCtx.Prec)
                 throw InvalidOp(ctx);
+        }
+
+        // x / y truncated, and x - q * y. Exact: through decimal's own division the quotient was rounded to 28-29 digits first.
+        private static BigInteger DivideExactly(decimal x, decimal y, out BigInteger remainder, out int scale, out bool negX)
+        {
+            BigInteger mx, my;
+            int sx, sy;
+            bool negY;
+            DecimalBits.Unpack(x, out mx, out sx, out negX);
+            DecimalBits.Unpack(y, out my, out sy, out negY);
+            scale = Math.Max(sx, sy);
+            return BigInteger.DivRem(mx * BigInteger.Pow(10, scale - sx), my * BigInteger.Pow(10, scale - sy), out remainder);
+        }
+
+        // 10^0 .. 10^19, the powers a ulong holds.
+        private static readonly ulong[] U64Pow10 = BuildU64Pow10();
+
+        private static ulong[] BuildU64Pow10()
+        {
+            var p = new ulong[20];
+            p[0] = 1;
+            for (int i = 1; i < p.Length; i++)
+                p[i] = p[i - 1] * 10;
+            return p;
+        }
+
+        // DivideExactly in 64-bit words, for the usual operands whose mantissas, brought to one scale, stay below
+        // 2^64: the BigInteger route made // and % 2-3.5 times slower than 1.1.0. The answer is the same.
+        private static bool TryDivideSmall(decimal x, decimal y, out ulong q, out ulong r, out int scale, out bool negX)
+        {
+            uint xl, xm, xh, yl, ym, yh;
+            int sx, sy;
+            bool negY;
+            DecimalBits.Read(x, out xl, out xm, out xh, out sx, out negX);
+            DecimalBits.Read(y, out yl, out ym, out yh, out sy, out negY);
+            scale = Math.Max(sx, sy);
+            q = r = 0;
+            if (xh != 0 || yh != 0)
+                return false;
+            ulong a = ((ulong)xm << 32) | xl;
+            ulong b = ((ulong)ym << 32) | yl;
+            if (!TryScale(ref a, scale - sx) || !TryScale(ref b, scale - sy) || b == 0)
+                return false;
+            q = a / b;
+            r = a - q * b;
+            return true;
+        }
+
+        private static bool TryScale(ref ulong v, int k)
+        {
+            if (k == 0)
+                return true;
+            if (k >= U64Pow10.Length || v > ulong.MaxValue / U64Pow10[k])
+                return false;
+            v *= U64Pow10[k];
+            return true;
+        }
+
+        private static int Digits(ulong v)
+        {
+            int n = 1;
+            while (v >= 10)
+            {
+                v /= 10;
+                n++;
+            }
+            return n;
+        }
+
+        private static decimal SmallDecimal(ulong v, int scale, bool neg)
+        {
+            return new decimal(unchecked((int)(uint)v), unchecked((int)(uint)(v >> 32)), 0, neg, (byte)scale);
+        }
+
+        private static void CheckSmallQuotient(EvalContext ctx, ulong q)
+        {
+            if (Digits(q) > ctx.DecimalCtx.Prec)
+                throw InvalidOp(ctx);
+        }
+
+        // FloorQuotient of a ulong quotient: Make(q, 0, neg) without the BigInteger round trip.
+        private static DecimalValue SmallQuotient(EvalContext ctx, ulong q, bool neg)
+        {
+            CheckSmallQuotient(ctx, q);
+            ctx.Values.PreCharge(48);
+            return new DecimalValue(SmallDecimal(q, 0, neg), 0);
+        }
+
+        private static DecimalValue FloorQuotient(EvalContext ctx, decimal x, decimal y, BigInteger q)
+        {
+            CheckQuotient(ctx, q);
+            return Make(ctx, q, 0, SignOf(x) != SignOf(y));
+        }
+
+        private static bool SignOf(decimal v)   // a negative zero counts
+        {
+            uint lo, mid, hi;
+            int scale;
+            bool neg;
+            DecimalBits.Read(v, out lo, out mid, out hi, out scale, out neg);
+            return neg;
+        }
+
+        private static DecimalValue Remainder(EvalContext ctx, BigInteger r, int scale, bool negX, int ideal)
+        {
+            return Settled(ctx, DecimalBits.Pack(ctx, r, scale, negX), ideal);
         }
 
         private bool TryOperand(EvalContext ctx, ScriptValue v, out decimal d, out int exp)
@@ -401,17 +550,36 @@ namespace Outbridge.PyLite.Runtime.Values
                         return Rounded(ctx, Prod(ctx, x, y), ex + ey);
                     case PyBinOp.TrueDiv:
                         if (y == 0m)
-                            throw DivByZero(ctx);
+                            throw x == 0m ? Undefined(ctx) : DivByZero(ctx);
                         return Rounded(ctx, Quot(ctx, x, y), ex - ey);
                     case PyBinOp.FloorDiv:
                         if (y == 0m)
-                            throw DivByZero(ctx);
-                        return Exact(ctx, decimal.Truncate(x / y), 0);
+                            throw x == 0m ? Undefined(ctx) : DivByZero(ctx);
+                        ulong sq, sr;
+                        int ss;
+                        bool sn;
+                        if (TryDivideSmall(x, y, out sq, out sr, out ss, out sn))
+                            return SmallQuotient(ctx, sq, SignOf(x) != SignOf(y));
+                        BigInteger fr;
+                        int fs;
+                        bool fn;
+                        return FloorQuotient(ctx, x, y, DivideExactly(x, y, out fr, out fs, out fn));
                     case PyBinOp.Mod:
                         if (y == 0m)
-                            throw InvalidOp(ctx);
-                        CheckQuotient(ctx, x, y);
-                        return Settled(ctx, x % y, Math.Min(ex, ey));
+                            throw x == 0m ? Undefined(ctx) : InvalidOp(ctx);
+                        ulong tq, tr;
+                        int ts;
+                        bool tn;
+                        if (TryDivideSmall(x, y, out tq, out tr, out ts, out tn))
+                        {
+                            CheckSmallQuotient(ctx, tq);
+                            return Settled(ctx, SmallDecimal(tr, ts, tn), Math.Min(ex, ey));
+                        }
+                        BigInteger mr;
+                        int ms;
+                        bool mn;
+                        CheckQuotient(ctx, DivideExactly(x, y, out mr, out ms, out mn));
+                        return Remainder(ctx, mr, ms, mn, Math.Min(ex, ey));
                     default:
                         return null;
                 }
@@ -433,10 +601,22 @@ namespace Outbridge.PyLite.Runtime.Values
             int ex = reflected ? be : Exp;
             int ey = reflected ? Exp : be;
             if (y == 0m)
-                throw DivByZero(ctx);
+                throw x == 0m ? Undefined(ctx) : Raise.Make(ctx, PyExceptionTypes.DecimalInvalidOperation, "[<class 'decimal.InvalidOperation'>, <class 'decimal.DivisionByZero'>]");
             try
             {
-                return ctx.Values.Tuple(new ScriptValue[] { Exact(ctx, decimal.Truncate(x / y), 0), Settled(ctx, x % y, Math.Min(ex, ey)) });
+                ulong sq, sr;
+                int ss;
+                bool sn;
+                if (TryDivideSmall(x, y, out sq, out sr, out ss, out sn))
+                {
+                    DecimalValue fq = SmallQuotient(ctx, sq, SignOf(x) != SignOf(y));
+                    return ctx.Values.Tuple(new ScriptValue[] { fq, Settled(ctx, SmallDecimal(sr, ss, sn), Math.Min(ex, ey)) });
+                }
+                BigInteger r;
+                int scale;
+                bool negX;
+                BigInteger q = DivideExactly(x, y, out r, out scale, out negX);
+                return ctx.Values.Tuple(new ScriptValue[] { FloorQuotient(ctx, x, y, q), Remainder(ctx, r, scale, negX, Math.Min(ex, ey)) });
             }
             catch (OverflowException)
             {
@@ -469,33 +649,156 @@ namespace Outbridge.PyLite.Runtime.Values
             }
 
             if (n.Sign == 0)
+            {
+                if (baseV.Value == 0m)
+                    throw InvalidOp(ctx);   // 0 ** 0 is undefined in the General Decimal Arithmetic
                 return FromDecimal(ctx, 1m);
-            BigInteger absN = BigInteger.Abs(n);
-            if (absN > 100000)
-                throw Overflow(ctx);
-            decimal result = 1m;
-            try
+            }
+            if (baseV.Value == 0m)
             {
-                for (BigInteger i = 0; i < absN; i++)
-                {
-                    result *= baseV.Value;
-                    ctx.Budget.Step();
-                }
-                if (n.Sign > 0)
-                {
-                    if (result == 0m && baseV.Value != 0m)
-                        throw Underflow(ctx);
-                    long ideal = (long)baseV.Exp * (long)absN;
-                    return Rounded(ctx, result, ideal > 60 ? 60 : (ideal < -60 ? -60 : (int)ideal));
-                }
-                if (result == 0m)
+                if (n.Sign < 0)
                     throw DivByZero(ctx);
-                return Rounded(ctx, Quot(ctx, 1m, result), -60);
+                return Make(ctx, BigInteger.Zero, 0, SignOf(baseV.Value) && !n.IsEven);
             }
-            catch (OverflowException)
+            return PowerByInteger(ctx, baseV, n, expArg);
+        }
+
+        // libmpdec's _mpd_qpow_int: left-to-right squaring at prec + the exponent's digits + 2, half-even, then the
+        // context's rounding. Repeating the product at the backend's own digits differed from it in the last digit.
+        private static ScriptValue PowerByInteger(EvalContext ctx, DecimalValue baseV, BigInteger n, ScriptValue expArg)
+        {
+            ScriptValue small;
+            if (TrySmallPower(ctx, baseV, n, out small))
+                return small;
+            BigInteger m;
+            int e0;
+            bool neg0;
+            baseV.Coeff(out m, out e0, out neg0);
+            bool neg = neg0 && !n.IsEven;
+            BigInteger absN = BigInteger.Abs(n);
+            int expDigits = DecimalBits.SignificantDigits(absN), expExp = 0;
+            DecimalValue de = expArg as DecimalValue;
+            if (de != null)
             {
-                throw Overflow(ctx);
+                BigInteger ce;
+                bool ne;
+                de.Coeff(out ce, out expExp, out ne);
+                expDigits = DecimalBits.SignificantDigits(ce);
             }
+            if (expDigits > 40)   // no base away from 1 survives this many digits of exponent
+            {
+                if (m.IsOne && e0 == 0)
+                    return Make(ctx, BigInteger.One, 0, neg);
+                bool grows = (BigInteger.Log10(m) + e0 > 0) == (n.Sign > 0);
+                throw grows ? Overflow(ctx) : Underflow(ctx);
+            }
+            int work = ctx.DecimalCtx.Prec + expDigits + expExp + 2;
+            BigInteger bc = m;
+            long be = e0;
+            if (n.Sign < 0)
+            {
+                work++;
+                Invert(ref bc, ref be, work);
+            }
+            BigInteger rc = bc;
+            long re = be;
+            int top = 0;
+            for (BigInteger t = absN; t > BigInteger.One; t >>= 1)
+                top++;
+            for (int bit = top - 1; bit >= 0; bit--)
+            {
+                ctx.Budget.Step();
+                rc *= rc;
+                re += re;
+                RoundWork(ref rc, ref re, work);
+                if (!((absN >> bit).IsEven))
+                {
+                    rc *= bc;
+                    re += be;
+                    RoundWork(ref rc, ref re, work);
+                }
+                long adjusted = re + DecimalBits.SignificantDigits(rc);
+                if (adjusted > 100)
+                    throw Overflow(ctx);
+                if (adjusted < -100)
+                    throw Underflow(ctx);
+            }
+            return Fix(ctx, rc, (int)re, neg);
+        }
+
+        // PowerByInteger when the exact power fits a ulong and the precision, as nearly every one does: no partial
+        // power is longer than the whole, so no step of the squaring rounds and the answer is the exact one. The
+        // BigInteger route made ** 2-3 times slower than 1.1.0. The steps are the squaring's.
+        private static bool TrySmallPower(EvalContext ctx, DecimalValue baseV, BigInteger n, out ScriptValue result)
+        {
+            result = null;
+            if (n.Sign <= 0 || n > 64)
+                return false;
+            uint lo, mid, hi;
+            int scale;
+            bool neg;
+            DecimalBits.Read(baseV.Value, out lo, out mid, out hi, out scale, out neg);
+            int k = (int)n;
+            long exp = (long)baseV.Exp * k;
+            if (hi != 0 || baseV.Exp != -scale || exp < -28)
+                return false;
+            ulong b = ((ulong)mid << 32) | lo, r = 1;
+            for (int i = 0; i < k; i++)
+            {
+                if (b != 0 && r > ulong.MaxValue / b)
+                    return false;
+                r *= b;
+            }
+            if (Digits(r) > ctx.DecimalCtx.Prec)
+                return false;
+            for (int t = k; t > 1; t >>= 1)
+                ctx.Budget.Step();
+            ctx.Values.PreCharge(48);
+            result = new DecimalValue(SmallDecimal(r, (int)-exp, neg && (k & 1) == 1), (int)exp);
+            return true;
+        }
+
+        // 1 / (c * 10^e) as mpd_qdiv gives it: half-even at the working digits; an exact one keeps the ideal exponent.
+        private static void Invert(ref BigInteger c, ref long e, int work)
+        {
+            int shift = work + DecimalBits.SignificantDigits(c) + 2;
+            BigInteger r;
+            BigInteger q = BigInteger.DivRem(BigInteger.Pow(10, shift), c, out r);
+            long ideal = -e;
+            long qe = -shift - e;
+            if (r.IsZero)
+            {
+                while (qe < ideal && (q % 10).IsZero)
+                {
+                    q /= 10;
+                    qe++;
+                }
+            }
+            else if ((q % 5).IsZero)
+            {
+                q += BigInteger.One;   // sticky: never a tie
+            }
+            RoundWork(ref q, ref qe, work);
+            c = q;
+            e = qe;
+        }
+
+        private static void RoundWork(ref BigInteger c, ref long e, int work)
+        {
+            int digits = DecimalBits.SignificantDigits(c);
+            if (digits <= work)
+                return;
+            int drop = digits - work;
+            BigInteger divisor = BigInteger.Pow(10, drop), r;
+            BigInteger q = BigInteger.DivRem(c, divisor, out r);
+            q = DecimalRound.Apply(q, r, divisor, false, RoundingMode.HalfEven);
+            if (DecimalBits.SignificantDigits(q) > work)
+            {
+                q /= 10;
+                drop++;
+            }
+            c = q;
+            e += drop;
         }
 
         // An int, a bool, or a Decimal whose value is a whole number: CPython's power takes all three
@@ -528,10 +831,10 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             switch (op)
             {
-                case PyUnaryOp.Neg:
-                    return Rounded(ctx, -Value, Exp);
-                case PyUnaryOp.Pos:
-                    return Rounded(ctx, Value, Exp);   // the CPython idiom for "apply the context to d"
+                case PyUnaryOp.Neg:   // minus(x) is 0 - x: a zero comes out positive but under ROUND_FLOOR
+                    return Rounded(ctx, ZeroSign(ctx, -Value, 0m, -Value), Exp);
+                case PyUnaryOp.Pos:   // plus(x) is 0 + x, the CPython idiom for "apply the context to d"
+                    return Rounded(ctx, ZeroSign(ctx, Value, 0m, Value), Exp);
                 default:
                     return null;
             }
@@ -541,6 +844,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static ScriptException DivByZero(EvalContext ctx) { return Raise.Make(ctx, PyExceptionTypes.DecimalDivisionByZero, "[<class 'decimal.DivisionByZero'>]"); }
         private static ScriptException InvalidOp(EvalContext ctx) { return Raise.Make(ctx, PyExceptionTypes.DecimalInvalidOperation, "[<class 'decimal.InvalidOperation'>]"); }
+        private static ScriptException Undefined(EvalContext ctx) { return Raise.Make(ctx, PyExceptionTypes.DecimalInvalidOperation, "[<class 'decimal.DivisionUndefined'>]"); }
         private static ScriptException Overflow(EvalContext ctx) { return Raise.Make(ctx, PyExceptionTypes.DecimalOverflow, "[<class 'decimal.Overflow'>]"); }
 
         // ---- comparisons / hash ----
@@ -581,6 +885,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             BigInteger n, d;
             ToRational(out n, out d);
+            ctx.Budget.ChargeLinear((NumericOps.BitLength(n) + NumericOps.BitLength(d)) >> 5);
             return NumericHash.HashRational(n, d);
         }
 

@@ -13,7 +13,7 @@ namespace Outbridge.PyLite.Tests.Hosting
         [Fact]
         public void PyErrorBuildsScriptException()
         {
-            var se = Assert.IsType<ScriptException>(ScriptExceptions.PyError("ValueError", "x"));
+            var se = Assert.IsAssignableFrom<ScriptException>(ScriptExceptions.PyError("ValueError", "x"));
             Assert.Equal("ValueError", se.Value.ExcType.Name);
         }
 

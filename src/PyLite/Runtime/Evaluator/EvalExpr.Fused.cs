@@ -5,7 +5,7 @@ using Outbridge.PyLite.Syntax.Ast;
 
 namespace Outbridge.PyLite.Runtime.Evaluator
 {
-    // Superinstruction fusion (T2.3). A comprehension body/condition that is pure machine-int
+    // Superinstruction fusion. A comprehension body/condition that is pure machine-int
     // arithmetic over the loop variable and int literals fuses into ONE delegate computing in C#
     // longs — no intermediate ScriptValue boxing, no slot reads, no per-node dispatch. Semantics
     // hold by construction: every operator defers to NumericOps.TryLongBinOp (the exact long core
@@ -25,22 +25,26 @@ namespace Outbridge.PyLite.Runtime.Evaluator
     // scope (a machine int drives the fused core; bool/float/str/big/unbound fall back — an unbound
     // read then raises the canonical UnboundLocalError on the general path). Expressions touching
     // two or more locals do not fuse — the compiled path owns them.
-    internal delegate bool FusedScopeLong(Environment scope, out long r);
+    internal delegate bool FusedScopeLong(Environment scope, EvalContext ctx, out long r);
     internal delegate bool FusedScopeCond(Environment scope, out bool r);
 
     internal sealed partial class Evaluator
     {
+        // A fused delegate has no context to charge: only a tree under 64 nodes fuses, and a larger one takes
+        // the compiled tier, which charges its size on every evaluation.
+        private static bool Small(ExprNode e) { return CompiledSize(e) < 64; }
+
         // Callers gate on FusionAllowed(ctx).
         internal static FusedLong GetFusedLong(ref object cache, ExprNode e, int xSlot)
         {
             object c = cache;
-            return c != null ? c as FusedLong : Store(ref cache, TryFuseLong(e, xSlot));
+            return c != null ? c as FusedLong : Store(ref cache, Small(e) ? TryFuseLong(e, xSlot) : null);
         }
 
         internal static FusedCond GetFusedCond(ref object cache, ExprNode e, int xSlot)
         {
             object c = cache;
-            return c != null ? c as FusedCond : Store(ref cache, TryFuseCond(e, xSlot));
+            return c != null ? c as FusedCond : Store(ref cache, Small(e) ? TryFuseCond(e, xSlot) : null);
         }
 
         // Odometer accessors. They share the AST cache fields with the flat-drain accessors — safe
@@ -49,13 +53,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         internal static FusedScopeLong GetFusedScopeLong(ref object cache, ExprNode e)
         {
             object c = cache;
-            return c != null ? c as FusedScopeLong : Store(ref cache, TryFuseScopeLong(e));
+            return c != null ? c as FusedScopeLong : Store(ref cache, Small(e) ? TryFuseScopeLong(e) : null);
         }
 
         internal static FusedScopeCond GetFusedScopeCond(ref object cache, ExprNode e)
         {
             object c = cache;
-            return c != null ? c as FusedScopeCond : Store(ref cache, TryFuseScopeCond(e));
+            return c != null ? c as FusedScopeCond : Store(ref cache, Small(e) ? TryFuseScopeCond(e) : null);
         }
 
         private static FusedScopeLong TryFuseScopeLong(ExprNode e)
@@ -71,18 +75,18 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (f == null)
                 return null;
             if (slot < 0)   // constant expression: nothing to read
-                return (Environment scope, out long r) => f(0, out r);
-            return (Environment scope, out long r) =>
+                return (Environment scope, EvalContext ctx, out long r) => f(0, out r);
+            return (Environment scope, EvalContext ctx, out long r) =>
             {
                 ScriptValue v = scope.PeekLocal(slot);
                 if (v != null && v.Kind == ValueKind.Int)
                 {
                     IntValue iv = (IntValue)v;
-                    if (iv.IsSmall)
+                    if (iv.IsSmall && EnumClassValue.MemberOf(v, ctx) == null)   // x if c else 0 would re-box an IntEnum member as a plain int
                         return f(iv.Small, out r);
                 }
                 r = 0;
-                return false;   // bool/float/str/big/unbound: the general path owns this element
+                return false;   // bool/float/str/big/unbound/enum member: the general path owns this element
             };
         }
 

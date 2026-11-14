@@ -29,6 +29,12 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("string.capwords('a-b-c', '-')", "'A-B-C'")]
         [InlineData("string.capwords('a--b', sep='-')", "'A--B'")]
         [InlineData("string.capwords('')", "''")]
+        [InlineData("string.capwords('xAy', 'A')", "'XAY'")]
+        [InlineData("string.capwords('a\\x1cb c\\xa0d\\u2003e\\x85f\\u200bg')", "'A B C D E F\\u200bg'")]   // str.split()'s whitespace (CPython)
+        [InlineData("string.capwords('ab--cd--', '--')", "'Ab--Cd--'")]
+        [InlineData("string.capwords('-a-', '-')", "'-A-'")]
+        // a long separator splits through the KMP search (the BCL's multi-char Split is O(n*m))
+        [InlineData("len(string.capwords('a' * 3000000, 'a' * 1000 + 'b'))", "3000000")]
         public void Surface(string expr, string expected)
         {
             Assert.Equal(expected, R(expr));
@@ -39,6 +45,14 @@ namespace Outbridge.PyLite.Tests.Modules
         {
             var ex = Assert.Throws<ScriptException>(() => Ev.Run("import string\nstring.capwords(3)\n"));
             Assert.Equal("TypeError", ex.Value.ExcType.Name);
+        }
+
+        [Fact]
+        public void CapwordsRefusesAnEmptySeparator()
+        {
+            var ex = Assert.Throws<ScriptException>(() => Ev.Run("import string\nstring.capwords('a b', '')\n"));
+            Assert.Equal("ValueError", ex.Value.ExcType.Name);
+            Assert.Equal("empty separator", ex.Value.GetMessageText(Rt.Ctx()));
         }
     }
 }

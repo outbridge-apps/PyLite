@@ -17,18 +17,28 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             var orderedStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["fromkeys"] = BuiltinFunctionValue.Make("fromkeys", OrderedDictFromKeys),
+                ["fromkeys"] = BuiltinFunctionValue.Make("fromkeys", Args.BoundKeywords("fromkeys", 1, OrderedDictFromKeys, "iterable", "value")),
             };
-            m["OrderedDict"] = ctx.Values.Type("collections.OrderedDict", OrderedDictCtor, null, orderedStatics);
-            m["defaultdict"] = ctx.Values.Type("collections.defaultdict", DefaultDictCtor, null, null);
+            m["OrderedDict"] = ctx.Values.EngineType("collections.OrderedDict", OrderedDictCtor, null, orderedStatics);
+            var defaultStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
+            {
+                // dict.fromkeys on the subclass: a defaultdict with no factory
+                ["fromkeys"] = BuiltinFunctionValue.Make("fromkeys", Args.BoundKeywords("fromkeys", 1, (self, a, kw, c) =>
+                {
+                    if (a.Length < 1 || a.Length > 2)
+                        throw Raise.TypeError(c, "fromkeys expected 1 or 2 arguments, got " + a.Length);
+                    return DictMethods.FillFromKeys(c, c.Values.DefaultDict(c.Values.None, 4), a[0], a.Length == 2 ? a[1] : c.Values.None);
+                }, "iterable", "value")),
+            };
+            m["defaultdict"] = ctx.Values.EngineType("collections.defaultdict", DefaultDictCtor, null, defaultStatics);
             var counterStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["fromkeys"] = BuiltinFunctionValue.Make("fromkeys", CounterValue.FromKeys),
+                ["fromkeys"] = BuiltinFunctionValue.Make("fromkeys", Args.BoundKeywords("fromkeys", 1, CounterValue.FromKeys, "iterable", "value")),
             };
-            m["Counter"] = ctx.Values.Type("collections.Counter", CounterCtor, null, counterStatics);
-            m["namedtuple"] = BuiltinFunctionValue.Make("namedtuple", NamedTuple);
-            m["deque"] = ctx.Values.Type("collections.deque", DequeCtor, null, null);
-            m["ChainMap"] = ctx.Values.Type("collections.ChainMap", ChainMapCtor, null, null);
+            m["Counter"] = ctx.Values.EngineType("collections.Counter", CounterCtor, null, counterStatics);
+            m["namedtuple"] = BuiltinFunctionValue.Make("namedtuple", Args.LeadKeywords("namedtuple", NamedTuple, 2, "typename", "field_names", "rename", "defaults", "module"));
+            m["deque"] = ctx.Values.EngineType("collections.deque", Args.LeadKeywords("deque", DequeCtor, 1, "iterable", "maxlen"), null, null);
+            m["ChainMap"] = ctx.Values.EngineType("collections.ChainMap", Args.NoKeywords("ChainMap", ChainMapCtor), null, null);
             return ctx.Values.Module("collections", m);
         }
 
@@ -73,17 +83,15 @@ namespace Outbridge.PyLite.Modules
             ScriptValue mkw;
             if (kw.TryGet("maxlen", out mkw))
                 maxlenArg = mkw;
-            int maxlen = -1;
+            long maxlen = -1;
             if (maxlenArg != null && maxlenArg.Kind != ValueKind.None)
             {
                 if (maxlenArg.Kind != ValueKind.Int && maxlenArg.Kind != ValueKind.Bool)
                     throw Raise.TypeError(ctx, "an integer is required");
-                System.Numerics.BigInteger m = Outbridge.PyLite.Runtime.Values.NumericOps.AsBigInteger(maxlenArg);
-                if (m < 0)
+                // the 64-bit range is CPython's: maxlen reads back as given, however far past what a deque can hold
+                maxlen = Coerce.ToSsize64(ctx, Outbridge.PyLite.Runtime.Values.NumericOps.AsBigInteger(maxlenArg));
+                if (maxlen < 0)
                     throw Raise.ValueError(ctx, "maxlen must be non-negative");
-                if (m > int.MaxValue)
-                    throw Raise.Make(ctx, PyExceptionTypes.OverflowError, "maxlen too large to convert to C ssize_t");
-                maxlen = (int)m;
             }
             ctx.Values.PreCharge(64);
             DequeValue d = new DequeValue(maxlen);

@@ -12,7 +12,6 @@ def err(f):
 out = []
 out.append((math.floor(-2.5), math.ceil(-2.5), math.trunc(-2.5), round(-2.5), round(3.5), round(0.375, 2)))
 out.append(math.fsum([0.1] * 10))
-out.append(sum([0.1] * 10))
 out.append((math.factorial(20), math.factorial(0)))
 out.append((math.log(1), math.log10(100), math.log2(1024), math.log1p(1e-10), math.exp(1)))
 out.append((math.hypot(3, 4), math.copysign(1, -0.0), math.fabs(-3)))
@@ -25,6 +24,6 @@ out.append(err(lambda: math.sqrt(-1)))
 out.append(err(lambda: math.log(0)))
 out.append(err(lambda: math.factorial(-1)))
 out.append(err(lambda: math.exp(1000)))
-out.append(err(lambda: math.factorial(2.5)))
+out.append(err(lambda: math.factorial(2.5)) in ("TypeError", "ValueError"))   # TypeError since 3.10 (iron34/factorial_float)
 out.append(err(lambda: math.acos(2)))
 result = out

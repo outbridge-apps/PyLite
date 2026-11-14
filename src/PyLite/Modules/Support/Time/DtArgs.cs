@@ -1,4 +1,3 @@
-using System.Numerics;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
@@ -10,23 +9,58 @@ namespace Outbridge.PyLite.Modules.Support
     // the field's own range error (not a raw OverflowException).
     internal static class DtArgs
     {
+        // CPython 3.14's check_date_args / check_time_args texts
+        public static void CheckDate(EvalContext ctx, int y, int mo, int d)
+        {
+            if (y < 1 || y > 9999)
+                throw Raise.ValueError(ctx, "year must be in 1..9999, not " + Num(y));
+            if (mo < 1 || mo > 12)
+                throw Raise.ValueError(ctx, "month must be in 1..12, not " + Num(mo));
+            int dim = CalendarMath.DaysInMonth(y, mo);
+            if (d < 1 || d > dim)
+                throw Raise.ValueError(ctx, "day " + Num(d) + " must be in range 1.." + Num(dim) + " for month " + Num(mo) + " in year " + Num(y));
+        }
+
+        public static void CheckTime(EvalContext ctx, int h, int mi, int s, int us, int fold)
+        {
+            if (h < 0 || h > 23)
+                throw Raise.ValueError(ctx, "hour must be in 0..23, not " + Num(h));
+            if (mi < 0 || mi > 59)
+                throw Raise.ValueError(ctx, "minute must be in 0..59, not " + Num(mi));
+            if (s < 0 || s > 59)
+                throw Raise.ValueError(ctx, "second must be in 0..59, not " + Num(s));
+            if (us < 0 || us > 999999)
+                throw Raise.ValueError(ctx, "microsecond must be in 0..999999, not " + Num(us));
+            if (fold != 0 && fold != 1)
+                throw Raise.ValueError(ctx, "fold must be either 0 or 1, not " + Num(fold));
+        }
+
+        private static string Num(int n) { return n.ToString(System.Globalization.CultureInfo.InvariantCulture); }
+
+        // replace()'s fields go through Argument Clinic's int converter, which words the overflow its own way.
+        public static int IntFieldReplace(EvalContext ctx, ScriptValue v)
+        {
+            IntValue iv = v as IntValue;
+            if (iv != null && (!iv.IsSmall || iv.Small < int.MinValue || iv.Small > int.MaxValue))
+                throw Raise.Overflow(ctx, "Python int too large to convert to C int");
+            return IntField(ctx, v, null);
+        }
+
         public static int IntField(EvalContext ctx, ScriptValue v, string rangeError)
         {
             IntValue iv = v as IntValue;
             if (iv != null)
             {
                 // Fast path: date/time fields are always small ints — read the long directly and skip the
-                // three BigInteger materializations the `.Value` property would do (P1 pattern).
+                // three BigInteger materializations the `.Value` property would do.
                 if (iv.IsSmall)
                 {
                     long s = iv.Small;
                     if (s < int.MinValue || s > int.MaxValue)
-                        throw Raise.ValueError(ctx, rangeError);
+                        throw Raise.Overflow(ctx, s > 0 ? "signed integer is greater than maximum" : "signed integer is less than minimum");
                     return (int)s;
                 }
-                if (iv.Value < int.MinValue || iv.Value > int.MaxValue)
-                    throw Raise.ValueError(ctx, rangeError);
-                return (int)iv.Value;
+                throw Raise.Overflow(ctx, "Python int too large to convert to C long");   // CPython's "i" past a long
             }
             BoolValue bv = v as BoolValue;
             if (bv != null)
@@ -61,6 +95,9 @@ namespace Outbridge.PyLite.Modules.Support
         // int|bool|float -> double, for fromtimestamp/utcfromtimestamp.
         public static double Timestamp(EvalContext ctx, ScriptValue v)
         {
+            IntValue iv = v as IntValue;
+            if (iv != null && double.IsInfinity(iv.ToDouble()))
+                throw Raise.Overflow(ctx, "timestamp out of range for platform time_t");
             double d;
             if (Coerce.TryToReal(ctx, v, false, out d))
                 return d;

@@ -9,15 +9,53 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 {
     // The central tree-walker. Dispatch is a flat switch over each node's NodeKind, delegating immediately to a per-node EvalXxx/ExecXxx method so EvalExpr /
     // ExecStmt stay small-frame. The only immutable state is the resolved program; all mutable
-    // run state lives in EvalContext + Environment (reentrancy, A8-#5).
+    // run state lives in EvalContext + Environment, so a run can re-enter it.
     internal sealed partial class Evaluator
     {
         private readonly ResolvedProgram _program;
         private ScriptValue[] _builtinCache;   // per-run resolved builtins (safe: the script provably never
                                                // assigns a Builtin-classified name, host inputs are fixed pre-run)
         private Environment.GlobalCacheEntry[] _globalCache;   // per-run versioned dict-entry cache (lever E)
-        private LiteralNode[] _literalNodes;    // per-run str/float/bytes literal values by CacheSlot (P4); the node
-        private ScriptValue[] _literalValues;   // is kept beside its value, so a slot can never answer for another one
+        private ExprNode[] _literalNodes;       // per-run str/float/bytes literal and literal-tuple values by CacheSlot;
+        private ScriptValue[] _literalValues;   // the node is kept beside its value, so a slot can never answer for another
+        private object[] _sites;                // per-run record caches by AttributeNode.SiteSlot: a FieldSite or a MethodSite
+
+        // obj.attr on a record instance: the field's index in the class's slot table
+        private sealed class FieldSite
+        {
+            internal readonly AttributeNode Node;
+            internal readonly Dictionary<string, int> SlotIndex;
+            internal readonly int Index;
+            internal FieldSite(AttributeNode n, Dictionary<string, int> si, int idx) { Node = n; SlotIndex = si; Index = idx; }
+        }
+
+        // obj.m(...) on a record instance: the method, while the class is the same, no class attribute has been
+        // assigned since (it could shadow the method) and the instance field of that name, if any, is unset
+        private sealed class MethodSite
+        {
+            internal readonly AttributeNode Node;
+            internal readonly RecordClassValue Class;
+            internal readonly int Version;
+            internal readonly int FieldIndex;
+            internal readonly FunctionValue Method;
+            internal MethodSite(AttributeNode n, RecordClassValue c, int v, int f, FunctionValue m) { Node = n; Class = c; Version = v; FieldIndex = f; Method = m; }
+        }
+
+        private object SiteOf(AttributeNode n)
+        {
+            int s = n.SiteSlot;
+            return _sites != null && s >= 0 && s < _sites.Length ? _sites[s] : null;
+        }
+
+        private void SetSite(AttributeNode n, object entry)
+        {
+            int s = n.SiteSlot;
+            if (s < 0 || s >= _program.SiteCount)
+                return;
+            if (_sites == null)
+                _sites = new object[_program.SiteCount];
+            _sites[s] = entry;
+        }
 
         private Environment.GlobalCacheEntry[] GlobalCache
         {
@@ -87,14 +125,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 // raise is the first frame — use the recorded raise site (bare-re-raise parity).
                 int line = se.Value.TracebackFrames == null && se.Value.RaiseLine > 0
                     ? se.Value.RaiseLine : ctx.CurrentLine;
-                TracebackBuilder.AppendFrame(se.Value, "<module>", line);
+                TracebackBuilder.AppendFrame(se.Value, "<module>", line, _program.ModuleFile);
                 throw;
             }
         }
 
         public ScriptValue EvalExpr(ExprNode e, Environment env, EvalContext ctx)
         {
-            // One counter for both cadences (P18): every 64th node charges the batch, every 16th probes the stack
+            // One counter for both cadences: every 64th node charges the batch, every 16th probes the stack
             // (consecutive within an expression, so a nesting of 16 always passes a probe); one test per node.
             int node = ++ctx.NodeCounter;
             if ((node & 15) == 0)
@@ -103,7 +141,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     ctx.Budget.Step(BudgetCost.NodeBatch);
                 StackGuard.Probe(ctx);
             }
-            switch (e.NodeKind)   // P2: int switch = jump table, not a sequential isinst chain
+            switch (e.NodeKind)   // int switch = jump table, not a sequential isinst chain
             {
                 case NodeKind.Literal: return EvalLiteral((LiteralNode)e, ctx);
                 case NodeKind.Name: return EvalName((NameNode)e, env, ctx);
@@ -139,9 +177,20 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 ctx.Budget.Step(BudgetCost.NodeBatch);
             }
-            switch (s.NodeKind)   // P2: jump table (see EvalExpr)
+            switch (s.NodeKind)   // jump table (see EvalExpr)
             {
-                case NodeKind.ExprStmt: EvalExpr(((ExprStmtNode)s).Value, env, ctx); return ExecSignal.Normal;
+                case NodeKind.ExprStmt:
+                {
+                    ExprNode e = ((ExprStmtNode)s).Value;
+                    if (e.QuietValue)
+                    {
+                        ExceptionValue raised;
+                        ValueOrRaised(e, env, ctx, out raised);
+                        return raised == null ? ExecSignal.Normal : ExecSignal.Raise(raised);
+                    }
+                    EvalExpr(e, env, ctx);
+                    return ExecSignal.Normal;
+                }
                 case NodeKind.Assign: return ExecAssign((AssignNode)s, env, ctx);
                 case NodeKind.AugAssign: return ExecAugAssign((AugAssignNode)s, env, ctx);
                 case NodeKind.Del: return ExecDel((DelNode)s, env, ctx);
@@ -186,7 +235,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 if (_literalNodes == null)
                 {
-                    _literalNodes = new LiteralNode[_program.LiteralCount];
+                    _literalNodes = new ExprNode[_program.LiteralCount];
                     _literalValues = new ScriptValue[_program.LiteralCount];
                 }
                 if (ReferenceEquals(_literalNodes[slot], lit))
@@ -278,6 +327,100 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private ScriptValue GetItemByKind(ScriptValue obj, ScriptValue idx, EvalContext ctx)
         {
             return PyOps.GetItem(obj, idx, ctx);
+        }
+
+        // A statement's whole value (`v = ...`, `v += ...`, `return ...`, an expression statement) whose QuietValue is
+        // set: a missing dict key, a list or tuple index out of range and a quiet builtin's failure (int('x'), next()
+        // at the end) are handed back as the exception, for the statement to raise as a signal - a .NET throw costs
+        // 40-80 times a raise statement. The same Raise.Make, so its text, line, steps and charge are too.
+        private ScriptValue ValueOrRaised(ExprNode e, Environment env, EvalContext ctx, out ExceptionValue raised)
+        {
+            return e.NodeKind == NodeKind.Index
+                ? IndexOrRaised((IndexNode)e, env, ctx, out raised)
+                : CallOrRaised((CallNode)e, env, ctx, out raised);
+        }
+
+        // Any statement's value: ValueOrRaised's when QuietValue is set, else EvalExpr's.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private ScriptValue StatementValue(ExprNode e, Environment env, EvalContext ctx, out ExceptionValue raised)
+        {
+            if (e.QuietValue)
+                return ValueOrRaised(e, env, ctx, out raised);
+            raised = null;
+            return EvalExpr(e, env, ctx);
+        }
+
+        private static void CountNode(EvalContext ctx)
+        {
+            int node = ++ctx.NodeCounter;   // counted as EvalExpr counts the node
+            if ((node & 15) == 0)
+            {
+                if ((node & 63) == 0)
+                    ctx.Budget.Step(BudgetCost.NodeBatch);
+                StackGuard.Probe(ctx);
+            }
+        }
+
+        // int(...), float(...), next(...) as EvalCall runs them, but through the twin while the name holds the builtin.
+        private ScriptValue CallOrRaised(CallNode n, Environment env, EvalContext ctx, out ExceptionValue raised)
+        {
+            raised = null;
+            CountNode(ctx);
+            ScriptValue callee = EvalExpr(n.Func, env, ctx);
+            ValueKind kind = callee.Kind;
+            QuietBuiltin quiet;
+            switch (kind)
+            {
+                case ValueKind.BuiltinFunction:
+                    quiet = ((BuiltinFunctionValue)callee).Quiet;
+                    break;
+                case ValueKind.Type:
+                    quiet = ((TypeValue)callee).Quiet;
+                    break;
+                default:
+                    quiet = null;
+                    break;
+            }
+            if (quiet == null)
+                return DispatchCall(n, callee, env, ctx);
+            KwArgs kw;
+            ScriptValue[] args = EvalCallArgs(n, env, ctx, out kw);
+            return CallQuiet(quiet, kind == ValueKind.Type, args, kw, ctx, out raised);
+        }
+
+        private ScriptValue IndexOrRaised(IndexNode n, Environment env, EvalContext ctx, out ExceptionValue raised)
+        {
+            CountNode(ctx);
+            raised = null;
+            ScriptValue obj = EvalExpr(n.Value, env, ctx);
+            ScriptValue idx = EvalSubscript(n.Index, env, ctx);
+            ScriptValue v;
+            int pos;
+            switch (obj.Kind)
+            {
+                case ValueKind.Dict:
+                    if (((DictValue)obj).TryGetItem(idx, ctx, out v))
+                        return v;
+                    raised = Raise.KeyError(ctx, idx).Value;
+                    return null;
+                case ValueKind.List:
+                    if (!SequenceOps.IsIndex(idx))
+                        break;
+                    List<ScriptValue> items = ((ListValue)obj).Items;
+                    if (SequenceOps.TryNormIndex(idx, items.Count, out pos))
+                        return items[pos];
+                    raised = Raise.IndexError(ctx, "list index out of range").Value;
+                    return null;
+                case ValueKind.Tuple:
+                    if (!SequenceOps.IsIndex(idx))
+                        break;
+                    ScriptValue[] elems = ((TupleValue)obj).Items;
+                    if (SequenceOps.TryNormIndex(idx, elems.Length, out pos))
+                        return elems[pos];
+                    raised = Raise.IndexError(ctx, "tuple index out of range").Value;
+                    return null;
+            }
+            return GetItemByKind(obj, idx, ctx);
         }
 
         private void SetItemByKind(ScriptValue obj, ScriptValue idx, ScriptValue value, EvalContext ctx)

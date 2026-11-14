@@ -36,6 +36,15 @@ namespace Outbridge.PyLite.Tests.Modern
             Assert.Equal("False", Ev.ReprOf(src, "hasattr(p, 'z')"));
         }
 
+        // type() of a class answered a type named after the class (<class 'Point'>); a class is a type.
+        [Fact]
+        public void TheTypeOfAClassIsType()
+        {
+            string src = Point + "from dataclasses import make_dataclass\nD = make_dataclass('D', ['a'])\n";
+            Assert.Equal("(<class 'type'>, <class 'type'>, True, True, True)",
+                Ev.ReprOf(src, "type(Point), type(D), type(Point) is type(int), type(D) is type(Point), type(Point(1, 2)) is Point"));
+        }
+
         [Fact]
         public void ConstructAndReadAttributes()
         {

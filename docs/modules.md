@@ -1,6 +1,6 @@
 # What is implemented
 
-The surface below was read off a running engine at version 1.1.0 — every name in it is what
+The surface below was read off a running engine at version 1.2.0 — every name in it is what
 `dir()` returns for that module, private `_names` left out — so it says what exists, not what was
 intended. It does not say how each name behaves; where behaviour differs from CPython, that
 belongs in `deviations.md`. `tests/PyLite.Tests/Infra/ModulesDocTests.cs` writes this file and
@@ -17,7 +17,7 @@ supported in this environment`:
 
 Not defined at all (a plain `NameError`): `aiter` `anext` `breakpoint`.
 
-Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseException` `EOFError` `Exception` `FloatingPointError` `ImportError` `IndexError` `KeyError` `LookupError` `NameError` `NotImplementedError` `OSError` `OverflowError` `RecursionError` `RuntimeError` `StopIteration` `SyntaxError` `TypeError` `UnboundLocalError` `UnicodeDecodeError` `UnicodeEncodeError` `UnicodeError` `ValueError` `ZeroDivisionError`.
+Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseException` `BufferError` `ConnectionError` `EOFError` `Exception` `FileNotFoundError` `FloatingPointError` `ImportError` `IndexError` `KeyError` `LookupError` `ModuleNotFoundError` `NameError` `NotImplementedError` `OSError` `OverflowError` `PermissionError` `RecursionError` `ReferenceError` `RuntimeError` `StopIteration` `SyntaxError` `SystemError` `TimeoutError` `TypeError` `UnboundLocalError` `UnicodeDecodeError` `UnicodeEncodeError` `UnicodeError` `UserWarning` `ValueError` `Warning` `ZeroDivisionError`.
 
 `import` reaches the modules listed below and the modules the host registers, nothing else.
 
@@ -43,7 +43,7 @@ Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseExce
 
 ### math
 
-`acos` `acosh` `asin` `asinh` `atan` `atan2` `atanh` `cbrt` `ceil` `comb` `copysign` `cos` `cosh` `degrees` `dist` `e` `exp` `exp2` `expm1` `fabs` `factorial` `floor` `fma` `fmod` `frexp` `fsum` `gcd` `hypot` `inf` `isclose` `isfinite` `isinf` `isnan` `isqrt` `lcm` `ldexp` `log` `log10` `log1p` `log2` `modf` `nan` `nextafter` `perm` `pi` `pow` `prod` `radians` `remainder` `sin` `sinh` `sqrt` `sumprod` `tan` `tanh` `tau` `trunc` `ulp`
+`acos` `acosh` `asin` `asinh` `atan` `atan2` `atanh` `cbrt` `ceil` `comb` `copysign` `cos` `cosh` `degrees` `dist` `e` `erf` `erfc` `exp` `exp2` `expm1` `fabs` `factorial` `floor` `fma` `fmod` `frexp` `fsum` `gamma` `gcd` `hypot` `inf` `isclose` `isfinite` `isinf` `isnan` `isqrt` `lcm` `ldexp` `lgamma` `log` `log10` `log1p` `log2` `modf` `nan` `nextafter` `perm` `pi` `pow` `prod` `radians` `remainder` `sin` `sinh` `sqrt` `sumprod` `tan` `tanh` `tau` `trunc` `ulp`
 
 ### decimal
 
@@ -55,7 +55,7 @@ Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseExce
 
 ### statistics
 
-`StatisticsError` `correlation` `covariance` `fmean` `geometric_mean` `harmonic_mean` `linear_regression` `mean` `median` `median_grouped` `median_high` `median_low` `mode` `multimode` `pstdev` `pvariance` `quantiles` `stdev` `variance`
+`LinearRegression` `StatisticsError` `correlation` `covariance` `fmean` `geometric_mean` `harmonic_mean` `linear_regression` `mean` `median` `median_grouped` `median_high` `median_low` `mode` `multimode` `pstdev` `pvariance` `quantiles` `stdev` `variance`
 
 ### random
 
@@ -71,7 +71,7 @@ Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseExce
 
 ### re
 
-`A` `ASCII` `DOTALL` `I` `IGNORECASE` `L` `LOCALE` `M` `MULTILINE` `S` `U` `UNICODE` `VERBOSE` `X` `compile` `error` `escape` `findall` `finditer` `fullmatch` `match` `purge` `search` `split` `sub` `subn`
+`A` `ASCII` `DOTALL` `I` `IGNORECASE` `L` `LOCALE` `M` `MULTILINE` `PatternError` `S` `U` `UNICODE` `VERBOSE` `X` `compile` `error` `escape` `findall` `finditer` `fullmatch` `match` `purge` `search` `split` `sub` `subn`
 
 ### datetime
 
@@ -115,7 +115,7 @@ Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseExce
 
 ### dataclasses
 
-`InitVar` `MISSING` `asdict` `astuple` `dataclass` `field` `fields` `is_dataclass` `make_dataclass` `replace`
+`FrozenInstanceError` `InitVar` `MISSING` `asdict` `astuple` `dataclass` `field` `fields` `is_dataclass` `make_dataclass` `replace`
 
 ### typing
 
@@ -212,3 +212,7 @@ Exception classes: `ArithmeticError` `AssertionError` `AttributeError` `BaseExce
 ### traceback
 
 `format_exc` `format_exception` `format_exception_only` `print_exc` `print_exception`
+
+### __future__
+
+`CO_FUTURE_ABSOLUTE_IMPORT` `CO_FUTURE_ANNOTATIONS` `CO_FUTURE_BARRY_AS_BDFL` `CO_FUTURE_DIVISION` `CO_FUTURE_GENERATOR_STOP` `CO_FUTURE_PRINT_FUNCTION` `CO_FUTURE_UNICODE_LITERALS` `CO_FUTURE_WITH_STATEMENT` `CO_GENERATOR_ALLOWED` `CO_NESTED` `__all__` `absolute_import` `all_feature_names` `annotations` `barry_as_FLUFL` `division` `generator_stop` `generators` `nested_scopes` `print_function` `unicode_literals` `with_statement`

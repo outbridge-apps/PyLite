@@ -2,24 +2,53 @@ using System;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // Read-only per-run telemetry snapshot. Filled by the engine; never null in
-    // any run outcome. The script has no access to it (a limit-probing channel is denied).
+    /// <summary>
+    /// What one run used, filled by the engine; never null, whatever the outcome. Scripts cannot read it, so it is
+    /// no channel for probing the limits.
+    /// </summary>
     public sealed class RunStatistics
     {
-        public long Steps { get; internal set; }              // Budget steps used at exit
-        public long AllocatedBytes { get; internal set; }     // Budget alloc bytes used
-        public long OutputBytes { get; internal set; }        // Budget output bytes used
-        public TimeSpan Elapsed { get; internal set; }        // run Stopwatch (marshaling included)
-        public TimeSpan CompileTime { get; internal set; }    // 0 on a compiled-script cache hit
-        public TimeSpan HostCallTime { get; internal set; }   // Σ host-delegate durations
-        public TimeSpan RegexTime { get; internal set; }      // Σ regex time consumed
-        public long SleepMs { get; internal set; }            // Σ sleep ms
-        public int PeakCallDepth { get; internal set; }       // max CallDepth over the run
-        public int ModulesImported { get; internal set; }     // ctx.ModuleInstances.Count at exit
-        public int RegexOps { get; internal set; }            // count of regex operations
-        public bool TerminatingEntered { get; internal set; } // Budget.IsTerminating at exit
+        /// <summary>The steps charged (see <see cref="ResourceLimits.MaxSteps"/>).</summary>
+        public long Steps { get; internal set; }
+
+        /// <summary>The bytes charged against <see cref="ResourceLimits.MaxAllocBytes"/>.</summary>
+        public long AllocatedBytes { get; internal set; }
+
+        /// <summary>The printed bytes charged against <see cref="ResourceLimits.MaxOutputBytes"/>.</summary>
+        public long OutputBytes { get; internal set; }
+
+        /// <summary>The run's time, the conversion of inputs and outputs included.</summary>
+        public TimeSpan Elapsed { get; internal set; }
+
+        /// <summary>The compile <c>Run(string, …)</c> did; zero on a cache hit and for a precompiled script.</summary>
+        public TimeSpan CompileTime { get; internal set; }
+
+        /// <summary>The time spent in host functions the script called.</summary>
+        public TimeSpan HostCallTime { get; internal set; }
+
+        /// <summary>The time regular expressions took.</summary>
+        public TimeSpan RegexTime { get; internal set; }
+
+        /// <summary>The milliseconds <c>time.sleep</c> waited.</summary>
+        public long SleepMs { get; internal set; }
+
+        /// <summary>The deepest call nesting the run reached.</summary>
+        public int PeakCallDepth { get; internal set; }
+
+        /// <summary>The modules the run imported.</summary>
+        public int ModulesImported { get; internal set; }
+
+        /// <summary>The regular expression operations the run made.</summary>
+        public int RegexOps { get; internal set; }
+
+        /// <summary>A limit was reached and the run was in its grace period when it ended.</summary>
+        public bool TerminatingEntered { get; internal set; }
+
+        /// <summary>The script traceback was cut to its maximum frames.</summary>
         public bool TracebackTruncated { get; internal set; }
-        public int LeakedThreadsAtStart { get; internal set; }// RunGate leak snapshot when the ticket issued
+
+        /// <summary>The engine's left-behind threads when the run was admitted.</summary>
+        public int LeakedThreadsAtStart { get; internal set; }
 
         // The exit-time fields; the running totals (host/regex time, depth) accumulate during the run.
         internal void Snapshot(Runtime.EvalContext ctx)

@@ -47,6 +47,10 @@ namespace Outbridge.PyLite.Modules.Support
                 }
                 case KeyKind.Str:
                 {
+                    // One compare of two long equal-prefix strs is a long native pass: those sort where each
+                    // compare is charged by length.
+                    if (HasLongStr(k))
+                        goto default;
                     ctx.Values.PreCharge(8L * n + 16L * tmpLen);
                     ChargeTyped(ctx, n);
                     var a = new string[n];
@@ -61,6 +65,38 @@ namespace Outbridge.PyLite.Modules.Support
                     break;
             }
             ctx.Budget.CheckDeadlineNow();
+        }
+
+        // order (indices into keys) by the text of its keys, ties in order. A bottom-up merge: each compare is charged by
+        // length, and the steps read the deadline, which no native sort over the same keys would.
+        internal static int[] OrderByText(EvalContext ctx, int[] order, System.Collections.Generic.List<string> keys)
+        {
+            int n = order.Length;
+            if (n < 2)
+                return order;
+            ctx.Values.PreCharge(4L * n);
+            int[] src = order, dst = new int[n];
+            for (long width = 1; width < n; width *= 2)
+            {
+                for (long lo = 0; lo < n; lo += 2 * width)
+                {
+                    int a = (int)lo, mid = (int)Math.Min(lo + width, n), hi = (int)Math.Min(lo + 2 * width, n);
+                    int b = mid, w = (int)lo;
+                    while (a < mid && b < hi)
+                    {
+                        ctx.Budget.Step();
+                        dst[w++] = PyOps.StrCompare(keys[src[a]], keys[src[b]], ctx) <= 0 ? src[a++] : src[b++];
+                    }
+                    while (a < mid)
+                        dst[w++] = src[a++];
+                    while (b < hi)
+                        dst[w++] = src[b++];
+                }
+                int[] t = src;
+                src = dst;
+                dst = t;
+            }
+            return src;
         }
 
         private enum KeyKind { Generic, SmallInt, Float, Str }
@@ -100,6 +136,16 @@ namespace Outbridge.PyLite.Modules.Support
                 return KeyKind.Float;
             }
             return KeyKind.Generic;
+        }
+
+        private static bool HasLongStr(ScriptValue[] k)
+        {
+            for (int i = 0; i < k.Length; i++)
+            {
+                if (((StrValue)k[i]).Value.Length > BudgetCost.LinearChunkSize)
+                    return true;
+            }
+            return false;
         }
 
         // A typed sort is bounded and cannot call script code: charge its comparisons before it starts.
@@ -154,7 +200,7 @@ namespace Outbridge.PyLite.Modules.Support
                 if (a.Kind == ValueKind.Str && b.Kind == ValueKind.Str)
                 {
                     _ctx.Budget.Step();
-                    return string.CompareOrdinal(((StrValue)a).Value, ((StrValue)b).Value) < 0;
+                    return PyOps.StrCompare(((StrValue)a).Value, ((StrValue)b).Value, _ctx) < 0;
                 }
                 return PyOps.RichCompare(PyCmpOp.Lt, a, b, _ctx).IsTruthy(_ctx);
             }

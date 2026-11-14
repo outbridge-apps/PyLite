@@ -17,5 +17,12 @@ namespace Outbridge.PyLite.Syntax
         };
 
         private PySyntaxErrorException Forbidden(string key) { return Error(ForbiddenTable[key]); }
+
+        // yield and await: CPython's error outside a function, the dialect's inside one
+        private PySyntaxErrorException ForbiddenInFunction()
+        {
+            string kw = _cur.Kind == TokenKind.KwYield ? "yield" : "await";
+            return _funcDepth == 0 ? Error("'" + kw + "' outside function") : Forbidden(kw);
+        }
     }
 }

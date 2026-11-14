@@ -39,9 +39,9 @@ namespace Outbridge.PyLite.Runtime.Values
             MixedIn = mixedIn;
             Base = baseCls;
             Methods = methods ?? new Dictionary<string, FunctionValue>(StringComparer.Ordinal);
-            MemberType = new ScriptTypeInfo(name, null);
+            MemberType = new ScriptTypeInfo(name, namedByScript: true);
             _byValue = ctx.Values.Dict(4);
-            _identity = SharedIdentitySource.Next();
+            _identity = ctx.Values.NextIdentitySeq();   // the run's counter: no other run reaches it
         }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
@@ -142,14 +142,8 @@ namespace Outbridge.PyLite.Runtime.Values
                             throw Raise.ValueError(ctx, "cannot convert float " + raw.Repr(ctx) + " to integer");
                         return ctx.Values.Int(new BigInteger(Math.Truncate(d)));
                     }
-                    case ValueKind.Str:
-                    {
-                        BigInteger b;
-                        string s = ((StrValue)raw).Value.Trim();
-                        if (BigInteger.TryParse(s, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out b))
-                            return ctx.Values.Int(b);
-                        throw Raise.ValueError(ctx, "invalid literal for int() with base 10: " + raw.Repr(ctx));
-                    }
+                    case ValueKind.Str:   // int(value), with its digit limit and charges
+                        return ctx.Values.Int(Modules.Support.IntParser.Parse(ctx, ((StrValue)raw).Value, 10));
                     default:
                         throw Raise.TypeError(ctx, "int() argument must be a string, a bytes-like object or a real number, not '" + raw.PyTypeName + "'");
                 }
@@ -235,10 +229,27 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override IScriptIterator GetIteratorCore(EvalContext ctx)
         {
-            var items = new List<ScriptValue>(Members.Count);
-            foreach (EnumMemberValue m in Members)
-                items.Add(m.Self);
-            return new ListIterator(items);
+            return new MemberIterator(Members);
+        }
+
+        // The members do not change once the class exists, so a kept iterator holds no copy of them.
+        private sealed class MemberIterator : ScriptIteratorBase
+        {
+            private readonly IList<EnumMemberValue> _members;
+            private int _next;
+
+            internal MemberIterator(IList<EnumMemberValue> members) { _members = members; }
+
+            protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+            {
+                if (_next >= _members.Count)
+                {
+                    value = null;
+                    return false;
+                }
+                value = _members[_next++].Self;
+                return true;
+            }
         }
 
         protected internal override bool TryLengthCore(out long length) { length = Members.Count; return true; }
@@ -333,14 +344,14 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             FunctionValue f = Class.FindMethod(name);
             if (f != null)
-                return new BoundUserMethodValue(Self, f);
+                return ctx.Values.BoundUserMethod(Self, f);
             for (EnumClassValue c = Class; c != null; c = c.Base)
             {
                 ScriptValue extra;
                 if (c.Extras.TryGetValue(name, out extra))
                 {
                     FunctionValue ef = extra as FunctionValue;
-                    return ef != null ? new BoundUserMethodValue(Self, ef) : extra;
+                    return ef != null ? ctx.Values.BoundUserMethod(Self, ef) : extra;
                 }
             }
             throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "'" + Class.Name + "' object has no attribute '" + name + "'");
@@ -414,6 +425,11 @@ namespace Outbridge.PyLite.Runtime.Values
     // Enum('Color', {'RED': 1, ...}).
     internal static class EnumFunctional
     {
+        private static bool IsNameSeparator(char c)
+        {
+            return c == ',' || c == ' ' || c == '\t' || c == '\n' || c == '\r';
+        }
+
         internal static ScriptValue Create(EnumClassValue baseCls, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             ScriptValue nameArg = args.Length > 0 ? args[0] : null;
@@ -435,8 +451,21 @@ namespace Outbridge.PyLite.Runtime.Values
             StrValue s = names as StrValue;
             if (s != null)
             {
-                foreach (string n in s.Value.Replace(',', ' ').Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
-                    cls.AddMember(n, new AutoValue(), ctx);
+                // name by name, a step each: a split of 16M chars ran 1.8 s on 28 steps before the first
+                // duplicate name raised
+                string v = s.Value;
+                for (int i = 0; i < v.Length; )
+                {
+                    while (i < v.Length && IsNameSeparator(v[i]))
+                        i++;
+                    int start = i;
+                    while (i < v.Length && !IsNameSeparator(v[i]))
+                        i++;
+                    if (i == start)
+                        continue;
+                    ctx.Budget.Step();
+                    cls.AddMember(v.Substring(start, i - start), new AutoValue(), ctx);
+                }
                 return cls;
             }
             DictValue d = names as DictValue;

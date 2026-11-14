@@ -27,43 +27,45 @@ by prefix in its README.
 | **No files, sockets, processes or environment.** The engine ships no module that reaches them, an `import` of anything not registered fails, and `eval`, `exec`, `compile`, `open`, `input`, `globals` and `locals` do not exist. The modules are listed in [`docs/modules.md`](docs/modules.md). | `Builtins/BuiltinsInventoryTests` (the builtin surface, pinned), `Builtins/HostFunctionTableTests`, `Runtime/ModuleRegistryTests`, `Evaluator/EvaluatorPhase5Tests` (unknown imports) |
 | **No reach into .NET.** Script values are the engine's own value model. Introspection does not lead out of it: `__subclasses__`, `__globals__`, `__code__`, `__builtins__`, `__import__` and the format-string attribute walk find nothing to climb, and no attribute or call yields a CLR object, type or method. | `Hosting/IntrospectionEscapeTests` |
 | **Every run is bounded** by `ResourceLimits`: steps, wall-clock deadline, allocated bytes, call depth, data depth, string and collection size, integer size, output bytes, regex time, sleep time. Crossing a limit ends the run with a `BudgetExceeded` result naming the limit; the script cannot catch it. | `Runtime/BudgetTests`, `Runtime/ResourceLimitsTests`, `Hosting/ResourceBoundTests` (bombs of every kind end near their deadline, no thread leaked), the `Stress/` classes, [`examples/limits`](examples/limits) with `Hosting/LimitExamplesTests` (one script per limit), every probe |
-| **The deadline holds inside long operations too**: big-int arithmetic, regex, sort, string building, parsing, compression. | `Hosting/ResourceBoundTests`, `Values/BigOpsTests`, probes `h`, `r`, `l` |
+| **The deadline holds inside long operations too**: big-int arithmetic, regex, sort, string building, parsing, formatting, compression. | `Hosting/ResourceBoundTests`, `Hosting/NativeOvershootTests`, `Values/BigOpsTests`, `Values/BigKernelTests`, probes `h`, `r`, `l`, `n` |
 | **No stack overflow.** Deep recursion ends the run on `MaxCallDepth`; deep data raises `RecursionError` at `MaxDataDepth`; the C# stack is probed on every recursive descent, at compile time as well, so a script cannot take the process down with `StackOverflowException`. | `Runtime/StackGuardTests`, `Syntax/CompileStackSafetyTests`, `Syntax/SyntaxLimitsTests`, `Stress/ValueModelStressTests`, probes `d` and `l1`-`l4` |
 | **No engine fault from script content.** Whatever the script does, the host receives a typed result (`RuntimeError`, `SyntaxError`, `BudgetExceeded`, `HostError`), never an exception. | `Hosting/HostBoundaryTests` (a hostile corpus through `Run` and `TryCompile`), `Hosting/RunnerThreadTests`, `Runtime/OverflowNetTests`, `Modules/ArgumentFaultTests`, `Modules/ModuleBoundaryTests`, the `Fuzz` category |
 | **The memory of a stopped run is given back.** | `Hosting/ResourceBoundTests` (`AbortedMemoryBombGraphIsCollected`), `Hosting/MemoryHygieneTests` |
-| **Concurrency is bounded.** At most `MaxConcurrentRuns` runs at once (8 by default, 32 at most), and the `MaxAllocBytes` of the running runs together stay under `GlobalMemoryCeilingBytes` (1 GB by default). A run past either is refused at once (`BudgetExceeded`, `MaxConcurrentRuns` or `GlobalMemoryCeiling`), never queued. | `Hosting/ScriptEngineGateTests`, `Hosting/RunGateTests`, `Hosting/EngineLifecycleTests` (twenty callers on four slots, three runs filling the ceiling) |
+| **One run's limits do not reduce another's, and the engine does not bound how many run.** Each run has its own limits, on its own thread; `Run` is synchronous, so the host's threads bound parallelism, and N runs may hold N × `MaxAllocBytes`. Leaked threads open a breaker that refuses new runs (`CircuitBreakerLeakedThreads`, 4 by default), and so does free memory below what a run may need. | `Hosting/UnlimitedRunsTests`, `Hosting/LeakBreakerTests`, `Hosting/FreeMemoryTests`, `Hosting/ScriptEngineGateTests` (runs side by side) |
 
 ## What can outlive a run, stated exactly
 
-- **Script code always stops at a budget check.** `Run` returns at about `DeadlineMs`, plus a terminating
-  grace of 250 ms in which `finally` blocks may run but cannot un-fail the run. A run cancelled through
-  `RunRequest.CancellationToken` stops the same way: its runner thread exits and no script code runs
-  after `Run` returns (`Hosting/EngineLifecycleTests`, `ACancelledRunLeavesNothingRunning`).
+Nothing of a run outlives it except a host function that blocks.
+
+- **Script code always stops at a budget check**, and so does every long call the engine makes for it into
+  .NET: big-int arithmetic runs in the engine's own kernel on the run's thread and checks the deadline every
+  few milliseconds; regexes run with a timeout; formatting, splitting, hashing and conversions charge the
+  budget as they go. `Run` returns at about `DeadlineMs`, plus a terminating grace of 250 ms in which
+  `finally` blocks may run but cannot un-fail the run, and the run's thread computes nothing afterwards. A run
+  cancelled through `RunRequest.CancellationToken` stops the same way (`Hosting/EngineLifecycleTests`,
+  `ACancelledRunLeavesNothingRunning`). Held by `Hosting/NativeOvershootTests` (every call that outlived its
+  run in 1.1.0 now ends within a second of its deadline and leaves no CPU behind) and probes `n`.
 - **A host function that blocks** is the one thing that can keep a run's thread past deadline + grace +
-  5 s. `Run` then returns a `HostError`, the runner thread is leaked (its gate slot and its memory stay held
-  until the host function returns), the engine raises a `ThreadLeaked` event, and once
+  5 s. `Run` then returns a `HostError`, the runner thread is leaked (its stack and its memory stay held
+  until the host function returns, and then the thread ends), the engine raises a `ThreadLeaked` event, and once
   `CircuitBreakerLeakedThreads` threads (4 by default) are leaked, the circuit breaker opens: every `Run` is
-  refused until they finish. Held by `Hosting/RunGateWatchdogTests` and `Hosting/RunnerThreadTests`, and end to end
-  through `Run` by `Hosting/EngineLifecycleTests` (`ALeakedThreadHoldsItsSlotUntilItReturns`).
-- **A long big-int operation** (a multiply, division, gcd, power, `pow(b, e, m)` or decimal conversion that
-  would take more than about 10 ms) runs on a helper thread while the run's thread polls the deadline. A
-  stopped run returns on time; that one call then finishes on its own: seconds of CPU at the default
-  `MaxIntBits` of 1,000,000 bits, about 16 times that at its 4,000,000-bit hard cap. The helper holds no gate
-  slot. Held by `Values/BigOpsTests` and probes `li`-`lm`.
+  refused until they finish. Held by `Hosting/LeakBreakerTests` and `Hosting/RunnerThreadTests`, and end to end
+  through `Run` by `Hosting/EngineLifecycleTests` (`LeakedThreadsStopTheEngineUntilTheyReturn`). A host
+  function that waits on something should give itself a timeout no longer than `ctx.Budget.TimeRemaining`, and
+  the run ends on time even when the call behind it hangs. The [hosting guide](docs/HOSTING-GUIDE.md) describes
+  the host side of all of this.
 
 ## What it does not guarantee
 
 - A host function or module the host registers runs with the host's privileges. Everything the host hands
   to a script is the host's responsibility; PyLite fences those calls so that an exception in them becomes
   a `HostError` result, nothing more, and a host function that blocks is the leaked-thread case above.
-- The CPU a stopped run's last big-int call still uses, as above.
 - Timing side channels and resource-usage inference are out of scope.
 - The default limits are generous. A host that runs untrusted scripts should set its own `ResourceLimits`
-  per run and a ceiling per engine in `EngineOptions`; the engine's hard caps (deadline 300 s, 2·10⁹ steps,
-  1 GB allocated, call depth 512, data depth 10,000, int size 4,000,000 bits, 32 concurrent runs) apply on
-  top of both.
+  per run; the engine's hard caps (deadline 300 s, 2·10⁹ steps, 1 GB allocated, call depth 512, data depth
+  10,000, int size 4,000,000 bits) apply on top of them.
 - Denial of service against the host by a flood of runs is the host's concern: the engine bounds each run
-  and refuses runs past its gate, but it does not throttle callers.
+  and refuses runs when leaked threads or free memory say so, but it does not throttle callers.
 
 ## Reporting a vulnerability
 

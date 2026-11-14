@@ -84,16 +84,16 @@ namespace Outbridge.PyLite.Tests.Syntax
                             L.Kinds("f'{d['k']}'"));
 
         [Theory]
-        [InlineData("f'{}'", "f-string: empty expression not allowed")]
-        [InlineData("f'{!r}'", "f-string: empty expression not allowed")]
+        [InlineData("f'{}'", "f-string: valid expression required before '}'")]
+        [InlineData("f'{!r}'", "f-string: valid expression required before '!'")]
         [InlineData("f'}'", "f-string: single '}' is not allowed")]
-        [InlineData("f'{a\\b}'", "f-string expression part cannot include a backslash")]
-        [InlineData("f'{#x}'", "f-string expression part cannot include '#'")]
+        [InlineData("f'{a\\b}'", "unexpected character after line continuation character")]
+        [InlineData("f'{#x}'", "'{' was never closed")]
         [InlineData("f'{a)}'", "f-string: unmatched ')'")]
-        [InlineData("f'{x:{y:{z}}}'", "f-string: expressions nested too deeply")]
+        [InlineData("f'{x:{y:{z:{w}}}}'", "f-string: expressions nested too deeply")]
         [InlineData("f'\\x7b}'", "f-string: single '}' is not allowed")]
-        [InlineData("f'{x'", "EOL while scanning string literal")]
-        [InlineData("f'{d['", "EOL while scanning string literal")]
+        [InlineData("f'{x'", "f-string: expecting '}'")]
+        [InlineData("f'{d['", "f-string: expecting '}'")]
         public void Errors(string src, string message)
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go(src));

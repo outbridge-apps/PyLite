@@ -25,7 +25,7 @@ namespace Outbridge.PyLite.Modules.Support
 
             double intpart = Math.Truncate(t);
             if (intpart >= TimestampLongLimit || intpart < -TimestampLongLimit)
-                throw Raise.Overflow(ctx, "timestamp out of range");
+                throw Raise.Overflow(ctx, "timestamp out of range for platform time_t");
 
             double frac = t - intpart;
             double usD = Math.Round(frac * 1e6, MidpointRounding.ToEven);

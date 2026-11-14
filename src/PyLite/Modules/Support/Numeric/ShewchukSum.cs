@@ -7,15 +7,15 @@ namespace Outbridge.PyLite.Modules.Support
 {
     // Exact summation, a port of Modules/mathmodule.c::math_fsum (Shewchuk exact-partials, NOT
     // Neumaier). Used by math.fsum and statistics._sum's float path. Non-finite inputs accumulate into
-    // infSum (modern: [inf,-inf] -> nan, no ValueError); finite summands overflowing mid-2Sum -> OverflowError.
+    // specialSum, infinities also into infSum: [inf, -inf] is ValueError, finite summands overflowing mid-2Sum
+    // OverflowError.
     internal static class ShewchukSum
     {
         public static double Sum(EvalContext ctx, IEnumerable<double> source)
         {
             var p = new List<double>();   // partials; invariant: p.Count == n
             int n = 0;
-            bool specialSeen = false;
-            double infSum = 0.0;
+            double infSum = 0.0, specialSum = 0.0;
             int since = 0;
 
             foreach (double item in source)
@@ -57,8 +57,9 @@ namespace Outbridge.PyLite.Modules.Support
                     {
                         if (IsFinite(xsave))
                             throw Raise.Overflow(ctx, "intermediate overflow in fsum");
-                        infSum += xsave;
-                        specialSeen = true;
+                        if (double.IsInfinity(xsave))
+                            infSum += xsave;
+                        specialSum += xsave;
                         p.Clear();
                         n = 0;
                     }
@@ -71,8 +72,12 @@ namespace Outbridge.PyLite.Modules.Support
                 }
             }
 
-            if (specialSeen)
-                return infSum;
+            if (specialSum != 0.0)   // true for a NaN too
+            {
+                if (double.IsNaN(infSum))
+                    throw Raise.ValueError(ctx, "-inf + inf in fsum");
+                return specialSum;
+            }
 
             double result = 0.0;
             if (n > 0)

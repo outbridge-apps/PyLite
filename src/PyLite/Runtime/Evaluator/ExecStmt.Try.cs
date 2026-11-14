@@ -91,6 +91,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (n.Finally.Count > 0)
             {
                 bool terminating = ctx.Budget.IsTerminating;
+                // A host failure, an engine fault or an abort is not the script's to drop: it ends the run
+                // whatever the finally does (a `return` there turned a failed host call into success).
+                bool dominant = pendingExc != null && !(pendingExc is ScriptException);
                 ExecSignal fsig;
                 try
                 {
@@ -106,6 +109,10 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     {
                         fsig = ExecSignal.Normal;   // swallow: EngineAbort dominates
                     }
+                    else if (dominant)
+                    {
+                        throw pendingExc;
+                    }
                     else
                     {
                         throw;   // an exception from finally REPLACES pending
@@ -117,7 +124,11 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 if (!fsig.IsNormal)
                 {
-                    return fsig;   // finally break/continue/return/raise overrides pending (and suppresses pendingExc)
+                    if (dominant)
+                    {
+                        throw pendingExc;
+                    }
+                    return fsig;   // finally break/continue/return/raise overrides a pending script exception
                 }
             }
 
@@ -159,7 +170,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             // once it becomes a __context__/__cause__ of something else. Stamp its raise site here.
             if ((exc.TracebackFrames == null || exc.TracebackFrames.Count == 0) && exc.RaiseLine > 0)
             {
-                TracebackBuilder.AppendFrame(exc, ctx.CurrentFunctionName, exc.RaiseLine);
+                TracebackBuilder.AppendFrame(exc, ctx.CurrentFunctionName, exc.RaiseLine, _program.ModuleFile);
                 exc.FrameStampedAtCatch = true;
             }
             else if (!exc.FrameStampedAtCatch && exc.TracebackFrames != null && exc.TracebackFrames.Count > 0)
@@ -167,7 +178,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 // Arrived from a callee: the catching frame is part of the traceback too (the line of the
                 // call that raised, as CPython shows it), and traceback.format_exc() reads it right here.
                 // The stamp flag makes the frame-exit append skip this frame should the handler re-raise.
-                TracebackBuilder.AppendFrame(exc, ctx.CurrentFunctionName, ctx.CurrentLine);
+                TracebackBuilder.AppendFrame(exc, ctx.CurrentFunctionName, ctx.CurrentLine, _program.ModuleFile);
                 exc.FrameStampedAtCatch = true;
             }
 
@@ -177,6 +188,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 if (matched.Name != null)
                 {
+                    exc.ChargeIfKept(ctx);
                     env.BindScopeName(matched.Name, exc);
                 }
                 try
@@ -198,26 +210,31 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
+        // CPython's except: an exception class, or a tuple whose every item is one (a nested tuple is not),
+        // all checked before the match.
         private bool MatchesHandler(ExceptionValue exc, ScriptValue typeVal, EvalContext ctx)
         {
             TypeValue tv = typeVal as TypeValue;
             if (tv != null && tv.ExcType != null)
-            {
                 return exc.ExcType.IsSubtypeOf(tv.ExcType);
-            }
             TupleValue tup = typeVal as TupleValue;
-            if (tup != null)
+            if (tup == null)
+                throw CannotCatch(ctx);
+            ctx.Budget.ChargeLinear(tup.Items.Length);
+            bool matched = false;
+            for (int i = 0; i < tup.Items.Length; i++)
             {
-                for (int i = 0; i < tup.Items.Length; i++)
-                {
-                    if (MatchesHandler(exc, tup.Items[i], ctx))
-                    {
-                        return true;
-                    }
-                }
-                return false;
+                TypeValue t = tup.Items[i] as TypeValue;
+                if (t == null || t.ExcType == null)
+                    throw CannotCatch(ctx);
+                matched = matched || exc.ExcType.IsSubtypeOf(t.ExcType);
             }
-            throw Raise.TypeError(ctx, "catching classes that do not inherit from BaseException is not allowed");
+            return matched;
+        }
+
+        private static ScriptException CannotCatch(EvalContext ctx)
+        {
+            return Raise.TypeError(ctx, "catching classes that do not inherit from BaseException is not allowed");
         }
 
         private ExecSignal ExecRaise(RaiseNode n, Environment env, EvalContext ctx)
@@ -265,7 +282,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         }
 
         // Attach `context` as ev's implicit __context__, trimming the chain to 16.
-        private static void SetContextChain(ExceptionValue ev, ExceptionValue context)
+        internal static void SetContextChain(ExceptionValue ev, ExceptionValue context)
         {
             ev.Context = context;
             ExceptionValue p = ev;

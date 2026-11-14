@@ -100,10 +100,10 @@ namespace Outbridge.PyLite.Tests.Modules.Support
         [Fact]
         public void Expm1SmallAndSpecial()
         {
-            Assert.True(FloatMath.Expm1(1e-10) > 1e-10);   // not flushed to 0
-            Assert.Equal(1e-10, FloatMath.Expm1(1e-10), 15);
-            Assert.Equal(0L, Bits(FloatMath.Expm1(0.0)));
-            Assert.Equal(-1.0, FloatMath.Expm1(double.NegativeInfinity));
+            Assert.True(FdLibm.Expm1(1e-10) > 1e-10);   // not flushed to 0
+            Assert.Equal(1e-10, FdLibm.Expm1(1e-10), 15);
+            Assert.Equal(0L, Bits(FdLibm.Expm1(0.0)));
+            Assert.Equal(-1.0, FdLibm.Expm1(double.NegativeInfinity));
         }
 
         [Fact]

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -15,10 +14,11 @@ namespace Outbridge.PyLite.Modules
     internal static partial class XmlModule
     {
         internal static readonly BuiltinFunctionValue CommentFn =
-            BuiltinFunctionValue.Make("Comment", (s, a, kw, c) => MakeNode(c, a, kw, "Comment", CommentFn, false));
+            BuiltinFunctionValue.Make("Comment", Args.KnownKeywords("Comment", 1, (s, a, kw, c) => MakeNode(c, a, kw, "Comment", CommentFn, false), "text"));
 
         internal static readonly BuiltinFunctionValue ProcessingInstructionFn =
-            BuiltinFunctionValue.Make("ProcessingInstruction", (s, a, kw, c) => MakeNode(c, a, kw, "ProcessingInstruction", ProcessingInstructionFn, true));
+            BuiltinFunctionValue.Make("ProcessingInstruction", Args.Signature("ProcessingInstruction", 2,
+                (s, a, kw, c) => MakeNode(c, a, kw, "ProcessingInstruction", ProcessingInstructionFn, true), "target", "text"));
 
         private static ScriptValue MakeNode(EvalContext ctx, ScriptValue[] a, KwArgs kw, string fn,
             BuiltinFunctionValue tag, bool instruction)
@@ -33,7 +33,7 @@ namespace Outbridge.PyLite.Modules
             if (instruction && first == null)
                 throw Raise.TypeError(ctx, fn + "() missing required argument 'target'");
 
-            var e = new ElementValue(tag, ctx.Values.Dict(0), ctx);
+            var e = new ElementValue(tag, null, ctx);
             string text = first == null || first.Kind == ValueKind.None ? null : StrOf(ctx, first, fn);
             if (instruction && second != null && second.Kind != ValueKind.None)
                 text = text + " " + StrOf(ctx, second, fn);

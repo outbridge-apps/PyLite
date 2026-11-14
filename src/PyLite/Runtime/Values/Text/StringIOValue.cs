@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Modules.Support;
 
 namespace Outbridge.PyLite.Runtime.Values
@@ -14,12 +12,18 @@ namespace Outbridge.PyLite.Runtime.Values
         private static readonly ScriptTypeInfo SType = new ScriptTypeInfo("io.StringIO", BuildSlots());
         internal static ScriptTypeInfo StringIOType { get { return SType; } }
 
-        private readonly StringBuilder _buf;
+        private readonly CharBuffer _buf;
+
+        public override ScriptValue CopyShallow(EvalContext ctx)
+        {
+            CheckOpen(ctx);
+            return new StringIOValue(ctx, _buf.ToString()) { Pos = Pos };
+        }
 
         internal StringIOValue(EvalContext ctx, string initial)
         {
             ctx.Values.PreCharge(24 + 2L * initial.Length);
-            _buf = new StringBuilder(initial);
+            _buf = new CharBuffer(initial);
         }
 
         public override ScriptTypeInfo TypeInfo { get { return SType; } }
@@ -135,6 +139,59 @@ namespace Outbridge.PyLite.Runtime.Values
                 return ctx.Values.Int(pos);
             }));
             return s;
+        }
+
+        // The buffer as one char array. net472's StringBuilder indexer walks its chunk list, so readline
+        // over a buffer built by many writes was quadratic (one readline over 4 MB took 17 s).
+        private sealed class CharBuffer
+        {
+            private char[] _chars;
+            private int _length;
+
+            internal CharBuffer(string initial)
+            {
+                _chars = initial.ToCharArray();
+                _length = _chars.Length;
+            }
+
+            internal int Length
+            {
+                get { return _length; }
+                set { _length = value; }   // only ever shrinks (truncate)
+            }
+
+            internal char this[int i]
+            {
+                get { return _chars[i]; }
+                set { _chars[i] = value; }
+            }
+
+            internal void Append(char c, int count)
+            {
+                Reserve(count);
+                for (int i = 0; i < count; i++)
+                    _chars[_length++] = c;
+            }
+
+            internal void Append(string s, int start, int count)
+            {
+                Reserve(count);
+                s.CopyTo(start, _chars, _length, count);
+                _length += count;
+            }
+
+            private void Reserve(int more)
+            {
+                long need = (long)_length + more;
+                if (need <= _chars.Length)
+                    return;
+                var grown = new char[(int)Math.Min(int.MaxValue - 64, Math.Max(need, 2L * _chars.Length + 16))];
+                Array.Copy(_chars, grown, _length);
+                _chars = grown;
+            }
+
+            public override string ToString() { return new string(_chars, 0, _length); }
+            internal string ToString(int start, int length) { return new string(_chars, start, length); }
         }
     }
 }

@@ -15,16 +15,19 @@ namespace Outbridge.PyLite.Modules
     internal static class TextwrapModule
     {
         private const string Whitespace = "\t\n\x0b\x0c\r ";
+        private static readonly char[] ReplacedWhitespace = { '\t', '\n', '\x0b', '\x0c', '\r' };
 
         // TextWrapper.wordsep_re, transcribed: whitespace runs, em-dashes between words, and words that
-        // may break after an inner hyphen; wordsep_simple_re when break_on_hyphens is off.
-        private static readonly Regex WordSep = new Regex(
-            @"([\t\n\x0b\x0c\r ]+|(?<=[\w!""'&.,?])-{2,}(?=\w)|[^\t\n\x0b\x0c\r ]+?(?:-(?:(?<=[^\d\W]{2}-)|(?<=[^\d\W]-[^\d\W]-))(?=[^\d\W]-?[^\d\W])|(?=[\t\n\x0b\x0c\r ]|\z)|(?<=[\w!""'&.,?])(?=-{2,}\w)))",
-            RegexOptions.Compiled);
-        private static readonly Regex WordSepSimple = new Regex(@"([\t\n\x0b\x0c\r ]+)", RegexOptions.Compiled);
-        private static readonly Regex SentenceEnd = new Regex(@"[a-z][\.\!\?][\""\']?\z", RegexOptions.Compiled);
-        private static readonly Regex WhitespaceOnly = new Regex(@"^[ \t]+$", RegexOptions.Multiline | RegexOptions.Compiled);
-        private static readonly Regex LeadingWhitespace = new Regex(@"(^[ \t]*)(?:[^ \t\n])", RegexOptions.Multiline | RegexOptions.Compiled);
+        // may break after an inner hyphen. The module's other regexes (wordsep_simple_re, sentence_end_re,
+        // dedent's two) are plain scans below, which a step per piece keeps interruptible.
+        private const string WordSepPattern =
+            @"([\t\n\x0b\x0c\r ]+|(?<=[\w!""'&.,?])-{2,}(?=\w)|[^\t\n\x0b\x0c\r ]+?(?:-(?:(?<=[^\d\W]{2}-)|(?<=[^\d\W]-[^\d\W]-))(?=[^\d\W]-?[^\d\W])|(?=[\t\n\x0b\x0c\r ]|\z)|(?<=[\w!""'&.,?])(?=-{2,}\w)))";
+        private static readonly Regex WordSep = new Regex(WordSepPattern, RegexOptions.Compiled);
+        private static readonly TimedRegex WordSepTimed = new TimedRegex(WordSepPattern, RegexOptions.Compiled);
+
+        // One wordsep_re match is linear in its word, so a text this short cannot hold it long; the
+        // timeout's own checks cost ~2% of a wrap and are kept for the longer texts.
+        private const int UntimedMaxChars = 1 << 16;
 
         private sealed class Options
         {
@@ -49,8 +52,8 @@ namespace Outbridge.PyLite.Modules
                 ["wrap"] = BuiltinFunctionValue.Make("wrap", (s, a, kw, c) => WrapFn(c, a, kw, "wrap", false)),
                 ["fill"] = BuiltinFunctionValue.Make("fill", (s, a, kw, c) => WrapFn(c, a, kw, "fill", true)),
                 ["shorten"] = BuiltinFunctionValue.Make("shorten", Shorten),
-                ["dedent"] = BuiltinFunctionValue.Make("dedent", (s, a, kw, c) => c.Values.Str(Dedent(c, TextArg(c, a, kw, "dedent")))),
-                ["indent"] = BuiltinFunctionValue.Make("indent", Indent),
+                ["dedent"] = BuiltinFunctionValue.Make("dedent", Args.KnownKeywords("dedent", 1, (s, a, kw, c) => c.Values.Str(Dedent(c, TextArg(c, a, kw, "dedent"))), "text")),
+                ["indent"] = BuiltinFunctionValue.Make("indent", Args.LeadKeywords("indent", Indent, 2, "text", "prefix", "predicate")),
             };
             return ctx.Values.Module("textwrap", m);
         }
@@ -135,9 +138,41 @@ namespace Outbridge.PyLite.Modules
             if (a.Length < 2 && !kw.TryGet("width", out widthKw))
                 throw Raise.TypeError(ctx, "shorten() missing required argument 'width'");
             o.MaxLines = 1;
-            string collapsed = string.Join(" ", text.Trim(Whitespace.ToCharArray()).Split(Whitespace.ToCharArray(), StringSplitOptions.RemoveEmptyEntries));
+            string collapsed = Collapse(ctx, text);
             string s = string.Join("\n", Wrap(ctx, collapsed, o));
             return ctx.Values.Str(s);
+        }
+
+        // ' '.join(text.strip().split()) without the list of words (8M words were 600 MB, uncharged);
+        // str.split() separates on all Unicode whitespace, NO-BREAK SPACE included.
+        private static string Collapse(EvalContext ctx, string text)
+        {
+            ctx.Budget.ChargeLinear(text.Length);
+            var sb = new StringBuilder(text.Length);
+            int i = 0;
+            while (true)
+            {
+                while (i < text.Length && PyUnicode.IsPythonSpace(text[i]))
+                    i++;
+                if (i >= text.Length)
+                    break;
+                if (sb.Length > 0)
+                    sb.Append(' ');
+                int start = i;
+                while (i < text.Length && !PyUnicode.IsPythonSpace(text[i]))
+                    i++;
+                sb.Append(text, start, i - start);
+            }
+            return sb.ToString();
+        }
+
+        // A chunk's memory and the item cap as it is made: 'a ' * 8M was 16M chunks before any was charged.
+        private static void AddChunk(EvalContext ctx, List<string> chunks, string chunk)
+        {
+            if (chunks.Count >= ctx.Limits.MaxCollectionItems)
+                SequenceOps.CheckCap(chunks.Count + 1L, ctx);
+            ctx.Budget.ChargeAllocation(32L + 2L * chunk.Length);
+            chunks.Add(chunk);
         }
 
         // ---- TextWrapper._wrap_chunks and friends ----
@@ -153,39 +188,58 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.ValueError(ctx, "placeholder too large for max width");
             }
             if (o.ExpandTabs)
-                text = ExpandTabs(text, o.TabSize);
-            if (o.ReplaceWhitespace)
+                text = ExpandTabs(ctx, text, o.TabSize);
+            // No copy when nothing is replaced (always so for shorten, whose text is already collapsed).
+            if (o.ReplaceWhitespace && text.IndexOfAny(ReplacedWhitespace) >= 0)
             {
-                var sb = new StringBuilder(text.Length);
-                foreach (char c in text)
-                    sb.Append(Whitespace.IndexOf(c) >= 0 ? ' ' : c);
-                text = sb.ToString();
+                char[] buf = text.ToCharArray();
+                for (int k = 0; k < buf.Length; k++)
+                {
+                    if (buf[k] != ' ' && Whitespace.IndexOf(buf[k]) >= 0)
+                        buf[k] = ' ';
+                }
+                text = new string(buf);
             }
-            // Matches() is lazy, so a step per chunk keeps a multi-megabyte text interruptible.
+            // Match/NextMatch, not Matches(): a MatchCollection keeps every Match it has handed out, uncharged.
+            // A step per chunk keeps a multi-megabyte text interruptible.
             var chunks = new List<string>();
             if (o.BreakOnHyphens)
             {
-                foreach (Match m in WordSep.Matches(text))
+                try
                 {
-                    ctx.Budget.Step();
-                    if (m.Value.Length > 0)
-                        chunks.Add(m.Value);
+                    Regex wordSep = text.Length <= UntimedMaxChars ? WordSep : WordSepTimed.For(ctx);
+                    for (Match m = wordSep.Match(text); m.Success; m = m.NextMatch())
+                    {
+                        ctx.Budget.Step();
+                        if (m.Length > 0)
+                            AddChunk(ctx, chunks, m.Value);
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    throw TimedRegex.Abort(ctx);
                 }
             }
             else
             {
-                // wordsep_simple_re splits on the captured whitespace, keeping the non-whitespace between
-                foreach (string p in WordSepSimple.Split(text))
+                // wordsep_simple_re.split: whitespace runs and the text between them, empty pieces dropped
+                int i = 0;
+                while (i < text.Length)
                 {
                     ctx.Budget.Step();
-                    if (p.Length > 0)
-                        chunks.Add(p);
+                    bool ws = IsWrapSpace(text[i]);
+                    int j = i + 1;
+                    while (j < text.Length && IsWrapSpace(text[j]) == ws)
+                        j++;
+                    AddChunk(ctx, chunks, text.Substring(i, j - i));
+                    i = j;
                 }
             }
             if (o.FixSentenceEndings)
                 FixSentenceEndings(chunks);
 
             var lines = new List<string>();
+            long total = 0;
             chunks.Reverse();   // pop from the end, as the Python does
             while (chunks.Count > 0)
             {
@@ -222,7 +276,7 @@ namespace Outbridge.PyLite.Modules
                     || ((chunks.Count == 0 || (o.DropWhitespace && chunks.Count == 1 && IsBlank(chunks[0])))
                         && curLen <= width))
                 {
-                    lines.Add(indent + line);
+                    AddLine(ctx, lines, ref total, indent + line);
                     continue;
                 }
                 // the last permitted line: fit the placeholder
@@ -232,7 +286,7 @@ namespace Outbridge.PyLite.Modules
                     if (!IsBlank(cur[cur.Count - 1]) && curLen + o.Placeholder.Length <= width)
                     {
                         cur.Add(o.Placeholder);
-                        lines.Add(indent + string.Concat(cur));
+                        AddLine(ctx, lines, ref total, indent + string.Concat(cur));
                         placed = true;
                         break;
                     }
@@ -250,11 +304,20 @@ namespace Outbridge.PyLite.Modules
                             break;
                         }
                     }
-                    lines.Add(indent + o.Placeholder.TrimStart());
+                    AddLine(ctx, lines, ref total, indent + o.Placeholder.TrimStart());
                 }
                 break;
             }
             return lines;
+        }
+
+        // The lines together stay within MaxStrChars: the text already does, so only the indents can grow
+        // them, and a 1M-char indent on every line built 600 MB before anything was charged.
+        private static void AddLine(EvalContext ctx, List<string> lines, ref long total, string line)
+        {
+            total += line.Length;
+            ctx.Values.CheckStrLen(total);
+            lines.Add(line);
         }
 
         private static void HandleLongWord(EvalContext ctx, List<string> chunks, List<string> cur, ref int curLen, int width, Options o)
@@ -291,7 +354,7 @@ namespace Outbridge.PyLite.Modules
             int i = 0;
             while (i < chunks.Count - 1)
             {
-                if (chunks[i + 1] == " " && SentenceEnd.IsMatch(chunks[i]))
+                if (chunks[i + 1] == " " && EndsSentence(chunks[i]))
                 {
                     chunks[i + 1] = "  ";
                     i += 2;
@@ -301,12 +364,27 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
+        // sentence_end_re: [a-z][.!?]["']?\Z
+        private static bool EndsSentence(string s)
+        {
+            int n = s.Length;
+            if (n > 0 && (s[n - 1] == '"' || s[n - 1] == '\''))
+                n--;
+            return n >= 2 && (s[n - 1] == '.' || s[n - 1] == '!' || s[n - 1] == '?') && s[n - 2] >= 'a' && s[n - 2] <= 'z';
+        }
+
+        // The class [\t\n\x0b\x0c\r ] of wordsep_simple_re.
+        private static bool IsWrapSpace(char c)
+        {
+            return c == ' ' || (c >= '\t' && c <= '\r');
+        }
+
         private static bool IsBlank(string s)
         {
             return s.Trim(Whitespace.ToCharArray()).Length == 0;
         }
 
-        private static string ExpandTabs(string text, int tabSize)
+        private static string ExpandTabs(EvalContext ctx, string text, int tabSize)
         {
             if (text.IndexOf('\t') < 0)
                 return text;
@@ -319,6 +397,7 @@ namespace Outbridge.PyLite.Modules
                     if (tabSize > 0)
                     {
                         int n = tabSize - col % tabSize;
+                        ctx.Values.CheckStrLen((long)sb.Length + n);   // tabsize=2000000000 asked for 2G spaces (an engine fault)
                         sb.Append(' ', n);
                         col += n;
                     }
@@ -334,44 +413,69 @@ namespace Outbridge.PyLite.Modules
 
         // ---- dedent / indent ----
 
+        // Lib/textwrap.py's three regex passes as two scans over the '\n'-separated lines: a line of only
+        // spaces and tabs empties (_whitespace_only_re), the others' leading [ \t] runs give the common
+        // margin (_leading_whitespace_re), and the margin comes off every line that starts with it.
         internal static string Dedent(EvalContext ctx, string text)
         {
-            text = WhitespaceOnly.Replace(text, "");
             string margin = null;
-            foreach (Match m in LeadingWhitespace.Matches(text))
-            {
-                ctx.Budget.Step();
-                string indent = m.Groups[1].Value;
-                if (margin == null)
-                    margin = indent;
-                else if (indent.StartsWith(margin, StringComparison.Ordinal))
-                    continue;
-                else if (margin.StartsWith(indent, StringComparison.Ordinal))
-                    margin = indent;
-                else
-                {
-                    int k = 0;
-                    while (k < margin.Length && k < indent.Length && margin[k] == indent[k])
-                        k++;
-                    margin = margin.Substring(0, k);
-                }
-            }
-            if (string.IsNullOrEmpty(margin))
-                return text;
-            var sb = new StringBuilder(text.Length);
+            bool anyBlank = false;
             int start = 0;
             while (start <= text.Length)
             {
                 ctx.Budget.Step();
                 int nl = text.IndexOf('\n', start);
-                string line = nl < 0 ? text.Substring(start) : text.Substring(start, nl - start);
-                sb.Append(line.StartsWith(margin, StringComparison.Ordinal) ? line.Substring(margin.Length) : line);
+                int end = nl < 0 ? text.Length : nl;
+                int k = start;
+                while (k < end && (text[k] == ' ' || text[k] == '\t'))
+                    k++;
+                if (k == end)
+                    anyBlank |= k > start;
+                else
+                    margin = CommonMargin(margin, text, start, k - start);
+                if (nl < 0)
+                    break;
+                start = nl + 1;
+            }
+            if (string.IsNullOrEmpty(margin) && !anyBlank)
+                return text;
+            margin = margin ?? "";
+            var sb = new StringBuilder(text.Length);
+            start = 0;
+            while (start <= text.Length)
+            {
+                ctx.Budget.Step();
+                int nl = text.IndexOf('\n', start);
+                int end = nl < 0 ? text.Length : nl;
+                int k = start;
+                while (k < end && (text[k] == ' ' || text[k] == '\t'))
+                    k++;
+                if (k < end)
+                {
+                    int from = margin.Length <= end - start && string.CompareOrdinal(text, start, margin, 0, margin.Length) == 0
+                        ? start + margin.Length
+                        : start;
+                    sb.Append(text, from, end - from);
+                }
                 if (nl < 0)
                     break;
                 sb.Append('\n');
                 start = nl + 1;
             }
             return sb.ToString();
+        }
+
+        // dedent's margin update for one more line indented by text[start, start + len).
+        private static string CommonMargin(string margin, string text, int start, int len)
+        {
+            if (margin == null)
+                return text.Substring(start, len);
+            int k = 0;
+            while (k < margin.Length && k < len && margin[k] == text[start + k])
+                k++;
+            // indent.startswith(margin) keeps it, margin.startswith(indent) and the general case both cut
+            // it to the common prefix
+            return k == margin.Length ? margin : margin.Substring(0, k);
         }
 
         private static ScriptValue Indent(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)

@@ -28,7 +28,7 @@ namespace Outbridge.PyLite.Modules
                 ["from_decimal"] = BuiltinFunctionValue.Make("from_decimal", Args.Positional("from_decimal", 1, 1, (self, args, kw, c) => FromDecimal(c, args))),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => FractionValue.Construct(c, args, kw);
-            return ctx.Values.Type("fractions.Fraction", ctor, null, slots);
+            return ctx.Values.EngineType("fractions.Fraction", ctor, null, slots);
         }
 
         private static ScriptValue FromFloat(EvalContext ctx, ScriptValue[] args)

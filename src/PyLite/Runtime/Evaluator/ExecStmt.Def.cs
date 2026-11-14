@@ -39,6 +39,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private ExecSignal ExecFromImport(FromImportNode n, Environment env, EvalContext ctx)
         {
             ModuleValue m = ctx.Modules.Import(n.Module, ctx);
+            ctx.Budget.ChargeParts(n.Names.Count);
             for (int i = 0; i < n.Names.Count; i++)
             {
                 ImportAlias alias = n.Names[i];
@@ -82,7 +83,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             IReadOnlyList<StmtNode> body, ExprNode lambdaBody, Environment env, EvalContext ctx, string returnAnn = null)
         {
             // (a) positional defaults, left to right, evaluated NOW (def-time); counted first, so the arrays are
-            // sized once and a def without defaults allocates none (P16)
+            // sized once and a def without defaults allocates none
+            ctx.Budget.ChargeParts(prms.Positional.Count + prms.KwOnly.Count);
             int nd = 0, nk = 0;
             for (int i = 0; i < prms.Positional.Count; i++)
                 if (prms.Positional[i].Default != null)

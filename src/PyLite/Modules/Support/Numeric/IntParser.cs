@@ -11,8 +11,19 @@ namespace Outbridge.PyLite.Modules.Support
     {
         internal static BigInteger Parse(EvalContext ctx, string original, int baseArg)
         {
+            BigInteger value;
+            ScriptException error = ParseOrError(ctx, original, baseArg, out value);
+            if (error != null)
+                throw error;
+            return value;
+        }
+
+        // Parse with its ValueError returned, not thrown (int()'s quiet twin).
+        internal static ScriptException ParseOrError(EvalContext ctx, string original, int baseArg, out BigInteger value)
+        {
+            value = BigInteger.Zero;
             if (baseArg != 0 && (baseArg < 2 || baseArg > 36))
-                throw Raise.ValueError(ctx, "int() base must be >= 2 and <= 36");
+                return Raise.ValueError(ctx, "int() base must be >= 2 and <= 36, or 0");
 
             int n = original.Length;
             int i = 0;
@@ -69,6 +80,25 @@ namespace Outbridge.PyLite.Modules.Support
                 i += 2;
             }
 
+            // CPython's int_max_str_digits: past 4300 digits a base that is no power of two has no int
+            if ((actualBase & (actualBase - 1)) != 0 && n - i > BigOps.MaxStrDigits)
+            {
+                ctx.Budget.ChargeLinear(n - i);
+                long digits = 0;
+                for (int k = i; k < n; k++)
+                {
+                    int dv = DigitValue(original[k]);
+                    if (original[k] == '_')
+                        continue;
+                    if (dv < 0 || dv >= actualBase)
+                        break;
+                    digits++;
+                }
+                if (digits > BigOps.MaxStrDigits)
+                    return Raise.ValueError(ctx, "Exceeds the limit (4300 digits) for integer string conversion: value has "
+                        + digits.ToString(System.Globalization.CultureInfo.InvariantCulture) + " digits; use sys.set_int_max_str_digits() to increase the limit");
+            }
+
             // A value within MaxIntBits has at most maxDigits significant digits. Longer input is counted
             // first (linear): past maxDigits it is a MaxIntBits refusal before the quadratic accumulation,
             // and leading zeros are not charged as BigInteger work.
@@ -83,10 +113,13 @@ namespace Outbridge.PyLite.Modules.Support
                     throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits,
                         (long)((costDigits - 1) * log2Base));
             }
-            ctx.Budget.Step((int)Math.Min(int.MaxValue, 1 + costDigits * costDigits / 1024));
+            bool pow2 = (actualBase & (actualBase - 1)) == 0;
+            ctx.Budget.Step((int)Math.Min(int.MaxValue, pow2 ? 1 + costDigits / 64 : 1 + costDigits * costDigits / 1024));
             ctx.Values.PreCharge(costDigits / 2 + 16);
             if (n > 64)
                 ctx.Budget.CheckDeadlineNow();
+            if (pow2 && n - i > 64)
+                return ParsePow2(ctx, original, baseArg, i, actualBase, sign, out value);   // linear: bits, not multiplies
 
             // Dual accumulator: one scan with every validation branch shared, but the arithmetic
             // stays in a long until the next multiply-add could overflow, then seeds the exact
@@ -95,7 +128,7 @@ namespace Outbridge.PyLite.Modules.Support
             const long LongSafe = (long.MaxValue - 35) / 36;   // safe to *base(<=36) + digit(<=35)
             long accL = 0;
             BigInteger acc = BigInteger.Zero;
-            long chunk = 0, chunkMul = 1;   // past the long range, digits gather here and fold into acc ~18 at a time (P17)
+            long chunk = 0, chunkMul = 1;   // past the long range, digits gather here and fold into acc ~18 at a time
             bool big = false;
             bool any = false;
             int scanned = 0;
@@ -112,13 +145,13 @@ namespace Outbridge.PyLite.Modules.Support
                         i++;
                         continue;
                     }
-                    throw Invalid(ctx, original, baseArg);
+                    return Invalid(ctx, original, baseArg);
                 }
                 int v = DigitValue(c);
                 if (v < 0 || v >= actualBase)
-                    throw Invalid(ctx, original, baseArg);
+                    return Invalid(ctx, original, baseArg);
                 if (requireAllZeros && v != 0)
-                    throw Invalid(ctx, original, baseArg);
+                    return Invalid(ctx, original, baseArg);
                 if (big)
                 {
                     chunk = chunk * actualBase + v;
@@ -150,16 +183,72 @@ namespace Outbridge.PyLite.Modules.Support
                 }
             }
             if (!any)
-                throw Invalid(ctx, original, baseArg);
+                return Invalid(ctx, original, baseArg);
 
             while (i < n && PyUnicode.IsPythonSpace(original[i]))
                 i++;
             if (i != n)
-                throw Invalid(ctx, original, baseArg);
+                return Invalid(ctx, original, baseArg);
 
             if (big && chunkMul > 1)
                 acc = acc * chunkMul + chunk;
-            return big ? sign * acc : sign * (BigInteger)accL;
+            value = big ? sign * acc : sign * (BigInteger)accL;
+            return null;
+        }
+
+        // A base that is a power of two: each digit is a fixed number of bits, so they are packed straight into the
+        // little-endian bytes BigInteger takes (one pass), where the general loop multiplies per chunk (quadratic).
+        // The validation is the general loop's: underscores between digits, trailing whitespace only.
+        private static ScriptException ParsePow2(EvalContext ctx, string original, int baseArg, int i, int numBase, int sign, out BigInteger value)
+        {
+            value = BigInteger.Zero;
+            int n = original.Length;
+            int bits = numBase == 2 ? 1 : numBase == 4 ? 2 : numBase == 8 ? 3 : numBase == 16 ? 4 : 5;
+            var digits = new System.Collections.Generic.List<byte>(n - i);
+            while (i < n)
+            {
+                char c = original[i];
+                if (PyUnicode.IsPythonSpace(c))
+                    break;
+                if (c == '_')
+                {
+                    int nv = i + 1 < n ? DigitValue(original[i + 1]) : -1;
+                    if (digits.Count > 0 && nv >= 0 && nv < numBase)
+                    {
+                        i++;
+                        continue;
+                    }
+                    return Invalid(ctx, original, baseArg);
+                }
+                int v = DigitValue(c);
+                if (v < 0 || v >= numBase)
+                    return Invalid(ctx, original, baseArg);
+                digits.Add((byte)v);
+                i++;
+                if ((digits.Count & 4095) == 0)
+                    ctx.Budget.CheckDeadlineNow();
+            }
+            if (digits.Count == 0)
+                return Invalid(ctx, original, baseArg);
+            while (i < n && PyUnicode.IsPythonSpace(original[i]))
+                i++;
+            if (i != n)
+                return Invalid(ctx, original, baseArg);
+
+            long totalBits = (long)digits.Count * bits;
+            var buf = new byte[(totalBits + 7) / 8 + 1];   // the extra zero byte keeps the value non-negative
+            long at = 0;
+            for (int k = digits.Count - 1; k >= 0; k--, at += bits)
+            {
+                int d = digits[k];
+                int byteAt = (int)(at >> 3), shift = (int)(at & 7);
+                buf[byteAt] |= (byte)(d << shift);
+                if (shift + bits > 8)
+                    buf[byteAt + 1] |= (byte)(d >> (8 - shift));
+            }
+            BigInteger acc = new BigInteger(buf);
+            value = sign < 0 ? -acc : acc;
+            return null;
         }
 
         // Digits of numBase after the leading zeros, up to the first character the loop would not take as one.

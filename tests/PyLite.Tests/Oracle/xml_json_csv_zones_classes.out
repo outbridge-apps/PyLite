@@ -1,0 +1,82 @@
+['{urn:d}a', '{urn:q}a']
+['{urn:d}a']
+['{urn:d}a', '{urn:d}b', '{urn:d}c']
+['{urn:q}a']
+['{urn:d}a', '{urn:q}a', '{urn:d}b', '{urn:d}c']
+['{urn:d}a', '{urn:q}a', '{urn:d}a']
+[]
+[]
+['{urn:d}a']
+['{urn:q}a']
+['{urn:d}b']
+['{urn:q}a']
+['{urn:d}a', '{urn:q}a', '{urn:d}b', '{urn:d}c']
+[]
+'x'
+'{urn:d}c'
+['1']
+['1', '2']
+['a', 'b']
+['1']
+'x'
+'é'
+'é'
+'é'
+'€'
+'ж'
+EXC LookupError: unknown encoding: foo
+EXC ParseError: encoding specified in XML declaration is incorrect: line 1, column 30
+EXC ParseError: not well-formed (invalid token): line 1, column 3
+EXC ParseError: not well-formed (invalid token): line 2, column 3
+'é'
+'x'
+'x'
+'€'
+'x'
+EXC ValueError: multi-byte encodings are not supported
+'ж'
+{'a': 1}
+{'a': 1}
+{'a': 'é'}
+{'a': 'é'}
+{'a': 'é'}
+EXC JSONDecodeError: Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)
+12
+1
+EXC UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 1: invalid start byte
+EXC TypeError: the JSON object must be str, bytes or bytearray, not int
+[3]
+EXC JSONDecodeError: Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)
+[['1', 'L1\r\nL2']]
+[['1', 'L1\r\nL2']]
+[['1', 'L1\nL2'], ['3', '4']]
+[['1', 'L1\nL2'], ['3', '4']]
+[['a', 'x\r\ny\r\nz', 'b'], ['c', 'd']]
+[['a', 'x\r\ny\r\nz', 'b'], ['c', 'd']]
+[['a', 'bc']]
+[['a', 'b\nc']]
+[['a', 'b\nc']]
+[['a', 'b\nc']]
+[{'h1': '1', 'h2': 'x\r\ny'}]
+Europe/Moscow (2012, 1, 1) 4:00:00 0:00:00 MSK
+Europe/Moscow (2012, 7, 1) 4:00:00 0:00:00 MSK
+Europe/Moscow (2020, 7, 1) 3:00:00 0:00:00 MSK
+America/Asuncion (2020, 7, 1) -1 day, 20:00:00 0:00:00 -04
+America/Asuncion (2020, 12, 1) -1 day, 21:00:00 1:00:00 -03
+America/Asuncion (2025, 7, 1) -1 day, 21:00:00 0:00:00 -03
+Europe/Berlin (2020, 1, 1) 1:00:00 0:00:00 CET
+Europe/Berlin (2020, 7, 1) 2:00:00 1:00:00 CEST
+America/New_York (2021, 7, 4) -1 day, 20:00:00 1:00:00 EDT
+America/New_York (2021, 1, 4) -1 day, 19:00:00 0:00:00 EST
+Europe/London (2021, 7, 1) 1:00:00 1:00:00 BST
+Europe/London (2021, 1, 1) 0:00:00 0:00:00 GMT
+Asia/Almaty (2025, 6, 1) 5:00:00 0:00:00 +05
+Australia/Sydney (2021, 1, 1) 11:00:00 1:00:00 AEDT
+America/Sao_Paulo (2018, 12, 1) -1 day, 22:00:00 1:00:00 -02
+America/Sao_Paulo (2021, 12, 1) -1 day, 21:00:00 0:00:00 -03
+Europe/Istanbul (2020, 7, 1) 3:00:00 0:00:00 +03
+mod
+5
+True True [1, 2, 3, 4, 'apply']
+('glob', 'cls')
+(['local'], 'local')

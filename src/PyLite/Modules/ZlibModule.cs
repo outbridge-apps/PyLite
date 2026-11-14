@@ -89,11 +89,11 @@ namespace Outbridge.PyLite.Modules
             if (wbits == 0 || (wbits >= 8 && wbits <= 15))
                 return c.Values.Bytes(ZlibUnwrap(c, data));
             if (wbits >= 24 && wbits <= 31)
-                return GzipModule.Decompress(c, data);
+                return GzipModule.Decompress(c, data, true);
             if (wbits >= 40 && wbits <= 47)
             {
                 return data.Length >= 2 && data[0] == 0x1F && data[1] == 0x8B
-                    ? GzipModule.Decompress(c, data)
+                    ? GzipModule.Decompress(c, data, true)
                     : c.Values.Bytes(ZlibUnwrap(c, data));
             }
             throw Err(c, "Invalid initialization option");

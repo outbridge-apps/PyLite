@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
-using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 
@@ -16,8 +15,8 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["escape"] = BuiltinFunctionValue.Make("escape", Escape);
-            m["unescape"] = BuiltinFunctionValue.Make("unescape", Unescape);
+            m["escape"] = BuiltinFunctionValue.Make("escape", Args.LeadKeywords("escape", Escape, 1, "s", "quote"));
+            m["unescape"] = BuiltinFunctionValue.Make("unescape", Args.BoundKeywords("unescape", 1, Unescape, "s"));
             return ctx.Values.Module("html", m);
         }
 
@@ -38,7 +37,11 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < s.Length; i++)
             {
                 if ((i & 63) == 0)
+                {
                     ctx.Budget.Step();
+                    if (sb.Length > ctx.Limits.MaxStrChars)
+                        ctx.Values.CheckStrLen(sb.Length);   // an entity is up to 6x its char: capped as it grows
+                }
                 char ch = s[i];
                 switch (ch)
                 {
@@ -108,7 +111,9 @@ namespace Outbridge.PyLite.Modules
                 return q - p + 1;
             }
             // Legacy names (the HTML5 table entries without ';'): longest prefix wins, the rest stays literal.
-            for (int x = name.Length; x > 1; x--)
+            // No legacy name is longer than MaxLegacyName: a prefix past it is never one (a 31-char name was
+            // 30 lookups, each a new string, for every '&').
+            for (int x = Math.Min(name.Length, MaxLegacyName); x > 1; x--)
             {
                 string head = name.Substring(0, x);
                 if (TryNamed(head, out decoded))
@@ -118,6 +123,19 @@ namespace Outbridge.PyLite.Modules
                 }
             }
             return 0;
+        }
+
+        private static readonly int MaxLegacyName = LongestLegacyName();
+
+        private static int LongestLegacyName()
+        {
+            int n = 0;
+            foreach (string k in Html5Entities.Table.Keys)
+            {
+                if (!k.EndsWith(";", StringComparison.Ordinal) && k.Length > n)
+                    n = k.Length;
+            }
+            return n;
         }
 
         private static bool IsNameChar(char c)

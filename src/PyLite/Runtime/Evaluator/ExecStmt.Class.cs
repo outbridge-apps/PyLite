@@ -51,9 +51,10 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             Dictionary<string, int> slotIndex;
             ComputeSlots(n, baseCls, initNode, ctx, out allSlots, out slotIndex);
             IReadOnlyDictionary<string, FieldDefault> annDefaults = BuildAnnotationDefaults(n, baseCls, env, ctx);
+            RecordClassValue.ChargeTables(ctx, allSlots.Count, annDefaults == null ? 0 : annDefaults.Count);
 
             var cls = new RecordClassValue(n.Name, baseCls, allSlots, slotIndex, methods, false, null,
-                annDefaults, null, SharedIdentitySource.Next(), EvalConstants(n, env, ctx));
+                annDefaults, null, ctx.Values.NextIdentitySeq(), EvalConstants(n, env, ctx));
             if (n.CellName != null)
                 env.BindScopeName(n.CellName, cls);   // super() in the methods; bound before a decorator can call one
             env.BindScopeName(n.Name, ApplyClassDecorators(n, cls, env, ctx));
@@ -91,9 +92,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (chain >= 16)
                 throw Raise.TypeError(ctx, "class inheritance chain too deep (limit 16)");
             ctx.Values.PreCharge(64);
-            var excType = new PyExceptionType(n.Name, baseTv.ExcType);
-            BuiltinDelegate ctor = (self, args, kw, c) => c.Values.Exception(excType, args);
-            TypeValue cls = TypeValue.Make(n.Name, ctor, null, constants.Count > 0 ? constants : null, excType);
+            var excType = new PyExceptionType(n.Name, baseTv.ExcType, true);
+            BuiltinDelegate ctor = (self, args, kw, c) => Modules.BuiltinsTable.ConstructException(c, excType, args, kw);
+            TypeValue cls = ctx.Values.EngineType(n.Name, ctor, null, constants.Count > 0 ? constants : null, excType);
             excType.ClassValue = cls;
             env.BindScopeName(n.Name, ApplyClassDecorators(n, cls, env, ctx));
             return ExecSignal.Normal;
@@ -149,7 +150,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private IReadOnlyDictionary<string, FieldDefault> BuildAnnotationDefaults(ClassDefNode n, RecordClassValue baseCls, Environment env, EvalContext ctx)
         {
             var map = new Dictionary<string, FieldDefault>(StringComparer.Ordinal);
-            if (baseCls != null && baseCls.AnnotationDefaults != null)
+            int inherited = baseCls != null && baseCls.AnnotationDefaults != null ? baseCls.AnnotationDefaults.Count : 0;
+            ctx.Budget.ChargeLinear(inherited + n.Fields.Count);   // a field without a default evaluates nothing
+            if (inherited > 0)
                 foreach (var kv in baseCls.AnnotationDefaults)
                     map[kv.Key] = kv.Value;
             foreach (var f in n.Fields)
@@ -274,7 +277,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
             for (int j = 0; j < kw.Count; j++)
             {
-                int idx = Array.IndexOf(ds.FieldNames, kw.NameAt(j));
+                int idx = ds.IndexOf(kw.NameAt(j));
                 if (idx < 0 || !ds.Fields[idx].Init)   // field(init=False) is not a parameter at all
                     throw Modules.Support.KwReader.UnexpectedError(ctx, cls.Name + ".__init__", kw.NameAt(j));
                 if (filled[idx])
@@ -322,12 +325,30 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private void ComputeSlots(ClassDefNode n, RecordClassValue baseCls, FuncDefNode initNode, EvalContext ctx,
             out List<string> allSlots, out Dictionary<string, int> slotIndex)
         {
-            var order = new List<string>();
+            // The walk of __init__ is the AST's, so it is made once; the merge with the base runs every time and
+            // is charged (a class statement in a loop over a 50,000-assignment __init__ was one step a pass).
+            string[] own = n.CachedOwnSlots ?? (n.CachedOwnSlots = OwnSlots(n, initNode, ctx));
+            int baseCount = baseCls != null ? baseCls.AllSlots.Count : 0;
+            ctx.Budget.ChargeLinear(baseCount + own.Length);
+            var order = new List<string>(baseCount + own.Length);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             if (baseCls != null)
                 foreach (string s in baseCls.AllSlots)
                     if (seen.Add(s))
                         order.Add(s);
+            foreach (string s in own)
+                if (seen.Add(s))
+                    order.Add(s);
+            slotIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < order.Count; i++)
+                slotIndex[order[i]] = i;
+            allSlots = order;
+        }
+
+        private static string[] OwnSlots(ClassDefNode n, FuncDefNode initNode, EvalContext ctx)
+        {
+            var order = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var f in n.Fields)
                 if (seen.Add(f.Name))
                     order.Add(f.Name);
@@ -336,10 +357,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 string self = initNode.Params.Positional.Count > 0 ? initNode.Params.Positional[0].Name : "self";
                 new SelfSlotCollector(ctx, self, order, seen).Stmts(initNode.Body, null);
             }
-            slotIndex = new Dictionary<string, int>(StringComparer.Ordinal);
-            for (int i = 0; i < order.Count; i++)
-                slotIndex[order[i]] = i;
-            allSlots = order;
+            return order.ToArray();
         }
 
         // The self.<name> targets __init__ assigns, first appearance first. A nested def/class is another

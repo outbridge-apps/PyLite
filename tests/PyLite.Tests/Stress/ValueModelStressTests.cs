@@ -72,15 +72,16 @@ namespace Outbridge.PyLite.Tests.Stress
                 l.Add(cur, ctx);
                 cur = l;
             }
-            // The process surviving to this assert proves the iterative repr did not SOE. A deterministic
-            // RuntimeError is also acceptable; only an uncatchable overflow would fail the run.
+            // The process surviving to this assert proves the iterative repr did not SOE. A RecursionError is
+            // also acceptable; any other exception is a defect, not a pass.
             try
             {
                 string r = cur.Repr(ctx);
                 Assert.True(r.Length >= 5000);
             }
-            catch (ScriptException)
+            catch (ScriptException ex)
             {
+                Assert.Equal("RecursionError", ex.Value.ExcType.Name);
             }
         }
 
@@ -112,10 +113,30 @@ namespace Outbridge.PyLite.Tests.Stress
         [InlineData("e = ValueError()\nfor i in range(200000):\n    e = ValueError(e)\nx = repr(e)\n")]
         [InlineData("from dataclasses import dataclass, asdict\n@dataclass\nclass N:\n    n: object = None\n"
             + "a = N()\nfor i in range(200000):\n    a = N(a)\nx = asdict(a)\n")]
+        [InlineData("e = ValueError()\nfor i in range(200000):\n    e = ValueError(e)\nx = str(e)\n")]
+        [InlineData("import itertools\nr = 0\nfor i in range(200000):\n    r = itertools.repeat(r)\nx = repr(r)\n")]
+        [InlineData(NestedCounters + "x = a <= b\n")]
         public void DeepLeafReentryAbortsOnStack(string src)
         {
-            var ex = Assert.Throws<EngineAbort>(() => Ev.Run(src, ResourceLimits.Default.With(maxDataDepth: 1_000_000)));
+            var ex = Assert.Throws<EngineAbort>(() => Ev.Run(src, TestEngines.Unhurried.With(maxDataDepth: 1_000_000)));   // the stack decides, not the clock
             Assert.Equal("StackDepth", ex.LimitName);
+        }
+
+        private const string CountersHead = "from collections import Counter\na = Counter()\nb = Counter()\n";
+        private const string CountersBody = ":\n    x = Counter()\n    x['k'] = a\n    a = x\n    y = Counter()\n    y['k'] = b\n    b = y\n";
+        private const string NestedCounters = CountersHead + "for i in range(200000)" + CountersBody;
+        private const string Counters1000 = CountersHead + "for i in range(1000)" + CountersBody;
+
+        // str of an exception wrapping an exception, repr of a repeat of a repeat and the order of a Counter
+        // of Counters re-entered their engine at depth 0, so no depth check or stack probe ever fired and the
+        // process died at default limits. They now count their depth like every other leaf.
+        [Theory]
+        [InlineData("e = ValueError(1)\nfor i in range(1000):\n    e = ValueError(e)\ntry:\n    str(e)\nexcept RecursionError:\n    r = 'ok'\n")]
+        [InlineData("import itertools\nx = 0\nfor i in range(1000):\n    x = itertools.repeat(x)\ntry:\n    repr(x)\nexcept RecursionError:\n    r = 'ok'\n")]
+        [InlineData(Counters1000 + "try:\n    a <= b\nexcept RecursionError:\n    r = 'ok'\n")]
+        public void NestedLeafReentryIsARecursionError(string src)
+        {
+            Assert.Equal("'ok'", Ev.Run(src).Repr("r"));
         }
 
         // The pow/mul pre-checks refuse only what surely passes MaxIntBits; the borderline is computed.

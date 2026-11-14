@@ -1,4 +1,4 @@
-# Outbridge.PyLite.UnicodeGen
+# PyLite.UnicodeGen
 
 Generates three tables from the Unicode Character Database, into the layer that owns each:
 `src/PyLite/Runtime/Values/Text/PyUnicodeCase.Tables.g.cs` (case mapping),
@@ -43,12 +43,26 @@ done
 Then generate, and commit the result:
 
 ```bash
-dotnet run -c Release --project tools/Outbridge.PyLite.UnicodeGen -- ucd src/PyLite
+dotnet run -c Release --project tools/PyLite.UnicodeGen -- ucd src/PyLite
 ```
 
 Re-run the suite afterwards: `conformance/cases/str/case_mapping.py`, `str/named_escapes.py`,
 `BuiltinsStrMethodsTests.UnicodeCaseMapping` and `LexerStringTests.NamedEscapes` pin the behaviour a
 version bump could move.
+
+## String classes
+
+One more table is read off CPython rather than the UCD files: `src/PyLite/Runtime/Values/Text/PyUnicodeClass.Tables.g.cs`,
+the code point ranges where `str.isprintable`, `isalpha`, `isnumeric`, `isdigit` and `isdecimal` answer True and the
+canonical compositions NFC does not make (the CompositionExclusions.txt list). Those predicates combine several
+UCD properties in CPython's own way, so the answers are taken from the interpreter the engine follows:
+
+```bash
+python3.14 tools/PyLite.UnicodeGen/class_tables.py > src/PyLite/Runtime/Values/Text/PyUnicodeClass.Tables.g.cs
+```
+
+`Values/Unicode16OracleTests` holds CPython's digests of the same predicates and of the four normal forms
+over every code point, so a table that drifts from CPython fails there.
 
 ## What it emits
 

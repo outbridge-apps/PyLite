@@ -76,7 +76,7 @@ namespace Outbridge.PyLite.Modules
             {
                 double den = LogHelperDouble(ctx, a[1], Math.Log);
                 if (den == 0.0)
-                    throw Raise.ZeroDivision(ctx, "float division by zero");
+                    throw Raise.ZeroDivision(ctx, "division by zero");
                 return ctx.Values.Float(num / den);
             }
             return ctx.Values.Float(num);
@@ -87,8 +87,10 @@ namespace Outbridge.PyLite.Modules
             return ctx.Values.Float(LogHelperDouble(ctx, arg, func));
         }
 
-        // Port of loghelper: ints larger than double via the bit-length scaling trick.
-        private static double LogHelperDouble(EvalContext ctx, ScriptValue arg, Func<double, double> func)
+        // CPython's loghelper: func(float(n)) while n converts, past that func(x) + func(2) * e with
+        // n = x * 2**e, x in [0.5, 1) rounded to 53 bits (_PyLong_Frexp). Scaling by 2**(e - 900) instead
+        // missed CPython's answer in the last digit for ints of 1,000 bits and more.
+        internal static double LogHelperDouble(EvalContext ctx, ScriptValue arg, Func<double, double> func)
         {
             IntValue iv = arg as IntValue;
             BoolValue bv = arg as BoolValue;
@@ -96,21 +98,22 @@ namespace Outbridge.PyLite.Modules
             {
                 BigInteger n = iv != null ? iv.Value : (bv.Value ? BigInteger.One : BigInteger.Zero);
                 if (n.Sign <= 0)
-                    throw Raise.ValueError(ctx, "math domain error");
-                int e = (int)NumericOps.BitLength(n) - 1;
-                if (e < 1000)
-                    return func((double)n);
-                int shift = e - 900;
-                double m = (double)(n >> shift);
-                return func(m) + shift * func(2.0);
+                    throw Raise.ValueError(ctx, PositiveInput);
+                double d = NearestDouble.FromBigInteger(n);
+                if (!double.IsInfinity(d))
+                    return func(d);
+                long e;
+                double m = Frexp(n, out e);
+                return func(m) + func(2.0) * e;
             }
             double x = AsDouble(ctx, arg);   // float, or Fraction/Decimal via their __float__
             if (x <= 0.0)
-                throw Raise.ValueError(ctx, "math domain error");
+                throw Raise.ValueError(ctx, PositiveInput);
             return func(x);
         }
 
         private const double InvLn2 = 1.4426950408889634;   // 1/ln(2)
+        private const string PositiveInput = "expected a positive input";
 
         private static ScriptValue Log2(EvalContext ctx, ScriptValue[] a)
         {
@@ -121,17 +124,14 @@ namespace Outbridge.PyLite.Modules
             {
                 BigInteger n = iv != null ? iv.Value : (bv.Value ? BigInteger.One : BigInteger.Zero);
                 if (n.Sign <= 0)
-                    throw Raise.ValueError(ctx, "math domain error");
+                    throw Raise.ValueError(ctx, PositiveInput);
                 if (BigIntMath.IsPowerOfTwo(n))
                     return ctx.Values.Float(NumericOps.BitLength(n) - 1);
                 return ctx.Values.Float(LogHelperDouble(ctx, arg, M_Log2));
             }
-            FloatValue fv = arg as FloatValue;
-            if (fv == null)
-                throw Raise.TypeError(ctx, "a float is required");
-            double fx = fv.Value;
+            double fx = AsDouble(ctx, arg);   // a Fraction or Decimal through its __float__
             if (fx <= 0.0)
-                throw Raise.ValueError(ctx, "math domain error");
+                throw Raise.ValueError(ctx, PositiveInput);
             double m;
             int e;
             FloatMath.Frexp(fx, out m, out e);
@@ -163,45 +163,58 @@ namespace Outbridge.PyLite.Modules
                 yield return AsDouble(ctx, v);
         }
 
+        // n = x * 2**e with x in [0.5, 1): the top 64 bits with a sticky bit for the rest, rounded once to
+        // 53 bits, so x is n's correctly rounded mantissa; a carry to 1.0 becomes 0.5 with e + 1.
+        private static double Frexp(BigInteger n, out long e)
+        {
+            e = NumericOps.BitLength(n);
+            int drop = (int)(e - 64);
+            BigInteger top = n >> drop;
+            if ((top << drop) != n)
+                top |= BigInteger.One;
+            double x = NearestDouble.FromBigInteger(top) / 18446744073709551616.0;   // / 2**64, exact
+            if (x == 1.0)
+            {
+                x = 0.5;
+                e++;
+            }
+            return x;
+        }
+
         private static ScriptValue Factorial(EvalContext ctx, ScriptValue[] a)
         {
             ScriptValue arg = Arg(ctx, a, 0);
             BigInteger n;
             IntValue iv = arg as IntValue;
             BoolValue bv = arg as BoolValue;
-            FloatValue fv = arg as FloatValue;
             if (iv != null)
                 n = iv.Value;
             else if (bv != null)
                 n = bv.Value ? 1 : 0;
-            else if (fv != null)
-            {
-                double f = fv.Value;
-                if (double.IsNaN(f) || double.IsInfinity(f) || Math.Floor(f) != f)
-                    throw Raise.ValueError(ctx, "factorial() only accepts integral values");
-                n = new BigInteger(f);
-            }
-            else
-                throw Raise.TypeError(ctx, "an integer is required");
+            else   // floats too, since 3.10
+                throw Raise.TypeError(ctx, "'" + arg.PyTypeName + "' object cannot be interpreted as an integer");
 
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "factorial() not defined for negative values");
-            if (n >= 2)
-            {
-                double nb = (double)n;
-                double estBytes = (nb * (Math.Log(nb) * InvLn2 - InvLn2) + 1) / 8.0;
-                // A huge n makes estBytes exceed long range; abort on the memory budget before the cast.
-                if (double.IsInfinity(estBytes) || estBytes >= ctx.Limits.MaxAllocBytes)
-                    throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxAllocBytes", ctx.Limits.MaxAllocBytes, long.MaxValue);
-                ctx.Values.PreCharge((long)estBytes + 64);
-            }
+            if (n < 2)
+                return ctx.Values.Int(BigInteger.One);
+            // Stirling's n*log2(n/e) bits, a slight under-estimate: past MaxIntBits the result is refused
+            // before the multiplications (factorial(10**7) used to run into the deadline). Within the cap
+            // n fits a long, since the estimate is at least n from n = 6 on.
+            double nb = (double)n;
+            double estBits = nb * (Math.Log(nb) * InvLn2 - InvLn2) + 1;
+            if (double.IsInfinity(estBits) || estBits > ctx.Limits.MaxIntBits)
+                throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits, long.MaxValue);
+            ctx.Values.EnsureIntBits((long)estBits);
 
+            long last = (long)n;
             BigInteger result = BigInteger.One;
-            for (BigInteger i = 2; i <= n; i++)
+            for (long i = 2; i <= last; i++)
             {
                 result *= i;
-                ctx.Budget.Step();
-                if ((i % 1024) == 0)
+                // the multiply is linear in the result so far, about i*log2(i) bits
+                ctx.Budget.ChargeLinear((long)(i * Math.Log(i) * InvLn2) >> 6);
+                if ((i & 1023) == 0)
                     ctx.Budget.CheckDeadlineNow();
             }
             return ctx.Values.Int(result);

@@ -1,0 +1,94 @@
+rv_set=[3, 2, 1, 7]
+rv_del!RuntimeError:deque mutated during iteration
+rv_iadd!RuntimeError:deque mutated during iteration
+rv_imul!RuntimeError:deque mutated during iteration
+rv_imul1=[3, 2, 1, 0]
+rv_iadd0=[3, 2, 1, 0]
+rv_extl=[3, 2, 1, 0]
+rv_extl1!RuntimeError:deque mutated during iteration
+rv_copy=[3, 2, 1, 0]
+rv_popleft!RuntimeError:deque mutated during iteration
+rv_same!RuntimeError:deque mutated during iteration
+fw_set=[1, 2, 3, 4]
+fw_del!RuntimeError:deque mutated during iteration
+fw_iadd!RuntimeError:deque mutated during iteration
+fw_imul1=[1, 2, 3, 4]
+fw_iadd0=[1, 2, 3, 4]
+fw_same!RuntimeError:deque mutated during iteration
+rv_empty=[]
+rv_full=['c', 'b', 'a']
+rv_maxlen=[9, 8, 7]
+rv_rot=[2, 1, 0, 4, 3]
+rv_two=[2, 2, 1, [1, 0]]
+ss_cm=[('a', 1), ('b', 2)]
+ss_cm_dup!TypeError:kw() got multiple values for keyword argument 'a'
+ss_cm_nonstr!TypeError:keywords must be strings
+ss_obj=[('a', 'aa'), ('b', 'bb')]
+ss_obj_dup!TypeError:kw() got multiple values for keyword argument 'a'
+ss_obj_nonstr!TypeError:keywords must be strings
+ss_obj_noget!TypeError:'N' object is not subscriptable
+ss_list!TypeError:kw() argument after ** must be a mapping, not list
+ss_none!TypeError:kw() argument after ** must be a mapping, not NoneType
+ss_od=[('a', 1)]
+ss_counter=[('a', 1)]
+ss_two=[('a', 1), ('b', 2)]
+ss_two_dup!TypeError:kw() got multiple values for keyword argument 'a'
+cm_or_counter_first=[Counter({'a': 3, 'b': 3}), {'z': 0}]
+cm_ior_counter_first=([Counter({'a': 3})], True)
+cm_ior_pairs=([{'a': 1, 'b': 2}], True)
+cm_ior_cm=([{'a': 1, 'c': 3, 'b': 2}], True)
+cm_ior_int!TypeError:'int' object is not iterable
+cm_ior_dd=([defaultdict(<class 'list'>, {'a': 2})], True)
+cm_or_dd=['defaultdict', 'OrderedDict']
+cm_or_empty_maps!IndexError:list index out of range
+cm_ior_empty_maps!IndexError:list index out of range
+cm_ror_empty_maps=[{'b': 1}]
+cm_or_self=[{'a': 1, 'b': 2}, {'b': 2}]
+cm_and!TypeError:unsupported operand type(s) for &: 'ChainMap' and 'dict'
+cm_add!TypeError:unsupported operand type(s) for +: 'ChainMap' and 'dict'
+dict_upd_cm={'x': 0, 'a': 1}
+dict_ior_cm2={'x': 0, 'b': 2, 'a': 1}
+c_upd_order=Counter({'a': 3.5, 'b': 1})
+c_upd_self=Counter({'b': 4, 'a': 2})
+c_upd_self_empty=Counter()
+c_upd_iter_str!TypeError:can only concatenate str (not "int") to str
+c_sub_iter_str!TypeError:unsupported operand type(s) for -: 'str' and 'int'
+c_sub_empty=Counter({'a': -2})
+c_sub_kw=Counter({'a': -2})
+c_sub_kw_str!TypeError:unsupported operand type(s) for -: 'int' and 'str'
+c_bool=Counter({'b': 2, 'a': True})
+c_bool_kw=Counter({'a': True})
+c_from_cm=Counter({'b': 3, 'a': 2})
+c_from_cm_nonempty=Counter({'a': 3, 'b': 3})
+c_from_od=Counter({'a': 2, 'b': 1})
+c_from_dd=Counter({'a': 2})
+c_from_pairs=Counter({('a', 1): 2})
+c_kw_after_iter=Counter({'a': 6, 'b': 1})
+c_kw_after_empty_iter=Counter({'a': 'x'})
+c_kw_after_empty_map=Counter({'a': 'x'})
+c_none=Counter({'a': 3})
+c_mc=[('a', 5), ('b', 2), ('r', 2), ('c', 1), ('d', 1)]
+c_mc2=[('a', 5), ('b', 2)]
+c_mc0=[]
+c_mc_neg=[]
+c_mc_float=[('b', 2), ('a', 1.5), ('c', 1.5), ('d', True)]
+c_mc_big=[('a', 1000000000000000000000000000000), ('c', 1000000000000000000000000000000), ('b', 2), ('d', -5)]
+c_mc_mixed!TypeError:'<' not supported between instances of 'int' and 'str'
+c_mc_none!TypeError:'<' not supported between instances of 'NoneType' and 'NoneType'
+c_mc_one_none=[('a', None)]
+c_mc_str_n=[('b', 'y'), ('a', 'x')]
+c_mc_tuple=[('b', (1, 3)), ('a', (1, 2)), ('c', (0,))]
+c_mc_nan=['a', 'b', 'c', 'd']
+c_repr_ties="Counter({'c': 2, 'b': 1, 'a': 1})"
+c_repr_str="Counter({'b': 'y', 'a': 'x', 'c': 'x'})"
+c_repr_float="Counter({'b': 2.5, 'a': 1.5, 'c': 1.5})"
+c_repr_big="Counter({'b': 1000000000000000000000000000000, 'a': 1})"
+c_el_mixed!TypeError:'str' object cannot be interpreted as an integer
+c_el_resume=['a', 'TE']
+c_el_neg_big=[]
+c_el_huge!OverflowError:Python int too large to convert to C ssize_t
+c_el_neg_huge!OverflowError:Python int too large to convert to C ssize_t
+c_add_upd=Counter({'a': 3.5})
+c_total_float=3.5
+c_copy_type='Counter'
+c_eq_dict=True

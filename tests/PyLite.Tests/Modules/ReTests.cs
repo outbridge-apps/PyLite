@@ -90,7 +90,7 @@ namespace Outbridge.PyLite.Tests.Modules
         public void BadPatternIsReError()
         {
             var ex = Raises("re.compile('[z-a]')");
-            Assert.Equal("error", ex.Value.ExcType.Name);
+            Assert.Equal("PatternError", ex.Value.ExcType.Name);
         }
 
         [Fact]
@@ -183,7 +183,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [Fact]
         public void AsciiCannotBeTurnedOff()
         {
-            Assert.Equal("error", Raises("re.compile('(?i-a:x)')").Value.ExcType.Name);
+            Assert.Equal("PatternError", Raises("re.compile('(?i-a:x)')").Value.ExcType.Name);
         }
 
         // Pattern.flags follows CPython's fix_flags for a str pattern: UNICODE is implied unless ASCII
@@ -205,7 +205,6 @@ namespace Outbridge.PyLite.Tests.Modules
         [Theory]
         [InlineData("re.compile('x', re.A | re.U)", "ASCII and UNICODE flags are incompatible")]
         [InlineData("re.compile('x', re.L)", "cannot use LOCALE flag with a str pattern")]
-        [InlineData("re.compile('(?L)x')", "cannot use LOCALE flag with a str pattern")]
         public void ContradictoryFlagsAreValueError(string body, string message)
         {
             // A bad flag COMBINATION is a plain ValueError in CPython, not re.error.
@@ -214,13 +213,21 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal(message, e.GetMessageText(Rt.Ctx()));
         }
 
+        [Fact]   // inline, the same flag is sre_parse's error
+        public void InlineLocaleIsAPatternError()
+        {
+            ExceptionValue e = Raises("x = re.compile('(?L)x')").Value;
+            Assert.Equal("PatternError", e.ExcType.Name);
+            Assert.Equal("bad inline flags: cannot use 'L' flag with a str pattern at position 3", e.GetMessageText(Rt.Ctx()));
+        }
+
         [Theory]
         [InlineData("re.compile('(?L:x)')")]
         [InlineData("re.compile('(?i-a:x)')")]
         [InlineData("re.compile('(?i-:x)')")]
         public void BadScopedFlagsRejected(string body)
         {
-            Assert.Equal("error", Raises(body).Value.ExcType.Name);
+            Assert.Equal("PatternError", Raises(body).Value.ExcType.Name);
         }
 
         // ---- findall / finditer / sub / subn / split / escape ----
@@ -279,7 +286,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [Fact]
         public void SubInvalidGroupRefIsReError()
         {
-            Assert.Equal("error", Raises("re.sub('a', r'\\9', 'a')").Value.ExcType.Name);
+            Assert.Equal("PatternError", Raises("re.sub('a', r'\\9', 'a')").Value.ExcType.Name);
         }
 
         // Catastrophic backtracking (a+)+$ on non-matching input -> the .NET MatchTimeout fires -> EngineAbort,

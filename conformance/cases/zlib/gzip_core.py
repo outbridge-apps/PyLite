@@ -68,7 +68,7 @@ except gzip.BadGzipFile:
 
 # BadGzipFile derives from OSError
 try:
-    gzip.decompress(b'\x1f\x8b\x08garbage')
+    gzip.decompress(b'\x1f\x8b\x09' + b'\x00' * 7)   # an unknown method; a cut header is EOFError
 except OSError as e:
     assert isinstance(e, gzip.BadGzipFile) and issubclass(gzip.BadGzipFile, OSError) and issubclass(OSError, Exception)
 
@@ -86,7 +86,7 @@ assert gzip.decompress(m1 + m2) == b'ab'
 assert gzip.decompress(m0 + gzip.compress(b'x')) == b'x'
 assert gzip.decompress(m1 + m2 + m0 + gzip.compress(b'cd')) == b'abcd'
 assert gzip.decompress(m1) == b'a' and gzip.decompress(m0) == b''
-assert zlib.decompress(m1 + m2, 47) == b'ab' and zlib.decompress(m1 + m2, 31) == b'ab'
+assert zlib.decompress(m1 + m2, 47) == b'a' and zlib.decompress(m1 + m2, 31) == b'a'   # zlib reads one member
 big = gzip.compress(data * 20)
 assert gzip.decompress(big + big) == data * 40
 # member boundaries are found by validating trailers, so a payload that CONTAINS the gzip magic

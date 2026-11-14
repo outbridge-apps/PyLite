@@ -9,8 +9,30 @@ namespace Outbridge.PyLite.Runtime.Values
     // collections.ChainMap. A LIVE view over a list of dicts: lookups search maps in order
     // writes/deletes go to maps[0] only. .maps is the live ListValue (mutations are visible). Iteration and
     // len() use the merged key union built back-to-front, so the FIRST map's order/values win (CPython).
-    internal sealed class ChainMapValue : ScriptValue
+    internal sealed class ChainMapValue : ScriptValue, Modules.IScriptCopyable
     {
+        // CPython's __copy__: a copy of the first map, the others shared.
+        public ScriptValue CopyShallow(EvalContext ctx)
+        {
+            ListValue maps = ctx.Values.List(Maps.Items.Count);
+            for (int i = 0; i < Maps.Items.Count; i++)
+            {
+                DictValue d = Maps.Items[i] as DictValue;
+                maps.Add(i == 0 && d != null ? ctx.Values.CopyDict(d) : Maps.Items[i], ctx);
+            }
+            return new ChainMapValue(maps);
+        }
+
+        public ScriptValue EmptyClone(EvalContext ctx) { return new ChainMapValue(ctx.Values.List(Maps.Items.Count)); }
+
+        public IReadOnlyList<ScriptValue> DeepChildren() { return Maps.Items; }
+
+        public void FillClone(EvalContext ctx, ScriptValue clone, System.Func<ScriptValue, ScriptValue> copyOf)
+        {
+            foreach (ScriptValue m in Maps.Items)
+                ((ChainMapValue)clone).Maps.Add(copyOf(m), ctx);
+        }
+
         private static readonly ScriptTypeInfo CMType = new ScriptTypeInfo("collections.ChainMap", BuildSlots());
 
         internal readonly ListValue Maps;   // live; each element must behave as a dict
@@ -28,12 +50,21 @@ namespace Outbridge.PyLite.Runtime.Values
             return d;
         }
 
-        // Union snapshot: back-to-front updates keep the first map's insertion order and values on top.
+        // Union snapshot: back-to-front updates keep the first map's insertion order and values on top. The
+        // maps are taken first, as CPython's `set().union(*self.maps)` takes them: a key's __eq__ may clear
+        // the list under the walk.
         internal DictValue Merged(EvalContext ctx)
         {
             DictValue merged = ctx.Values.Dict(8);
-            for (int i = Maps.Items.Count - 1; i >= 0; i--)
-                DictMethods.Merge(ctx, merged, MapAt(ctx, i));
+            ctx.Values.PreCharge(8L * Maps.Items.Count);
+            ScriptValue[] maps = Maps.Items.ToArray();
+            for (int i = maps.Length - 1; i >= 0; i--)
+            {
+                DictValue d = maps[i] as DictValue;
+                if (d == null)
+                    throw Raise.TypeError(ctx, "ChainMap maps must be dicts, not " + maps[i].PyTypeName);
+                DictMethods.Merge(ctx, merged, d);
+            }
             return merged;
         }
 
@@ -41,6 +72,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override bool IsTruthyCore(EvalContext ctx)
         {
+            if (Maps.Items.Count > 16)
+                ctx.Budget.ChargeLinear(Maps.Items.Count);   // a lookup per map: millions of maps are seconds
             for (int i = 0; i < Maps.Items.Count; i++)
                 if (MapAt(ctx, i).Count > 0)
                     return true;
@@ -78,6 +111,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override bool TryContainsCore(ScriptValue item, EvalContext ctx, int depth, out bool found)
         {
+            if (Maps.Items.Count > 16)
+                ctx.Budget.ChargeLinear(Maps.Items.Count);   // a lookup per map: millions of maps are seconds
             for (int i = 0; i < Maps.Items.Count; i++)
             {
                 ScriptValue ignored;
@@ -93,6 +128,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override ScriptValue GetItemCore(ScriptValue key, EvalContext ctx)
         {
+            if (Maps.Items.Count > 16)
+                ctx.Budget.ChargeLinear(Maps.Items.Count);   // a lookup per map: millions of maps are seconds
             // CPython does mapping[key] per map (a defaultdict first map DOES run its factory, a Counter
             // answers 0), asked without the KeyError a miss would otherwise cost per map.
             for (int i = 0; i < Maps.Items.Count; i++)
@@ -102,6 +139,47 @@ namespace Outbridge.PyLite.Runtime.Values
                     return v;
             }
             throw Raise.KeyError(ctx, key);
+        }
+
+        // CPython's __or__ and __ror__ (3.9): `cm | mapping` is a copy with the mapping put into its first map,
+        // `mapping | cm` is one plain dict (the mapping, then the maps from the last to the first) in a new ChainMap.
+        protected internal override ScriptValue BinaryOpCore(PyBinOp op, ScriptValue other, bool reflected, EvalContext ctx)
+        {
+            if (op != PyBinOp.BitOr || !(other is DictValue || other is ChainMapValue))
+                return null;
+            if (!reflected)
+            {
+                ChainMapValue copy = (ChainMapValue)CopyShallow(ctx);
+                copy.UpdateFirst(other, ctx);
+                return copy;
+            }
+            DictValue all = ctx.Values.Dict(8);
+            DictMethods.Merge(ctx, all, other);
+            DictMethods.Merge(ctx, all, Merged(ctx));
+            ListValue maps = ctx.Values.List(1);
+            maps.Add(all, ctx);
+            ctx.Values.PreCharge(32);
+            return new ChainMapValue(maps);
+        }
+
+        // cm |= other: the first map's own update (a mapping or pairs), and the same object stays bound.
+        internal ScriptValue InPlaceOr(ScriptValue other, EvalContext ctx)
+        {
+            UpdateFirst(other, ctx);
+            return this;
+        }
+
+        // maps[0].update(other): that map's own update, so a Counter there adds the counts.
+        private void UpdateFirst(ScriptValue other, EvalContext ctx)
+        {
+            if (Maps.Items.Count == 0)
+                throw Raise.IndexError(ctx, "list index out of range");
+            DictValue first = MapAt(ctx, 0);
+            CounterValue counter = first as CounterValue;
+            if (counter != null)
+                CounterValue.UpdateFrom(ctx, counter, other, KwArgs.Empty, +1);
+            else
+                DictMethods.Merge(ctx, first, other);
         }
 
         protected internal override bool TrySetItemCore(ScriptValue key, ScriptValue value, EvalContext ctx)
@@ -128,6 +206,23 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
+            if (!ReprEngine.EnterLeaf(ctx, this))
+            {
+                sb.Append("...");   // reprlib.recursive_repr
+                return;
+            }
+            try
+            {
+                ReprBody(sb, ctx, depth);
+            }
+            finally
+            {
+                ReprEngine.ExitLeaf(ctx, this);
+            }
+        }
+
+        private void ReprBody(BudgetStringBuilder sb, EvalContext ctx, int depth)
+        {
             sb.Append("ChainMap(");
             for (int i = 0; i < Maps.Items.Count; i++)
             {
@@ -146,15 +241,20 @@ namespace Outbridge.PyLite.Runtime.Values
             s["maps"] = SlotDescriptor.MakeProperty("maps", (self, ctx) => ((ChainMapValue)self).Maps);
             s["parents"] = SlotDescriptor.MakeProperty("parents", (self, ctx) => Parents((ChainMapValue)self, ctx));
             s["new_child"] = SlotDescriptor.MakeMethod("new_child", NewChild);
-            s["get"] = SlotDescriptor.MakeMethod("get", Get_);
+            s["get"] = SlotDescriptor.MakeMethod("get", Args.BoundKeywords("get", 1, Get_, "key", "default"));
             s["keys"] = SlotDescriptor.MakeMethod("keys", Args.Positional("keys", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).KeysView(ctx)));
             s["values"] = SlotDescriptor.MakeMethod("values", Args.Positional("values", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ValuesView(ctx)));
             s["items"] = SlotDescriptor.MakeMethod("items", Args.Positional("items", 0, 0, (self, a, kw, ctx) => ((ChainMapValue)self).Merged(ctx).ItemsView(ctx)));
-            s["copy"] = SlotDescriptor.MakeMethod("copy", Copy_);
+            s["copy"] = SlotDescriptor.MakeMethod("copy", Args.Positional("copy", 0, 0, Copy_));
             s["update"] = SlotDescriptor.MakeMethod("update", Update_);
-            s["pop"] = SlotDescriptor.MakeMethod("pop", Pop_);
-            s["popitem"] = SlotDescriptor.MakeMethod("popitem", PopItem_);
-            s["setdefault"] = SlotDescriptor.MakeMethod("setdefault", SetDefault_);
+            // pop(self, key, *args): the default comes only by position ("*default" matches no keyword)
+            s["pop"] = SlotDescriptor.MakeMethod("pop", Args.LeadKeywords("pop", (self, a, kw, c) =>
+            {
+                Args.NoKw(c, kw, "pop");
+                return Pop_(self, a, kw, c);
+            }, 1, "key", "*default"));
+            s["popitem"] = SlotDescriptor.MakeMethod("popitem", Args.Positional("popitem", 0, 0, PopItem_));
+            s["setdefault"] = SlotDescriptor.MakeMethod("setdefault", Args.BoundKeywords("setdefault", 1, SetDefault_, "key", "default"));
             s["clear"] = SlotDescriptor.MakeMethod("clear", Args.Positional("clear", 0, 0, (self, a, kw, ctx) =>
             {
                 ((ChainMapValue)self).First(ctx).Table.Clear(ctx);   // first map only (MutableMapping semantics)

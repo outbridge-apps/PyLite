@@ -38,14 +38,16 @@ namespace Outbridge.PyLite.Syntax
         public readonly object Value;   // IntLiteral: boxed BigInteger; FloatLiteral: boxed double; else null
         public readonly int Line;       // 1-based
         public readonly int Col;        // 1-based, UTF-16 units
+        public readonly int EndCol;     // the column just past the token, on its last line
 
-        public Token(TokenKind kind, string text, object value, int line, int col)
+        public Token(TokenKind kind, string text, object value, int line, int col, int endCol = 0)
         {
             Kind = kind;
             Text = text;
             Value = value;
             Line = line;
             Col = col;
+            EndCol = endCol;
         }
 
         public override string ToString() { return TokenDump.DumpLine(this); }

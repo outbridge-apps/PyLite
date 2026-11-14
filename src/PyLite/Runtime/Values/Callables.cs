@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Syntax;
 using Outbridge.PyLite.Syntax.Ast;
 
@@ -41,6 +42,7 @@ namespace Outbridge.PyLite.Runtime.Values
         // functools.wraps/update_wrapper set this; __name__ and repr read it (null => the def name).
         internal string NameOverride;
         internal string EffectiveName { get { return NameOverride ?? Name; } }
+        internal ScriptValue Wrapped;   // __wrapped__, set by the same two (null => no such attribute)
 
         internal FunctionValue(string name, FunctionInfo info, ScriptValue[] defaults,
             KeyValuePair<string, ScriptValue>[] kwDefaults, Cell[] closure, object globalsToken,
@@ -77,6 +79,7 @@ namespace Outbridge.PyLite.Runtime.Values
         public readonly BuiltinDelegate Fn;
         public readonly bool IsHostProvided;   // set via HostFunctionTable.Set: the call is wrapped by
                                                // HostCallGuard so an arbitrary exception -> HostError
+        internal QuietBuiltin Quiet;           // set while the builtins template is built
         private readonly long _identity;
 
         internal BuiltinFunctionValue(string name, BuiltinDelegate fn, long identity, bool isHostProvided = false)
@@ -87,23 +90,27 @@ namespace Outbridge.PyLite.Runtime.Values
             _identity = identity;
         }
 
-        // Shared-identity instance for the immutable builtins template.
+        // For the builtins template and the module tables a run builds: hashed by name (identity 0), so no
+        // counter shared by the process tells one run how many functions the others made.
         internal static BuiltinFunctionValue Make(string name, BuiltinDelegate fn)
         {
-            return new BuiltinFunctionValue(name, fn, SharedIdentitySource.Next());
+            return new BuiltinFunctionValue(name, fn, 0);
         }
 
         // A host-provided override (HostFunctionTable.Set) — its call is fenced by HostCallGuard.
         internal static BuiltinFunctionValue MakeHost(string name, BuiltinDelegate fn)
         {
-            return new BuiltinFunctionValue(name, fn, SharedIdentitySource.Next(), true);
+            return new BuiltinFunctionValue(name, fn, 0, true);
         }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
         internal override ValueKind Kind { get { return ValueKind.BuiltinFunction; } }
         internal override bool IsCallable { get { return true; } }
 
-        protected internal override long HashLeafCore(EvalContext ctx, int depth) { return _identity; }
+        protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            return _identity != 0 ? _identity : NumericHash.HashString(Name, ctx.StrHashSeed ^ 0x6A09E667u);   // not hash(name); equality is identity
+        }
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth) { return ReferenceEquals(this, other); }
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth) { sb.Append("<built-in function " + Name + ">"); }
     }
@@ -123,7 +130,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
         {
-            return unchecked(PyOps.Hash(Self, ctx, depth + 1) * 1000003L ^ Descriptor.Name.GetHashCode());
+            return unchecked(PyOps.Hash(Self, ctx, depth + 1) * 1000003L ^ NumericHash.HashString(Descriptor.Name, ctx.StrHashSeed));
         }
 
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth)

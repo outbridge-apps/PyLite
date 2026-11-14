@@ -25,7 +25,7 @@ namespace Outbridge.PyLite.Modules
             m["_inverted_registry"] = invRegistry;
             m["_extension_cache"] = extCache;
             m["pickle"] = BuiltinFunctionValue.Make("pickle", Args.Positional("pickle", 2, 3, (s, a, k, c) => Pickle(c, a, dispatch)));
-            m["constructor"] = BuiltinFunctionValue.Make("constructor", Constructor);
+            m["constructor"] = BuiltinFunctionValue.Make("constructor", Args.BoundKeywords("constructor", 1, Constructor, "object"));
             m["add_extension"] = BuiltinFunctionValue.Make("add_extension", Args.Positional("add_extension", 3, 3, (s, a, k, c) => AddExtension(c, a, extRegistry, invRegistry)));
             m["remove_extension"] = BuiltinFunctionValue.Make("remove_extension", Args.Positional("remove_extension", 3, 3, (s, a, k, c) => RemoveExtension(c, a, extRegistry, invRegistry, extCache)));
             m["clear_extension_cache"] = BuiltinFunctionValue.Make("clear_extension_cache", Args.Positional("clear_extension_cache", 0, 0, (s, a, k, c) =>

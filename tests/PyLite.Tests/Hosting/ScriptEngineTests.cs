@@ -222,6 +222,23 @@ namespace Outbridge.PyLite.Tests.Hosting
             Assert.True(r.Stats.Elapsed > TimeSpan.Zero);
         }
 
+        // CompileTime was documented but always 0 (second review, Q04): Run(source) reports its compile, a
+        // cache hit and Run(CompiledScript) report 0.
+        [Fact]
+        public void CompileTimeIsReported()
+        {
+            ScriptEngine e = NewEngine();
+            const string src = "def f(a):\n    return [x * a for x in range(10) if x % 2]\ny = f(3)\n";
+            RunResult first = e.Run(src, new RunRequest());
+            RunResult hit = e.Run(src, new RunRequest());
+            RunResult precompiled = e.Run(e.Compile(src), new RunRequest());
+            RunResult syntax = e.Run("x = (\n", new RunRequest());
+            Assert.True(first.Stats.CompileTime > TimeSpan.Zero);
+            Assert.Equal(TimeSpan.Zero, hit.Stats.CompileTime);
+            Assert.Equal(TimeSpan.Zero, precompiled.Stats.CompileTime);
+            Assert.True(syntax.Stats.CompileTime > TimeSpan.Zero);
+        }
+
         // ---- RFC-001 §3: host prelude modules ----
 
         private static EngineOptions WithPython(string name, string source, params string[] prelude)

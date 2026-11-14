@@ -39,8 +39,8 @@ assert math.gcd(12, 18, 24) == 6
 # prod and fsum
 assert math.prod([1, 2, 3, 4]) == 24
 assert math.prod([]) == 1
-assert math.fsum([0.1] * 10) == 1.0          # fsum is exactly-rounded, sum() is not
-assert sum([0.1] * 10) != 1.0
+assert math.fsum([0.1] * 10) == 1.0          # fsum is exactly-rounded, and sum() is compensated since 3.12
+assert sum([0.1] * 10) == 1.0 and sum([3.3, 1.1, 2.2]) == 6.6
 
 # exp / log family
 assert math.exp(0) == 1.0

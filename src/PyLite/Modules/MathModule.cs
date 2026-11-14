@@ -34,21 +34,21 @@ namespace Outbridge.PyLite.Modules
                 ["radians"] = Fn("radians", 1, 1, (c, a) => c.Values.Float(AsDouble(c, Arg(c, a, 0)) * (Math.PI / 180.0))),
 
                 ["exp"] = Wrap("exp", Math.Exp),
-                ["expm1"] = Wrap("expm1", FloatMath.Expm1),
+                ["expm1"] = Wrap("expm1", FdLibm.Expm1),
                 ["sqrt"] = Fn("sqrt", 1, 1, (c, a) => Sqrt(c, a)),
-                ["sin"] = Wrap("sin", Math.Sin),
-                ["cos"] = Wrap("cos", Math.Cos),
-                ["tan"] = Wrap("tan", Math.Tan),
-                ["asin"] = Wrap("asin", Math.Asin),
-                ["acos"] = Wrap("acos", Math.Acos),
+                ["sin"] = Wrap("sin", FdLibm.Sin, Finite),
+                ["cos"] = Wrap("cos", FdLibm.Cos, Finite),
+                ["tan"] = Wrap("tan", FdLibm.Tan, Finite),
+                ["asin"] = Wrap("asin", Math.Asin, "expected a number in range from -1 up to 1, got "),
+                ["acos"] = Wrap("acos", Math.Acos, "expected a number in range from -1 up to 1, got "),
                 ["atan"] = Wrap("atan", Math.Atan),
                 ["atan2"] = Fn("atan2", 2, 2, (c, a) => c.Values.Float(Math.Atan2(AsDouble(c, Arg(c, a, 0)), AsDouble(c, Arg(c, a, 1))))),
                 ["sinh"] = Wrap("sinh", Math.Sinh),
                 ["cosh"] = Wrap("cosh", Math.Cosh),
                 ["tanh"] = Wrap("tanh", Math.Tanh),
                 ["asinh"] = Wrap("asinh", FloatMath.Asinh),
-                ["acosh"] = Wrap("acosh", FloatMath.Acosh),
-                ["atanh"] = Wrap("atanh", FloatMath.Atanh),
+                ["acosh"] = Wrap("acosh", FloatMath.Acosh, "expected argument value not less than 1, got "),
+                ["atanh"] = Wrap("atanh", FloatMath.Atanh, "expected a number between -1 and 1, got "),
 
                 ["isfinite"] = Fn("isfinite", 1, 1, (c, a) => Predicate(c, a, PredKind.Finite)),
                 ["isinf"] = Fn("isinf", 1, 1, (c, a) => Predicate(c, a, PredKind.Inf)),
@@ -64,6 +64,7 @@ namespace Outbridge.PyLite.Modules
             };
             AddSummationAndFactorial(ctx, m);
             AddModern(ctx, m);
+            AddSpecial(m);
             return ctx.Values.Module("math", m);
         }
 
@@ -87,17 +88,25 @@ namespace Outbridge.PyLite.Modules
         {
             double x = AsDouble(c, Arg(c, a, 0));
             if (x <= -1.0)
-                throw Raise.ValueError(c, "math domain error");
-            return c.Values.Float(Math1(c, FloatMath.Log1p(x), x));
+                throw Domain(c, "expected argument value > -1, got ", x);
+            return c.Values.Float(Math1(c, FloatMath.Log1p(x), x, null));
         }
 
-        private static BuiltinFunctionValue Wrap(string name, Func<double, double> func)
+        // domain: CPython 3.14's text for the function, completed with the argument's repr; null is "math domain error"
+        private static BuiltinFunctionValue Wrap(string name, Func<double, double> func, string domain = null)
         {
             return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
             {
                 double x = AsDouble(c, Args.One(c, args, kw, name));
-                return c.Values.Float(Math1(c, func(x), x));
+                return c.Values.Float(Math1(c, func(x), x, domain));
             });
+        }
+
+        private const string Finite = "expected a finite input, got ";
+
+        internal static ScriptException Domain(EvalContext c, string text, double x)
+        {
+            return Raise.ValueError(c, text == null ? "math domain error" : text + FloatRepr.Repr(x));
         }
 
         private static ScriptValue Arg(EvalContext ctx, ScriptValue[] a, int i)
@@ -107,7 +116,7 @@ namespace Outbridge.PyLite.Modules
             return a[i];
         }
 
-        // numeric reader; math's non-number text is "a float is required".
+        // numeric reader: a float, or any number with __float__.
         internal static double AsDouble(EvalContext ctx, ScriptValue v)
         {
             BoolValue bv = v as BoolValue;
@@ -115,7 +124,7 @@ namespace Outbridge.PyLite.Modules
                 return bv.Value ? 1.0 : 0.0;
             IntValue iv = v as IntValue;
             if (iv != null)
-                return ToDoubleChecked(ctx, iv.Value);
+                return iv.IsSmall ? iv.Small : NumericOps.ToDoubleChecked(iv.Value, ctx);
             FloatValue fv = v as FloatValue;
             if (fv != null)
                 return fv.Value;
@@ -124,25 +133,17 @@ namespace Outbridge.PyLite.Modules
                 return fr.AsDouble(ctx);
             DecimalValue dv = v as DecimalValue;
             if (dv != null)
-                return (double)dv.Value;
-            throw Raise.TypeError(ctx, "a float is required");
-        }
-
-        internal static double ToDoubleChecked(EvalContext ctx, BigInteger n)
-        {
-            double d = (double)n;
-            if (double.IsInfinity(d))
-                throw Raise.Overflow(ctx, "int too large to convert to float");
-            return d;
+                return NearestDouble.FromDecimal(dv.Value);
+            throw Raise.TypeError(ctx, "must be real number, not " + v.PyTypeName);
         }
 
         private static bool IsFinite(double x) { return !double.IsNaN(x) && !double.IsInfinity(x); }
 
         // NaN from a non-NaN input -> domain; Inf from a finite input -> range.
-        private static double Math1(EvalContext ctx, double r, double x)
+        private static double Math1(EvalContext ctx, double r, double x, string domain)
         {
             if (double.IsNaN(r) && !double.IsNaN(x))
-                throw Raise.ValueError(ctx, "math domain error");
+                throw Domain(ctx, domain, x);
             if (double.IsInfinity(r) && IsFinite(x))
                 throw Raise.Overflow(ctx, "math range error");
             return r;
@@ -164,7 +165,8 @@ namespace Outbridge.PyLite.Modules
                 ScriptValue hook = mode == RoundMode.Ceil ? v.CeilCore(ctx) : mode == RoundMode.Floor ? v.FloorCore(ctx) : v.TruncCore(ctx);
                 if (hook != null)
                     return hook;
-                throw Raise.TypeError(ctx, "a float is required");
+                throw Raise.TypeError(ctx, mode == RoundMode.Trunc ? "type " + v.PyTypeName + " doesn't define __trunc__ method"
+                    : "must be real number, not " + v.PyTypeName);
             }
             double x = fv.Value;
             if (double.IsNaN(x))
@@ -244,7 +246,7 @@ namespace Outbridge.PyLite.Modules
             if (fx == 0.0)
                 return ctx.Values.Float(fx);   // sqrt(-0.0) = -0.0, no error
             if (fx < 0.0)
-                throw Raise.ValueError(ctx, "math domain error");
+                throw Domain(ctx, "expected a nonnegative input, got ", fx);
             return ctx.Values.Float(Math.Sqrt(fx));
         }
 
@@ -253,12 +255,8 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue Predicate(EvalContext ctx, ScriptValue[] a, PredKind kind)
         {
             ScriptValue v = Arg(ctx, a, 0);
-            if (v is IntValue || v is BoolValue)
-                return ctx.Values.Bool(kind == PredKind.Finite);
             FloatValue fv = v as FloatValue;
-            if (fv == null)
-                throw Raise.TypeError(ctx, "a float is required");
-            double x = fv.Value;
+            double x = fv != null ? fv.Value : AsDouble(ctx, v);   // as CPython: a Fraction converts, an int past double is OverflowError
             bool r = kind == PredKind.Finite ? IsFinite(x) : kind == PredKind.Inf ? double.IsInfinity(x) : double.IsNaN(x);
             return ctx.Values.Bool(r);
         }

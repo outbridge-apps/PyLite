@@ -119,6 +119,7 @@ namespace Outbridge.PyLite.Tests.Hosting
             Assert.Throws<ArgumentOutOfRangeException>(() => NewRunner().SetLimitTimeoutMs(0));
             Assert.Throws<ArgumentOutOfRangeException>(() => NewRunner().SetLimitMemoryBytes(0));
             Assert.Throws<ArgumentOutOfRangeException>(() => NewRunner().SetLimitRecursion(0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => NewRunner().SetLimitIntBits(0));
         }
 
         [Fact]
@@ -148,6 +149,24 @@ namespace Outbridge.PyLite.Tests.Hosting
             // deep recursion trips the lowered call-depth budget
             Assert.Equal(3, r.Run("def f(n):\n    return f(n + 1)\nf(0)\n"));
             Assert.Equal("MaxCallDepth", r.GetErrorLimit());
+        }
+
+        [Fact]
+        public void IntBitsLimitDownwardOnly()
+        {
+            var r = NewRunner();
+            r.SetLimitIntBits(256);
+            Assert.Equal(0, r.Run("x = 2 ** 200\n"));
+            Assert.Equal(3, r.Run("x = 2 ** 300\n"));
+            Assert.Equal("MaxIntBits", r.GetErrorLimit());
+
+            // a value above the engine's default is clamped to it
+            r.SetLimitIntBits(int.MaxValue);
+            Assert.Equal(3, r.Run("x = 1 << 1000001\n"));
+            Assert.Equal("MaxIntBits", r.GetErrorLimit());
+
+            r.Reset();
+            Assert.Equal(0, r.Run("x = 2 ** 300\n"));
         }
     }
 }

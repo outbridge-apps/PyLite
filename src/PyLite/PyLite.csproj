@@ -5,7 +5,7 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>Outbridge.PyLite</AssemblyName>
     <RootNamespace>Outbridge.PyLite</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>PyLite</Product>
     <Company>Outbridge</Company>
     <Authors>Outbridge</Authors>
@@ -20,6 +20,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <NeutralLanguage>en</NeutralLanguage>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- XML documentation ships with the package; the hosting API is documented, and a missing comment elsewhere
+         is not an error while it is open which Runtime and Syntax types stay public -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Deterministic>true</Deterministic>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
@@ -33,6 +37,7 @@
     <!-- standard-library parts written in the dialect itself, compiled once per process -->
     <EmbeddedResource Include="Modules/Python/string_template.py" LogicalName="Outbridge.PyLite.string_template.py" />
     <EmbeddedResource Include="Modules/Python/email_utils.py" LogicalName="Outbridge.PyLite.email_utils.py" />
+    <EmbeddedResource Include="Modules/Python/future.py" LogicalName="Outbridge.PyLite.future.py" />
   </ItemGroup>
 
   <ItemGroup>
@@ -50,6 +55,9 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <!-- public-tree files: the package carries the licence and the notices beside the README -->
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\LICENSE')" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Condition="Exists('..\..\THIRD-PARTY-NOTICES.md')" />
   </ItemGroup>
 
   <!-- The package carries the repository README, and only the public tree has the public one. The internal

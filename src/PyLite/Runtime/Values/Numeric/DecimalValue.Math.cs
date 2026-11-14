@@ -12,13 +12,19 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             int prec = ctx.DecimalCtx.Prec;
             int digits = coeff.IsZero ? 1 : DecimalBits.SignificantDigits(coeff);
-            if (digits > prec)
+            // one rounding to the tighter of prec and the backend's 28 places: rounding to prec and then
+            // again in Make gave Decimal(19) ** -1 a last digit 1 / Decimal(19) does not have
+            int drop = Math.Max(digits - prec, coeff.IsZero ? 0 : -28 - exp);
+            if (drop > 0)
             {
-                int drop = digits - prec;
+                if (drop > digits + 1)
+                    throw DecimalBits.Underflow(ctx);
                 BigInteger divisor = BigInteger.Pow(10, drop);
                 BigInteger r;
                 BigInteger q = BigInteger.DivRem(coeff, divisor, out r);
                 q = DecimalRound.Apply(q, r, divisor, neg, ctx.DecimalCtx.Mode);
+                if (q.IsZero)
+                    throw DecimalBits.Underflow(ctx);
                 if (DecimalBits.SignificantDigits(q) > prec)   // rounding up grew it: 999 -> 1000
                 {
                     q /= 10;
@@ -156,7 +162,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return Settle(ctx, w =>
             {
                 BigInteger S = BigInteger.Pow(10, w);
-                return Fixed(DivNearest(LnFixed(ctx, c, e, w) * S, Ln10(ctx, w)), w);
+                return Fixed(BigIntMath.DivNearHalfEven(LnFixed(ctx, c, e, w) * S, Ln10(ctx, w)), w);
             });
         }
 
@@ -183,7 +189,11 @@ namespace Outbridge.PyLite.Runtime.Values
             bool negy;
             y.Coeff(out cy, out ey, out negy);
             if (cy.IsZero)
+            {
+                if (cx.IsZero)
+                    throw InvalidOp(ctx);   // 0 ** 0
                 return DecimalValue.Make(ctx, BigInteger.One, 0, false);
+            }
             if (cx.IsZero)
             {
                 if (negy)
@@ -199,7 +209,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 BigInteger S = BigInteger.Pow(10, w);
                 BigInteger lnx = LnFixed(ctx, cx, ex, w);
                 BigInteger yf = Point(cy, ey, negy, w);
-                return ExpApprox(ctx, DivNearest(yf * lnx, S), w);
+                return ExpApprox(ctx, BigIntMath.DivNearHalfEven(yf * lnx, S), w);
             });
         }
 
@@ -211,12 +221,12 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             BigInteger S = BigInteger.Pow(10, w);
             BigInteger ln10 = Ln10(ctx, w);
-            BigInteger y = DivNearest(u * S, ln10);
-            BigInteger n = FloorDiv(y, S);
+            BigInteger y = BigIntMath.DivNearHalfEven(u * S, ln10);
+            BigInteger n = BigIntMath.FloorDiv(y, S);
             if (n > 200 || n < -200)
                 throw n > 0 ? Overflow(ctx) : DecimalBits.Underflow(ctx);
             BigInteger g = y - n * S;
-            BigInteger v = ExpSeries(ctx, DivNearest(g * ln10, S), S);
+            BigInteger v = ExpSeries(ctx, BigIntMath.DivNearHalfEven(g * ln10, S), S);
             return new Approx { Coeff = v, Exp = (int)n - w, Neg = false };
         }
 
@@ -229,7 +239,7 @@ namespace Outbridge.PyLite.Runtime.Values
             while (!t.IsZero)
             {
                 ctx.Budget.Step();
-                t = DivNearest(t * r, S * i);
+                t = BigIntMath.DivNearHalfEven(t * r, S * i);
                 acc += t;
                 i++;
             }
@@ -247,10 +257,10 @@ namespace Outbridge.PyLite.Runtime.Values
             BigInteger mu = Rescale(c, w - (d - 1));
             if (mu * mu >= 10 * S * S)   // above sqrt(10): shift a power of ten into the exponent
             {
-                mu = DivNearest(mu, 10);
+                mu = BigIntMath.DivNearHalfEven(mu, 10);
                 adjusted += 1;
             }
-            BigInteger lnm = 2 * AtanhSeries(ctx, DivNearest((mu - S) * S, mu + S), S);
+            BigInteger lnm = 2 * AtanhSeries(ctx, BigIntMath.DivNearHalfEven((mu - S) * S, mu + S), S);
             return adjusted == 0 ? lnm : lnm + adjusted * Ln10(ctx, w);
         }
 
@@ -280,14 +290,14 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static BigInteger AtanhSeries(EvalContext ctx, BigInteger z, BigInteger S)
         {
-            BigInteger zz = DivNearest(z * z, S);
+            BigInteger zz = BigIntMath.DivNearHalfEven(z * z, S);
             BigInteger t = z;
             BigInteger acc = z;
             int i = 1;
             while (!t.IsZero)
             {
                 ctx.Budget.Step();
-                t = DivNearest(t * zz, S);
+                t = BigIntMath.DivNearHalfEven(t * zz, S);
                 if (t.IsZero)
                     break;
                 acc += t / (2 * i + 1);
@@ -346,32 +356,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (k >= 0)
                 return c * BigInteger.Pow(10, k);
-            return DivNearest(c, BigInteger.Pow(10, -k));
-        }
-
-        // Round-half-even division by a positive divisor, for a dividend of either sign.
-        private static BigInteger DivNearest(BigInteger a, BigInteger b)
-        {
-            BigInteger r;
-            BigInteger q = BigInteger.DivRem(a, b, out r);
-            if (r.Sign < 0)
-            {
-                q -= BigInteger.One;
-                r += b;
-            }
-            BigInteger twice = r * 2;
-            if (twice > b || (twice == b && !q.IsEven))
-                q += BigInteger.One;
-            return q;
-        }
-
-        private static BigInteger FloorDiv(BigInteger a, BigInteger b)
-        {
-            BigInteger r;
-            BigInteger q = BigInteger.DivRem(a, b, out r);
-            if (r.Sign < 0)
-                q -= BigInteger.One;
-            return q;
+            return BigIntMath.DivNearHalfEven(c, BigInteger.Pow(10, -k));
         }
 
         private static ScriptException InvalidOp(EvalContext ctx)

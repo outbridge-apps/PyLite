@@ -1,5 +1,4 @@
 using System.Numerics;
-using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {

@@ -23,9 +23,11 @@ namespace Outbridge.PyLite.Runtime.Values
         public readonly byte Second;
         public readonly int Microsecond;
         public readonly TzInfoValue Tz;      // null <=> naive
+        public readonly int Fold;            // 0/1, kept for combine and replace; no effect on equality (PEP 495)
 
-        private TimeValue(byte hour, byte minute, byte second, int us, TzInfoValue tz)
+        private TimeValue(byte hour, byte minute, byte second, int us, TzInfoValue tz, int fold)
         {
+            Fold = fold;
             Hour = hour;
             Minute = minute;
             Second = second;
@@ -43,23 +45,16 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // ---- construction ----
 
-        internal static TimeValue Construct(EvalContext ctx, int hour, int minute, int second, int us, TzInfoValue tz)
+        internal static TimeValue Construct(EvalContext ctx, int hour, int minute, int second, int us, TzInfoValue tz, int fold = 0)
         {
-            if (hour < 0 || hour > 23)
-                throw Raise.ValueError(ctx, "hour must be in 0..23");
-            if (minute < 0 || minute > 59)
-                throw Raise.ValueError(ctx, "minute must be in 0..59");
-            if (second < 0 || second > 59)
-                throw Raise.ValueError(ctx, "second must be in 0..59");
-            if (us < 0 || us > 999999)
-                throw Raise.ValueError(ctx, "microsecond must be in 0..999999");
+            DtArgs.CheckTime(ctx, hour, minute, second, us, fold);
             ctx.Values.PreCharge(48);
-            return new TimeValue((byte)hour, (byte)minute, (byte)second, us, tz);
+            return new TimeValue((byte)hour, (byte)minute, (byte)second, us, tz, fold);
         }
 
         private static readonly ArgSpec CtorSpec = ArgSpec.Create("time")
             .Opt("hour", ArgSpec.MISSING).Opt("minute", ArgSpec.MISSING).Opt("second", ArgSpec.MISSING)
-            .Opt("microsecond", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Seal();
+            .Opt("microsecond", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Opt("fold", ArgSpec.MISSING).Seal();
 
         internal static TimeValue ConstructFromArgs(EvalContext ctx, ScriptValue[] args, KwArgs kw)
         {
@@ -72,7 +67,7 @@ namespace Outbridge.PyLite.Runtime.Values
             int s = Field(ctx, slots[2], "second must be in 0..59");
             int us = Field(ctx, slots[3], "microsecond must be in 0..999999");
             TzInfoValue tz = ReferenceEquals(slots[4], ArgSpec.MISSING) ? null : DtArgs.TzArg(ctx, slots[4]);
-            return Construct(ctx, h, mi, s, us, tz);
+            return Construct(ctx, h, mi, s, us, tz, DateTimeValue.FoldArg(ctx, slots[5]));
         }
 
         private static int Field(EvalContext ctx, ScriptValue v, string rangeError)
@@ -115,7 +110,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        // Immutable, so hashed once; the first time through the same tuple as before.
         private long _hash;
         private bool _hashed;
 
@@ -228,25 +223,27 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static readonly ArgSpec ReplaceSpec = ArgSpec.Create("replace")
             .Opt("hour", ArgSpec.MISSING).Opt("minute", ArgSpec.MISSING).Opt("second", ArgSpec.MISSING)
-            .Opt("microsecond", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Seal();
+            .Opt("microsecond", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Opt("fold", ArgSpec.MISSING).Seal();
 
         private ScriptValue Replace(EvalContext ctx, ScriptValue[] args, KwArgs kw)
         {
             var slots = new ScriptValue[ReplaceSpec.SlotCount];
             ScriptValue[] star;
             ReplaceSpec.Bind(ctx, args, kw, slots, out star);
-            int h = ReferenceEquals(slots[0], ArgSpec.MISSING) ? Hour : DtArgs.IntField(ctx, slots[0], "hour must be in 0..23");
-            int mi = ReferenceEquals(slots[1], ArgSpec.MISSING) ? Minute : DtArgs.IntField(ctx, slots[1], "minute must be in 0..59");
-            int s = ReferenceEquals(slots[2], ArgSpec.MISSING) ? Second : DtArgs.IntField(ctx, slots[2], "second must be in 0..59");
-            int us = ReferenceEquals(slots[3], ArgSpec.MISSING) ? Microsecond : DtArgs.IntField(ctx, slots[3], "microsecond must be in 0..999999");
+            int h = ReferenceEquals(slots[0], ArgSpec.MISSING) ? Hour : DtArgs.IntFieldReplace(ctx, slots[0]);
+            int mi = ReferenceEquals(slots[1], ArgSpec.MISSING) ? Minute : DtArgs.IntFieldReplace(ctx, slots[1]);
+            int s = ReferenceEquals(slots[2], ArgSpec.MISSING) ? Second : DtArgs.IntFieldReplace(ctx, slots[2]);
+            int us = ReferenceEquals(slots[3], ArgSpec.MISSING) ? Microsecond : DtArgs.IntFieldReplace(ctx, slots[3]);
             TzInfoValue tz = ReferenceEquals(slots[4], ArgSpec.MISSING) ? Tz : DtArgs.TzArg(ctx, slots[4]);
-            return Construct(ctx, h, mi, s, us, tz);
+            int fold = ReferenceEquals(slots[5], ArgSpec.MISSING) ? Fold : DateTimeValue.FoldArg(ctx, slots[5]);
+            return Construct(ctx, h, mi, s, us, tz, fold);
         }
 
         private static ScriptTypeInfo BuildType()
         {
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal)
             {
+                ["fold"] = SlotDescriptor.MakeProperty("fold", (self, c) => c.Values.Int(((TimeValue)self).Fold)),
                 ["hour"] = SlotDescriptor.MakeProperty("hour", (self, c) => c.Values.Int(((TimeValue)self).Hour)),
                 ["minute"] = SlotDescriptor.MakeProperty("minute", (self, c) => c.Values.Int(((TimeValue)self).Minute)),
                 ["second"] = SlotDescriptor.MakeProperty("second", (self, c) => c.Values.Int(((TimeValue)self).Second)),
@@ -257,7 +254,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     return tz == null ? (ScriptValue)c.Values.None : tz;
                 }),
                 ["replace"] = SlotDescriptor.MakeMethod("replace", (self, a, kw, c) => ((TimeValue)self).Replace(c, a, kw)),
-                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", (self, a, kw, c) => c.Values.Str(((TimeValue)self).IsoFormat(TimespecArg(c, a, kw, 0)))),
+                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", Args.Signature("isoformat", 1, (self, a, kw, c) => c.Values.Str(((TimeValue)self).IsoFormat(TimespecArg(c, a, kw, 0))), "timespec")),
                 ["strftime"] = SlotDescriptor.MakeMethod("strftime", Args.Positional("strftime", 1, 1, (self, a, kw, c) => c.Values.Str(((TimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a))))),
                 ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 0, 0, (self, a, kw, c) =>
                 {

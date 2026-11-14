@@ -402,7 +402,7 @@ try:
     dt.fromisoformat('2011-13-04')
     assert False
 except ValueError as e:
-    assert str(e) == 'month must be in 1..12'                       # range errors keep the constructor's text
+    assert str(e) == 'month must be in 1..12, not 13'               # range errors keep the constructor's text (3.14)
 try:
     dt.fromisoformat('2011-11-04T24:01')
     assert False

@@ -18,14 +18,14 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["isleap"] = BuiltinFunctionValue.Make("isleap", (s, a, kw, c) => c.Values.Bool(CalendarMath.IsLeap(IntArg(c, a, kw, "isleap", 1, 0)))),
-                ["leapdays"] = BuiltinFunctionValue.Make("leapdays", Leapdays),
-                ["weekday"] = BuiltinFunctionValue.Make("weekday", Weekday),
-                ["monthrange"] = BuiltinFunctionValue.Make("monthrange", Monthrange),
-                ["monthcalendar"] = BuiltinFunctionValue.Make("monthcalendar", Monthcalendar),
-                ["month"] = BuiltinFunctionValue.Make("month", MonthText),
-                ["weekheader"] = BuiltinFunctionValue.Make("weekheader", Weekheader),
-                ["timegm"] = BuiltinFunctionValue.Make("timegm", Timegm),
+                ["isleap"] = BuiltinFunctionValue.Make("isleap", Args.BoundKeywords("isleap", 1, (s, a, kw, c) => c.Values.Bool(CalendarMath.IsLeap(IntArg(c, a, kw, "isleap", 1, 0))), "year")),
+                ["leapdays"] = BuiltinFunctionValue.Make("leapdays", Args.BoundKeywords("leapdays", 2, Leapdays, "y1", "y2")),
+                ["weekday"] = BuiltinFunctionValue.Make("weekday", Args.BoundKeywords("weekday", 3, Weekday, "year", "month", "day")),
+                ["monthrange"] = BuiltinFunctionValue.Make("monthrange", Args.BoundKeywords("monthrange", 2, Monthrange, "year", "month")),
+                ["monthcalendar"] = BuiltinFunctionValue.Make("monthcalendar", Args.BoundKeywords("monthcalendar", 2, Monthcalendar, "year", "month")),
+                ["month"] = BuiltinFunctionValue.Make("month", Args.LeadKeywords("month", MonthText, 2, "theyear", "themonth", "w", "l")),
+                ["weekheader"] = BuiltinFunctionValue.Make("weekheader", Args.BoundKeywords("weekheader", 1, Weekheader, "width")),
+                ["timegm"] = BuiltinFunctionValue.Make("timegm", Args.BoundKeywords("timegm", 1, Timegm, "tuple")),
                 ["firstweekday"] = BuiltinFunctionValue.Make("firstweekday", Args.Positional("firstweekday", 0, 0, (s, a, kw, c) => c.Values.Int(0))),
                 ["month_name"] = Names(ctx, DtNames.FullMonths, true),
                 ["month_abbr"] = Names(ctx, DtNames.AbbrMonths, true),
@@ -36,7 +36,7 @@ namespace Outbridge.PyLite.Modules
                 // Lib/calendar.py exports both: February holds 28 here and leap years are handled by
                 // monthrange, and `error` is the ValueError the two Illegal* errors derive from.
                 ["mdays"] = MDays(ctx),
-                ["error"] = PyExceptionTypes.ValueError.ClassValue ?? ctx.Values.Type("error", null, null, null, PyExceptionTypes.ValueError),
+                ["error"] = PyExceptionTypes.ValueError.ClassValue ?? ctx.Values.EngineType("error", null, null, null, PyExceptionTypes.ValueError),
             };
             string[] days = { "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY" };
             for (int i = 0; i < days.Length; i++)
@@ -154,6 +154,7 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue Weekheader(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             int n = IntArg(ctx, a, kw, "weekheader", 1, 0);
+            ctx.Values.CheckStrLen(7L * Math.Max(n, 9) + 6);   // seven columns of n: weekheader(2**31-1) was an engine fault
             return ctx.Values.Str(WeekHeader(n));
         }
 
@@ -163,8 +164,9 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < 7; i++)
             {
                 string name = n >= 9 ? DtNames.FullDays[i] : DtNames.AbbrDays[i];
-                if (name.Length > n)
-                    name = name.Substring(0, n);
+                int keep = n < 0 ? Math.Max(0, name.Length + n) : n;   // names[day][:width]: a negative width drops from the end
+                if (name.Length > keep)
+                    name = name.Substring(0, keep);
                 parts[i] = Center(name, n);
             }
             return string.Join(" ", parts);

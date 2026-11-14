@@ -63,7 +63,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("math.fsum([1, 1e100, 1, -1e100])", "2.0")]
         [InlineData("math.fsum([1e16, 1, -1e16])", "1.0")]
         [InlineData("math.fsum([float('inf')])", "inf")]
-        [InlineData("math.fsum([float('inf'), float('-inf')])", "nan")]
+        [InlineData("math.fsum([float('inf'), 1.0])", "inf")]
         [InlineData("math.fsum([float('nan'), 1.0])", "nan")]
         [InlineData("math.fsum(range(10001))", "50005000.0")]
         [InlineData("math.fsum([-0.0])", "0.0")]
@@ -71,7 +71,6 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("math.factorial(0)", "1")]
         [InlineData("math.factorial(5)", "120")]
         [InlineData("math.factorial(20)", "2432902008176640000")]
-        [InlineData("math.factorial(3.0)", "6")]
         [InlineData("math.factorial(True)", "1")]
         [InlineData("math.pi", "3.141592653589793")]
         public void MathBehavior(string expr, string expected)
@@ -113,7 +112,9 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("x = math.log(-5)", "ValueError")]
         [InlineData("x = math.log(5, 1)", "ZeroDivisionError")]
         [InlineData("x = math.factorial(-1)", "ValueError")]
-        [InlineData("x = math.factorial(3.5)", "ValueError")]
+        [InlineData("x = math.factorial(3.5)", "TypeError")]
+        [InlineData("x = math.factorial(3.0)", "TypeError")]
+        [InlineData("x = math.fsum([float('inf'), float('-inf')])", "ValueError")]
         [InlineData("x = math.factorial('5')", "TypeError")]
         [InlineData("x = math.fsum([1.0, 'x'])", "TypeError")]
         [InlineData("x = math.fsum([1e308, 1e308, -1e308, -1e308])", "OverflowError")]  // intermediate overflow (real CPython)
@@ -128,16 +129,6 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Throws<EngineAbort>(() => Ev.Run(Prelude + "x = math.factorial(10**9)\n"));
         }
 
-        [Theory]
-        // gamma/lgamma/erf/erfc remain excluded (no BCL implementation; a Lanczos port is deferred).
-        [InlineData("math.gamma")]
-        [InlineData("math.lgamma")]
-        [InlineData("math.erf")]
-        public void ExcludedNamesAreAttributeError(string expr)
-        {
-            Assert.Equal("AttributeError", Raises("x = " + expr).Value.ExcType.Name);
-        }
-
         [Fact]
         public void FromImportSqrt()
         {
@@ -148,7 +139,7 @@ namespace Outbridge.PyLite.Tests.Modules
         public void DomainErrorText()
         {
             string src = Prelude + "msg = ''\ntry:\n    math.sqrt(-1)\nexcept ValueError as e:\n    msg = str(e)\n";
-            Assert.Equal("'math domain error'", Ev.Run(src).Repr("msg"));
+            Assert.Equal("'expected a nonnegative input, got -1.0'", Ev.Run(src).Repr("msg"));
         }
     }
 }

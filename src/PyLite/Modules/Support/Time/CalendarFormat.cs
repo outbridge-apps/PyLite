@@ -61,8 +61,14 @@ namespace Outbridge.PyLite.Modules.Support
                 int y, m, day, iy, iw, id;
                 CalendarMath.Ord2Ymd(ordinal(self), out y, out m, out day);
                 CalendarMath.IsoCalendar(y, m, day, out iy, out iw, out id);
-                return c.Values.Tuple(new ScriptValue[] { c.Values.Int(iy), c.Values.Int(iw), c.Values.Int(id) });
+                c.Values.PreCharge(64);
+                return new NamedTupleValue(IsoInfo, new ScriptValue[] { c.Values.Int(iy), c.Values.Int(iw), c.Values.Int(id) });
             }));
         }
+
+        // datetime.IsoCalendarDate (3.9): a tuple with year, week and weekday by name
+        private static readonly string[] IsoFields = { "year", "week", "weekday" };
+        private static readonly NamedTupleInfo IsoInfo = new NamedTupleInfo("datetime.IsoCalendarDate", IsoFields,
+            NamedTupleValue.BuildInstanceType("IsoCalendarDate", IsoFields));
     }
 }

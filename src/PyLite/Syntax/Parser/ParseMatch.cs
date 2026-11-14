@@ -7,11 +7,12 @@ namespace Outbridge.PyLite.Syntax
     {
         // 'match' and 'case' are soft keywords. LL(2) can only see the next token, so 'match' starts a
         // match statement when followed by a token that begins a subject and is not an identifier-use
-        // ('match = x', 'match.attr', 'match:int', 'match, y', operators). Documented limit: a bare
-        // 'match(...)'/'match[...]' statement where 'match' is a variable is read as a match statement.
+        // ('match = x', 'match.attr', 'match:int', 'match, y', other operators). Documented limit: a bare
+        // 'match(...)', 'match[...]', 'match -x', 'match +x' or 'match *x' statement where 'match' is a
+        // variable is read as a match statement.
         private bool LooksLikeMatchStatement()
         {
-            if (_cur.Kind != TokenKind.Name || _cur.Text != "match")
+            if (_cur.Kind != TokenKind.Name || _cur.Text != "match" || _cur.Value != null)
                 return false;
             switch (Peek2().Kind)
             {
@@ -26,6 +27,13 @@ namespace Outbridge.PyLite.Syntax
                 case TokenKind.LeftParen:
                 case TokenKind.LeftBracket:
                 case TokenKind.LeftBrace:
+                case TokenKind.BytesLiteral:
+                case TokenKind.Ellipsis:
+                case TokenKind.KwNot:
+                case TokenKind.Tilde:
+                case TokenKind.Minus:
+                case TokenKind.Plus:
+                case TokenKind.Star:
                     return true;
                 default:
                     return false;
@@ -36,15 +44,14 @@ namespace Outbridge.PyLite.Syntax
         {
             Token kw = Take();   // 'match' (soft keyword)
             ExprNode subject = ParseMatchSubject();
-            Expect(TokenKind.Colon, "':'");
-            Expect(TokenKind.NewLine, "newline");
-            Expect(TokenKind.Indent, "an indented block");
+            ExpectHeaderColon(false);
+            ExpectIndent(Expect(TokenKind.NewLine), kw, "'match' statement");
             var cases = new List<MatchCase>();
-            while (_cur.Kind == TokenKind.Name && _cur.Text == "case")
+            while (_cur.Kind == TokenKind.Name && _cur.Text == "case" && _cur.Value == null)
                 cases.Add(ParseCaseBlock());
-            if (cases.Count == 0)
-                throw Error("expected 'case' block");
-            Expect(TokenKind.Dedent, "dedent");
+            if (cases.Count == 0 || _cur.Kind != TokenKind.Dedent)
+                throw Unexpected(false);
+            Take();   // DEDENT
             return new MatchNode(Src(kw), subject, AstList.Freeze(cases));
         }
 
@@ -73,7 +80,7 @@ namespace Outbridge.PyLite.Syntax
             Token c = Take();   // 'case' (soft keyword)
             PatternNode pattern = ParsePatterns();
             ExprNode guard = Match(TokenKind.KwIf) ? ParseTest() : null;
-            IReadOnlyList<StmtNode> body = ParseColonSuite();
+            IReadOnlyList<StmtNode> body = ParseColonSuite(c, "'case' statement");
             return new MatchCase(Src(c), pattern, guard, body);
         }
 
@@ -84,7 +91,7 @@ namespace Outbridge.PyLite.Syntax
             if (_cur.Kind != TokenKind.Comma)
             {
                 if (first is StarPattern)
-                    throw Error("star pattern cannot be used here");
+                    throw Unexpected(false);
                 return first;
             }
             var elts = new List<PatternNode> { first };
@@ -94,12 +101,8 @@ namespace Outbridge.PyLite.Syntax
                 if (_cur.Kind == TokenKind.Colon || _cur.Kind == TokenKind.KwIf)
                     break;
                 PatternNode p = ParseMaybeStarPattern();
-                if (p is StarPattern)
-                {
-                    if (star >= 0)
-                        throw Error("multiple starred patterns in sequence pattern");
+                if (p is StarPattern && star < 0)
                     star = elts.Count;
-                }
                 elts.Add(p);
             }
             return new SequencePattern(first.Src, AstList.Freeze(elts), star);
@@ -115,7 +118,8 @@ namespace Outbridge.PyLite.Syntax
                     Take();
                     return new StarPattern(Src(s), null);
                 }
-                Token n = Expect(TokenKind.Name, "name after '*'");
+                Token n = Expect(TokenKind.Name);
+                ForbidDebug(n.Text, Src(s));
                 return new StarPattern(Src(s), new NameNode(Src(n), n.Text));
             }
             return ParsePattern();
@@ -131,13 +135,21 @@ namespace Outbridge.PyLite.Syntax
             EnterExpr();
             try
             {
+                Token start = _cur;
                 PatternNode p = ParseOrPattern();
                 if (Match(TokenKind.KwAs))
                 {
-                    Token n = Expect(TokenKind.Name, "capture name after 'as'");
+                    // CPython's invalid_as_pattern: an attribute, a literal, a parenthesized name named by its kind
+                    if (_cur.Kind == TokenKind.Name ? Peek2().Kind == TokenKind.Dot : StartsExpression(_cur.Kind))
+                    {
+                        ExprNode target = ParseTest();
+                        throw ErrorAtSrc(target.Src, "cannot use " + ExprName(target) + " as pattern target");
+                    }
+                    Token n = Expect(TokenKind.Name);
                     if (n.Text == "_")
-                        throw Error("cannot use '_' as a capture target");
-                    return new AsPattern(Src(n), p, new NameNode(Src(n), n.Text));
+                        throw ErrorAt(n, "cannot use '_' as a target");
+                    ForbidDebug(n.Text, Src(start));
+                    return new AsPattern(Src(start), p, new NameNode(Src(n), n.Text));
                 }
                 return p;
             }
@@ -174,13 +186,14 @@ namespace Outbridge.PyLite.Syntax
                     {
                         ExprNode dotted = new NameNode(Src(t), t.Text);
                         while (Match(TokenKind.Dot))
-                            dotted = GuardDepth(new AttributeNode(Src(t), dotted, Expect(TokenKind.Name, "attribute name").Text));
+                            dotted = GuardDepth(new AttributeNode(Src(t), dotted, Expect(TokenKind.Name).Text));
                         if (_cur.Kind == TokenKind.LeftParen)
                             return ParseClassPattern(dotted);
                         return new ValuePattern(Src(t), dotted);
                     }
                     if (_cur.Kind == TokenKind.LeftParen)
                         return ParseClassPattern(new NameNode(Src(t), t.Text));
+                    ForbidDebug(t.Text, Src(t));
                     return new CapturePattern(Src(t), new NameNode(Src(t), t.Text));
                 case TokenKind.LeftParen:
                     return ParseGroupOrSequencePattern();
@@ -189,7 +202,17 @@ namespace Outbridge.PyLite.Syntax
                 case TokenKind.LeftBrace:
                     return ParseMappingPattern();
                 default:
-                    return new LiteralPattern(Src(t), ParseLiteralValue());
+                {
+                    ExprNode value = ParseLiteralValue();
+                    if ((_cur.Kind == TokenKind.Plus || _cur.Kind == TokenKind.Minus) && !(value is LiteralNode l && l.Kind != LiteralKind.Int && l.Kind != LiteralKind.Float))
+                    {
+                        Take();   // a complex literal: the dialect has no imaginary numbers
+                        if (_cur.Kind == TokenKind.IntLiteral || _cur.Kind == TokenKind.FloatLiteral)
+                            throw Error("imaginary number required in complex literal");
+                        throw Unexpected(false);
+                    }
+                    return new LiteralPattern(Src(t), value);
+                }
             }
         }
 
@@ -202,7 +225,7 @@ namespace Outbridge.PyLite.Syntax
                 Take();
                 Token num = _cur;
                 if (num.Kind != TokenKind.IntLiteral && num.Kind != TokenKind.FloatLiteral)
-                    throw Error("invalid pattern");
+                    throw Unexpected(false);
                 Take();
                 ExprNode lit = new LiteralNode(Src(num), num.Value, num.Kind == TokenKind.IntLiteral ? LiteralKind.Int : LiteralKind.Float);
                 return new UnaryOpNode(Src(t), t.Kind == TokenKind.Minus ? UnaryOp.USub : UnaryOp.UAdd, lit);
@@ -218,10 +241,12 @@ namespace Outbridge.PyLite.Syntax
                 case TokenKind.FStringStart:
                     ExprNode s = ParseStringLike();
                     if (s is FStringNode)
-                        throw Error("patterns may not contain f-strings");
+                        throw ErrorAtSrc(s.Src, "patterns may only match literals and attribute lookups");
                     return s;
+                case TokenKind.BytesLiteral:
+                    return ParseBytesLike();
                 default:
-                    throw Error("invalid pattern");
+                    throw Unexpected(false);
             }
         }
 
@@ -236,7 +261,7 @@ namespace Outbridge.PyLite.Syntax
             PatternNode first = ParseMaybeStarPattern();
             if (_cur.Kind == TokenKind.Comma)
                 return FinishSequence(open, TokenKind.RightParen, first);
-            Expect(TokenKind.RightParen, "')'");
+            Expect(TokenKind.RightParen);
             return first;   // group: the parenthesized single pattern
         }
 
@@ -261,15 +286,11 @@ namespace Outbridge.PyLite.Syntax
                 if (_cur.Kind == close)
                     break;
                 PatternNode p = ParseMaybeStarPattern();
-                if (p is StarPattern)
-                {
-                    if (star >= 0)
-                        throw Error("multiple starred patterns in sequence pattern");
+                if (p is StarPattern && star < 0)
                     star = elts.Count;
-                }
                 elts.Add(p);
             }
-            Expect(close, close == TokenKind.RightParen ? "')'" : "']'");
+            Expect(close);
             return new SequencePattern(Src(open), AstList.Freeze(elts), star);
         }
 
@@ -284,20 +305,21 @@ namespace Outbridge.PyLite.Syntax
                 if (_cur.Kind == TokenKind.DoubleStar)
                 {
                     Take();
-                    Token n = Expect(TokenKind.Name, "capture name after '**'");
+                    Token n = Expect(TokenKind.Name);
                     if (n.Text == "_")
-                        throw Error("cannot use '_' as a capture target");
+                        throw ErrorAt(n, "invalid syntax");
+                    ForbidDebug(n.Text, Src(open));   // CPython: the mapping pattern
                     rest = new NameNode(Src(n), n.Text);
                     Match(TokenKind.Comma);   // optional trailing comma; nothing may follow '**rest'
                     break;
                 }
                 keys.Add(ParseMappingKey());
-                Expect(TokenKind.Colon, "':'");
+                Expect(TokenKind.Colon);
                 vals.Add(ParsePattern());
                 if (!Match(TokenKind.Comma))
                     break;
             }
-            Expect(TokenKind.RightBrace, "'}'");
+            Expect(TokenKind.RightBrace);
             return new MappingPattern(Src(open), AstList.Freeze(keys), AstList.Freeze(vals), rest);
         }
 
@@ -316,7 +338,7 @@ namespace Outbridge.PyLite.Syntax
                     Token n = Take();
                     Take();   // '='
                     kwNames.Add(n.Text);
-                    kwPats.Add(ParsePattern());
+                    kwPats.Add(ParsePattern());   // a __debug__ keyword is PatternValidator's, in CPython's order
                     sawKw = true;
                 }
                 else
@@ -328,7 +350,7 @@ namespace Outbridge.PyLite.Syntax
                 if (!Match(TokenKind.Comma))
                     break;
             }
-            Expect(TokenKind.RightParen, "')'");
+            Expect(TokenKind.RightParen);
             return new ClassPattern(cls.Src, cls, AstList.Freeze(pos), AstList.Freeze(kwNames), AstList.Freeze(kwPats));
         }
 
@@ -341,9 +363,9 @@ namespace Outbridge.PyLite.Syntax
                 Take();
                 ExprNode e = new NameNode(Src(t), t.Text);
                 if (_cur.Kind != TokenKind.Dot)
-                    throw Error("mapping pattern keys must be literals or dotted names");
+                    throw Unexpected(false);
                 while (Match(TokenKind.Dot))
-                    e = GuardDepth(new AttributeNode(Src(t), e, Expect(TokenKind.Name, "attribute name").Text));
+                    e = GuardDepth(new AttributeNode(Src(t), e, Expect(TokenKind.Name).Text));
                 return e;
             }
             return ParseLiteralValue();

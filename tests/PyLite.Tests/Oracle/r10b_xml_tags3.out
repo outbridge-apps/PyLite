@@ -1,0 +1,169 @@
+itertext T=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self T=['b', 'c', 'e']
+text pred T=1
+dot pred T=1
+pos star T!TypeError
+pos star 2 T!TypeError
+pos c T!TypeError
+pos last T!TypeError
+pos find T!TypeError
+pos desc T!TypeError
+iter c T=2
+findall c T=2
+findall ./c T=2
+findtext c T='b'
+itertext None=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self None=['b', 'c', 'e']
+text pred None=0
+dot pred None=1
+pos star None!TypeError
+pos star 2 None!TypeError
+pos c None=1
+pos last None!TypeError
+pos find None!TypeError
+pos desc None!TypeError
+iter c None=1
+findall c None=1
+findall ./c None=1
+findtext c None='g'
+itertext int=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self int=['b', 'c', 'e']
+text pred int=0
+dot pred int=1
+pos star int!TypeError
+pos star 2 int!TypeError
+pos c int=1
+pos last int!TypeError
+pos find int!TypeError
+pos desc int!TypeError
+iter c int=1
+findall c int=1
+findall ./c int=1
+findtext c int='g'
+itertext tuple=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self tuple=['b', 'c', 'e']
+text pred tuple=0
+dot pred tuple=1
+pos star tuple!TypeError
+pos star 2 tuple!TypeError
+pos c tuple=1
+pos last tuple!TypeError
+pos find tuple!TypeError
+pos desc tuple!TypeError
+iter c tuple=1
+findall c tuple=1
+findall ./c tuple=1
+findtext c tuple='g'
+itertext bytes=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self bytes=['b', 'c', 'e']
+text pred bytes=0
+dot pred bytes=1
+pos star bytes=2
+pos star 2 bytes=0
+pos c bytes=1
+pos last bytes=2
+pos find bytes=False
+pos desc bytes=3
+iter c bytes=1
+findall c bytes=1
+findall ./c bytes=1
+findtext c bytes='g'
+itertext list=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self list=['b', 'c', 'e']
+text pred list=0
+dot pred list=1
+pos star list!TypeError
+pos star 2 list!TypeError
+pos c list=1
+pos last list!TypeError
+pos find list!TypeError
+pos desc list!TypeError
+iter c list=1
+findall c list=1
+findall ./c list=1
+findtext c list='g'
+itertext qname=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self qname=['b', 'c', 'e']
+text pred qname=1
+dot pred qname=1
+pos star qname!TypeError
+pos star 2 qname!TypeError
+pos c qname!TypeError
+pos last qname!TypeError
+pos find qname!TypeError
+pos desc qname!TypeError
+iter c qname=2
+findall c qname=2
+findall ./c qname=2
+findtext c qname='b'
+itertext comment=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self comment=['b', 'c', 'e']
+text pred comment=0
+dot pred comment=1
+pos star comment!TypeError
+pos star 2 comment!TypeError
+pos c comment=1
+pos last comment!TypeError
+pos find comment!TypeError
+pos desc comment!TypeError
+iter c comment=1
+findall c comment=1
+findall ./c comment=1
+findtext c comment='g'
+itertext pi=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self pi=['b', 'c', 'e']
+text pred pi=0
+dot pred pi=1
+pos star pi!TypeError
+pos star 2 pi!TypeError
+pos c pi=1
+pos last pi!TypeError
+pos find pi!TypeError
+pos desc pi!TypeError
+iter c pi=1
+findall c pi=1
+findall ./c pi=1
+findtext c pi='g'
+itertext float=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self float=['b', 'c', 'e']
+text pred float=0
+dot pred float=1
+pos star float!TypeError
+pos star 2 float!TypeError
+pos c float=1
+pos last float!TypeError
+pos find float!TypeError
+pos desc float!TypeError
+iter c float=1
+findall c float=1
+findall ./c float=1
+findtext c float='g'
+itertext bool=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self bool=['b', 'c', 'e']
+text pred bool=0
+dot pred bool=1
+pos star bool!TypeError
+pos star 2 bool!TypeError
+pos c bool=1
+pos last bool!TypeError
+pos find bool!TypeError
+pos desc bool!TypeError
+iter c bool=1
+findall c bool=1
+findall ./c bool=1
+findtext c bool='g'
+itertext G=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+itertext self G=['b', 'c', 'e']
+text pred G=1
+dot pred G=1
+pos star G!TypeError
+pos star 2 G!TypeError
+pos c G!TypeError
+pos last G!TypeError
+pos find G!TypeError
+pos desc G!TypeError
+iter c G=2
+findall c G=2
+findall ./c G=2
+findtext c G='b'
+real comment=(['a', 'note', 'b', 't x', 'c', 'd'], ['note'], 1, 1, b'<r>a<!--note-->b<?t x?>c<e>d</e></r>')

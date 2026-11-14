@@ -44,7 +44,7 @@ namespace Outbridge.PyLite.Tests.Runtime
             var fn = Fn(ctx, Mod(ctx), 2, 0, null);
             var ex = Assert.Throws<ScriptException>(() => fn.GetLocal(1, "y"));
             Assert.Same(PyExceptionTypes.UnboundLocalError, ex.Value.ExcType);
-            Assert.Equal("local variable 'y' referenced before assignment", ex.Value.GetMessageText(ctx));
+            Assert.Equal("cannot access local variable 'y' where it is not associated with a value", ex.Value.GetMessageText(ctx));
         }
 
         [Fact]
@@ -148,7 +148,7 @@ namespace Outbridge.PyLite.Tests.Runtime
             var fn = Fn(ctx, mod, 0, 0, new[] { new Cell() });
             var ex = Assert.Throws<ScriptException>(() => fn.GetFree(0, "z"));
             Assert.Same(PyExceptionTypes.NameError, ex.Value.ExcType);
-            Assert.Equal("free variable 'z' referenced before assignment in enclosing scope", ex.Value.GetMessageText(ctx));
+            Assert.Equal("cannot access free variable 'z' where it is not associated with a value in enclosing scope", ex.Value.GetMessageText(ctx));
         }
 
         [Fact]

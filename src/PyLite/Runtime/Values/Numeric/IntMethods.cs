@@ -16,9 +16,9 @@ namespace Outbridge.PyLite.Runtime.Values
             var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
             d["bit_length"] = SlotDescriptor.MakeMethod("bit_length", Args.Positional("bit_length", 0, 0, (self, a, kw, c) => c.Values.Int(BitLength(self))));
             d["bit_count"] = SlotDescriptor.MakeMethod("bit_count", Args.Positional("bit_count", 0, 0, (self, a, kw, c) => c.Values.Int(BitCount(Val(self)))));
-            d["to_bytes"] = SlotDescriptor.MakeMethod("to_bytes", (self, a, kw, c) => ToBytes(c, Val(self), a, kw));
-            d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio",
-                (self, a, kw, c) => c.Values.Tuple(new[] { AsInt(self, c), (ScriptValue)c.Values.Int(BigInteger.One) }));
+            d["to_bytes"] = SlotDescriptor.MakeMethod("to_bytes", Args.Signature("to_bytes", 2, (self, a, kw, c) => ToBytes(c, Val(self), a, kw), "length", "byteorder", "signed"));
+            d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio", Args.Positional("as_integer_ratio", 0, 0,
+                (self, a, kw, c) => c.Values.Tuple(new[] { AsInt(self, c), (ScriptValue)c.Values.Int(BigInteger.One) })));
             // The numeric tower: an int is its own real part and numerator, with no imaginary part.
             d["real"] = SlotDescriptor.MakeProperty("real", (self, c) => AsInt(self, c));
             d["numerator"] = SlotDescriptor.MakeProperty("numerator", (self, c) => AsInt(self, c));

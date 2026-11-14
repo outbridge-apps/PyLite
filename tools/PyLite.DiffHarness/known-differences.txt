@@ -9,6 +9,8 @@ float_floordiv_iron|value
 iron34/timedelta_repr|value
 # aware == naive datetime is False since CPython 3.3; IronPython raises TypeError.
 iron34/aware_naive_eq|outcome
+# sum() of floats is compensated (Neumaier) since CPython 3.12.
+iron34/sum_compensated|value
 # re.sub with a group the pattern lacks is re.error in CPython; IronPython accepts it.
 iron34/re_sub_bad_group|value
 # Empty matches next to a match are replaced and split on since CPython 3.7.
@@ -39,3 +41,7 @@ iron34/str_isnumeric|value
 iron34/math_log10|value
 # Unicode titlecase digraphs and special lowercase: CPython follows the Unicode tables, IronPython .NET's.
 iron34/unicode_case|value
+# math.factorial of a float is a TypeError since CPython 3.10; IronPython raises ValueError.
+iron34/factorial_float|value
+# A bad pattern raises re.PatternError since CPython 3.13 (re.error is its alias); IronPython's class is error.
+iron34/re_pattern_error|value

@@ -29,7 +29,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = Counter([1,1,2]).most_common()", "[(1, 2), (2, 1)]")]
         [InlineData("r = Counter('abc')['z']", "0")]
         [InlineData("c = Counter('abc')\nc['z']\nr = 'z' in c", "False")]
-        [InlineData("r = (Counter(a=0) == Counter())", "False")]
+        [InlineData("r = (Counter(a=0) == Counter())", "True")]
         [InlineData("r = (Counter() == {})", "True")]
         [InlineData("r = list(Counter(a=3, b=1).elements())", "['a', 'a', 'a', 'b']")]
         [InlineData("r = list(Counter(a=2, b=-1, c=0).elements())", "['a', 'a']")]
@@ -43,6 +43,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = Counter('aaabbc').most_common(-1)", "[]")]
         [InlineData("r = dict(Counter({'x': 2, 'y': 3}))", "{'x': 2, 'y': 3}")]
         [InlineData("r = list(Counter(a=1, b=-1).elements())", "['a']")]
+        [InlineData("c = Counter(a=2, b=1)\nit = c.elements()\nx = [next(it)]\nc['z'] = 1\nx.append(next(it))\ntry:\n    next(it)\nexcept RuntimeError as e:\n    x.append(str(e))\nr = x", "['a', 'a', 'dictionary changed size during iteration']")]   // lazy over items(), as CPython
         public void Counters(string body, string expected)
         {
             Assert.Equal(expected, Body(body));

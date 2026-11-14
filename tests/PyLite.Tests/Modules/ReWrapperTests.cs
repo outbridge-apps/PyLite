@@ -58,12 +58,36 @@ namespace Outbridge.PyLite.Tests.Modules
                 + "     re.split(r'(\\w)', 'xyz')[1::2], p.sub(r'\\g<b>|\\2|\\g<a>', 'xyz'), m.span(2))\n"));
         }
 
+        // Review 6, f1-09: CPython's parse_template reads \0 and three octal digits as a character, and a missing
+        // well-formed group name is an IndexError. Answers from CPython 3.14.
+        [Theory]
+        [InlineData("r = re.sub('a', r'\\0', 'a')", "'\\x00'")]
+        [InlineData("r = re.sub('a', r'\\012|\\07', 'a')", "'\\n|\\x07'")]
+        [InlineData("r = re.sub('a', r'\\101', 'a')", "'A'")]
+        [InlineData("r = re.sub('(a)', r'\\1\\1', 'a')", "'aa'")]
+        [InlineData("r = re.match('(a)', 'a').expand(r'\\0\\1')", "'\\x00a'")]
+        public void TemplateOctalEscapesAreCharacters(string src, string expected)
+        {
+            Assert.Equal(expected, R(src + "\n"));
+        }
+
+        [Theory]
+        [InlineData("re.sub('a', r'\\400', 'a')", "PatternError", "octal escape value \\400 outside of range 0-0o377")]
+        [InlineData("re.sub('(a)', r'\\18', 'a')", "PatternError", "invalid group reference 18")]
+        [InlineData("re.sub('(a)', r'\\g<x>', 'a')", "IndexError", "unknown group name 'x'")]
+        [InlineData("re.match('(a)', 'a').expand(r'\\g<x>')", "IndexError", "unknown group name 'x'")]
+        public void TemplateErrorsAreCPythons(string call, string type, string message)
+        {
+            Assert.Equal(type, Ev.ErrType("import re\n" + call + "\n").Name);
+            Assert.Equal(message, Ev.Err("import re\n" + call + "\n"));
+        }
+
         [Fact]
         public void SubOnAMegabyteStopsOnMaxStrChars()
         {
-            RunResult r = Run("s = re.sub('a', 'aaa', 'a' * 1000000)\n", ResourceLimits.Default.With(maxStrChars: 2_000_000, deadlineMs: 60_000));
+            RunResult r = Run("s = re.sub('a', 'aaa', 'a' * 1000000)\n", TestEngines.Unhurried.With(maxStrChars: 2_000_000));
             Assert.Equal("MaxStrChars", r.Error.LimitName);
-            RunResult g = Run("s = re.sub('(a)', r'\\1\\1\\1', 'a' * 1000000)\n", ResourceLimits.Default.With(maxStrChars: 2_000_000, deadlineMs: 60_000));
+            RunResult g = Run("s = re.sub('(a)', r'\\1\\1\\1', 'a' * 1000000)\n", TestEngines.Unhurried.With(maxStrChars: 2_000_000));
             Assert.Equal("MaxStrChars", g.Error.LimitName);
         }
 
@@ -95,7 +119,7 @@ namespace Outbridge.PyLite.Tests.Modules
         {
             var ctx = Rt.Ctx(ResourceLimits.Default.With(regexPerOpTimeoutMs: ms));
             PatternValue p = new RegexCache().GetOrCompile(ctx, "(a+)+$", 0);
-            Assert.Equal(TimeSpan.FromMilliseconds(ms), p.Net.MatchTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(ms), p.Plain(ctx, "a").MatchTimeout);
         }
     }
 }

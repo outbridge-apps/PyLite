@@ -37,7 +37,7 @@ namespace Outbridge.PyLite.Tests.Builtins
         [Theory]
         [InlineData("zip(1)", "zip argument #1 must support iteration")]
         [InlineData("map(abs)", "map() must have at least two arguments.")]
-        [InlineData("reversed(5)", "argument to reversed() must be a sequence")]
+        [InlineData("reversed(5)", "'int' object is not reversible")]
         public void IteratorErrors(string expr, string msg)
         {
             Assert.Equal(msg, Ev.Err("x = " + expr + "\n"));
@@ -72,7 +72,7 @@ namespace Outbridge.PyLite.Tests.Builtins
 
         [Theory]
         [InlineData("sum(['a', 'b'], '')", "sum() can't sum strings [use ''.join(seq) instead]")]
-        [InlineData("min([])", "min() arg is an empty sequence")]
+        [InlineData("min([])", "min() iterable argument is empty")]
         [InlineData("min(1, 2, default=0)", "Cannot specify a default for min() with multiple positional arguments")]
         [InlineData("min([1, 'a'])", "'<' not supported between instances of 'str' and 'int'")]
         public void AggregateErrors(string expr, string msg)
@@ -95,7 +95,7 @@ namespace Outbridge.PyLite.Tests.Builtins
 
         [Theory]
         [InlineData("sorted([1, 'a'])", "'<' not supported between instances of 'str' and 'int'")]
-        [InlineData("sorted([1, 2, 3], True)", "sorted() takes exactly one argument (2 given)")]
+        [InlineData("sorted([1, 2, 3], True)", "sorted expected 1 argument, got 2")]
         public void SortedErrors(string expr, string msg)
         {
             Assert.Equal(msg, Ev.Err("x = " + expr + "\n"));

@@ -19,6 +19,9 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(ctx, "namedtuple() missing required arguments 'typename' and 'field_names'");
             string typename = AsFieldString(ctx, args[0]);
             List<string> fields = ParseFieldNames(ctx, args[1]);
+            // A field costs its name, a slot, an index entry and a getter: ~400 bytes, measured (3M fields = 1.3 GB).
+            ctx.Values.EnsureCollectionSize(fields.Count);
+            ctx.Values.PreCharge(400L * fields.Count);
             bool rename = BoolKw(ctx, kw, "rename");
 
             if (!StrMethods.IsIdentifier(typename))
@@ -27,7 +30,7 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.ValueError(ctx, "Type names and field names cannot be a keyword: " + Repr(ctx, typename));
 
             if (rename)
-                ApplyRename(fields);
+                ApplyRename(ctx, fields);
             else
                 ValidateFields(ctx, fields);
 
@@ -40,15 +43,11 @@ namespace Outbridge.PyLite.Modules
             ScriptValue defaultsArg;
             if (kw.TryGet("defaults", out defaultsArg) && defaultsArg.Kind != ValueKind.None)
             {
-                var given = new List<ScriptValue>();
-                IScriptIterator it = PyOps.GetIterator(defaultsArg, ctx);
-                ScriptValue d;
-                while (it.MoveNext(ctx, out d))
-                    given.Add(d);
-                if (given.Count > fieldArr.Length)
+                ScriptValue[] given = Iter.ToArray(ctx, defaultsArg);   // charged and capped: defaults=repeat(0)
+                if (given.Length > fieldArr.Length)
                     throw Raise.TypeError(ctx, "Got more default values than field names");
-                int first = fieldArr.Length - given.Count;
-                for (int i = 0; i < given.Count; i++)
+                int first = fieldArr.Length - given.Length;
+                for (int i = 0; i < given.Length; i++)
                 {
                     defaults[first + i] = given[i];
                     fieldDefaults.SetItem(ctx.Values.Str(fieldArr[first + i]), given[i], ctx);
@@ -59,6 +58,7 @@ namespace Outbridge.PyLite.Modules
             var statics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["_fields"] = NamedTupleValue.FieldsTuple(info, ctx),
+                ["__match_args__"] = NamedTupleValue.FieldsTuple(info, ctx),
                 ["_field_defaults"] = fieldDefaults,
                 ["_source"] = ctx.Values.Str(""),
                 ["_make"] = BuiltinFunctionValue.Make("_make", Args.Positional("_make", 1, 1, (s, a, k, c) =>
@@ -67,7 +67,7 @@ namespace Outbridge.PyLite.Modules
                     return NamedTupleValue.Make(info, a[0], c);
                 })),
             };
-            info.Class = ctx.Values.Type(typename, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), instanceType, statics);
+            info.Class = ctx.Values.ScriptMadeType(typename, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), instanceType, statics);
             return info.Class;
         }
 
@@ -76,15 +76,13 @@ namespace Outbridge.PyLite.Modules
             var result = new List<string>();
             if (arg.Kind == ValueKind.Str)
             {
-                string s = ((StrValue)arg).Value.Replace(',', ' ');
-                foreach (string part in s.Split((char[])null, StringSplitOptions.RemoveEmptyEntries))
-                    result.Add(part);
+                string s = ((StrValue)arg).Value;
+                ctx.Values.PreCharge(16L * s.Length);   // the parts, before the per-field charge can count them
+                result.AddRange(PyUnicode.SplitWhitespace(s.Replace(',', ' ')));   // str.split(): \x1c is a space
             }
             else
             {
-                IScriptIterator it = PyOps.GetIterator(arg, ctx);
-                ScriptValue v;
-                while (it.MoveNext(ctx, out v))
+                foreach (ScriptValue v in Iter.ToArray(ctx, arg))   // charged and capped
                     result.Add(v.Kind == ValueKind.Str ? ((StrValue)v).Value : v.Str(ctx));
             }
             return result;
@@ -95,6 +93,7 @@ namespace Outbridge.PyLite.Modules
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string name in fields)
             {
+                ctx.Budget.Step();
                 if (!StrMethods.IsIdentifier(name))
                     throw Raise.ValueError(ctx, "Type names and field names must be valid identifiers: " + Repr(ctx, name));
                 if (IsKeyword(name))
@@ -107,11 +106,12 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
-        private static void ApplyRename(List<string> fields)
+        private static void ApplyRename(EvalContext ctx, List<string> fields)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < fields.Count; i++)
             {
+                ctx.Budget.Step();
                 string name = fields[i];
                 if (!StrMethods.IsIdentifier(name) || IsKeyword(name) || name.Length == 0 || name[0] == '_' || seen.Contains(name))
                     fields[i] = "_" + i;

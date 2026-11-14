@@ -67,6 +67,37 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal(expected, R(expr));
         }
 
+        // A lower bound past 4096 puts an empty atomic group in front of the .NET pattern, so .NET builds no
+        // Boyer-Moore table for an m-char prefix (quadratic: re.compile('a{100000}') ran ~30 s in one call).
+        // The matches are those of the plain pattern.
+        [Theory]
+        [InlineData(@"re.search(r'a{100000}', 'x' + 'a' * 100000 + 'y').span()", "(1, 100001)")]
+        [InlineData(@"re.search(r'(a{100000})y', 'x' + 'a' * 100001 + 'y').span(1)", "(2, 100002)")]
+        [InlineData(@"re.fullmatch(r'^a{100000,}', 'a' * 100003).span()", "(0, 100003)")]
+        [InlineData(@"re.match(r'\x61{5000}', 'a' * 4999)", "None")]
+        [InlineData(@"re.fullmatch(r'(?x) a {100000} b', 'a' * 100000 + 'b') is not None", "True")]
+        [InlineData(@"re.match(r'a{5000}?', 'a' * 6000).span()", "(0, 5000)")]
+        [InlineData(@"re.match(r'a{5000}+a', 'a' * 5000)", "None")]
+        [InlineData(@"re.search(r'\ba{5000}b|c', 'c ' + 'a' * 5000 + 'b').span()", "(0, 1)")]
+        [InlineData(@"re.compile(r'a{100000}').pattern", "'a{100000}'")]
+        public void LongLowerBoundBuildsNoPrefixTable(string expr, string expected)
+        {
+            Assert.Equal(expected, R(expr));
+        }
+
+        [Fact]
+        public void OnlyALongLowerBoundStopsThePrefix()
+        {
+            var ctx = Rt.Ctx();
+            Assert.StartsWith("(?>)", Outbridge.PyLite.Modules.Support.RegexTranslator.Translate(ctx, "a{4097}", 0).NetPattern);
+            // a literal nothing quantifies is the prefix .NET makes, never a long loop: it keeps its scan
+            Assert.Equal("x|(?<p1>b{99999999999})", Outbridge.PyLite.Modules.Support.RegexTranslator.Translate(ctx, "x|(b{99999999999})", 0).NetPattern);
+            // the stop stands where the prefix search meets the loop, after the anchor .NET starts from (review 16)
+            Assert.Equal("^(?>)a{4097}", Outbridge.PyLite.Modules.Support.RegexTranslator.Translate(ctx, "^a{4097}", 0).NetPattern);
+            Assert.Equal("a{4096}", Outbridge.PyLite.Modules.Support.RegexTranslator.Translate(ctx, "a{4096}", 0).NetPattern);
+            Assert.Equal("a{0,100000}", Outbridge.PyLite.Modules.Support.RegexTranslator.Translate(ctx, "a{,100000}", 0).NetPattern);
+        }
+
         // \N{NAME} in a pattern (3.8), off the same table the lexer uses for string literals.
         [Theory]
         [InlineData(@"ord(re.search(r'\N{DEGREE SIGN}', '5°').group())", "176")]
@@ -84,13 +115,14 @@ namespace Outbridge.PyLite.Tests.Modules
         }
 
         [Theory]
-        [InlineData(@"re.compile(r'\N{NO SUCH NAME}')", "undefined character name 'NO SUCH NAME'")]
-        [InlineData(@"re.compile(r'\N{DEGREE')", "missing }, unterminated name")]
-        [InlineData(@"re.compile(r'\Nx')", @"bad escape \N")]                    // bare \N is still an error
+        [InlineData(@"re.compile(r'\N{NO SUCH NAME}')", "undefined character name 'NO SUCH NAME' at position 0")]
+        [InlineData(@"re.compile(r'\N{DEGREE')", "missing }, unterminated name at position 3")]
+        [InlineData(@"re.compile(r'\Nx')", "missing { at position 2")]                    // bare \N is still an error
+        [InlineData(@"re.compile(r'[\Nx]')", "missing { at position 3")]
         public void NamedCharacterEscapeErrors(string expr, string message)
         {
             var ex = Raises("r = " + expr);
-            Assert.Equal("error", ex.Value.ExcType.Name);
+            Assert.Equal("PatternError", ex.Value.ExcType.Name);
             Assert.Equal(message, ex.Value.GetMessageText(Rt.Ctx()));
         }
     }

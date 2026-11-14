@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
@@ -45,7 +44,7 @@ namespace Outbridge.PyLite.Modules
         private static TypeValue StructTimeType(EvalContext ctx)
         {
             BuiltinDelegate ctor = (self, args, kw, c) => StructTimeValue.Construct(c, args, kw);
-            return ctx.Values.Type("time.struct_time", ctor, null, null);
+            return ctx.Values.EngineType("time.struct_time", ctor, null, null);
         }
 
         // ---- gmtime / localtime ----
@@ -70,7 +69,7 @@ namespace Outbridge.PyLite.Modules
             if (iv != null)
             {
                 if (iv.Value < long.MinValue || iv.Value > long.MaxValue)
-                    throw Raise.Overflow(ctx, "timestamp out of range");
+                    throw Raise.Overflow(ctx, "timestamp out of range for platform time_t");
                 return (long)iv.Value;
             }
             BoolValue bv = v as BoolValue;
@@ -85,7 +84,7 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.Overflow(ctx, "cannot convert float infinity to integer");
                 double f = Math.Floor(fv.Value);
                 if (f < -9.2e18 || f > 9.2e18)
-                    throw Raise.Overflow(ctx, "timestamp out of range");
+                    throw Raise.Overflow(ctx, "timestamp out of range for platform time_t");
                 return (long)f;
             }
             throw Raise.TypeError(ctx, "an integer is required (got type " + v.PyTypeName + ")");
@@ -162,8 +161,12 @@ namespace Outbridge.PyLite.Modules
                 return ctx.Values.None;
             }
 
-            // Measured, not summed: a wait overshoots its quantum by up to a timer tick.
+            // One step per quantum, charged up front: the same sleep costs the same steps on any box (a step per turn
+            // of the loop made one script cost 69 or 14,608 steps).
             TimeSpan quantum = ctx.SleepPolicy.Quantum;
+            double turns = Math.Ceiling(eff.Ticks / (double)quantum.Ticks);
+            ctx.Budget.Step(turns > int.MaxValue ? int.MaxValue : (int)turns);
+            // Measured, not summed: a wait overshoots its quantum by up to a timer tick.
             var clock = System.Diagnostics.Stopwatch.StartNew();
             using (var mre = new System.Threading.ManualResetEventSlim(false))
             {
@@ -173,8 +176,15 @@ namespace Outbridge.PyLite.Modules
                     TimeSpan left = eff - clock.Elapsed;
                     if (left <= TimeSpan.Zero)
                         break;
-                    mre.Wait(quantum < left ? quantum : left);   // never signaled; cancellation is caught by CheckDeadlineNow
-                    ctx.Budget.Step();
+                    TimeSpan slice = quantum < left ? quantum : left;
+                    if (slice.Ticks < TimeSpan.TicksPerMillisecond)
+                    {
+                        // Under a millisecond a wait takes a whole timer tick (15.6 ms by default): the fraction is
+                        // spun out instead, at no step, as the steps were charged above.
+                        System.Threading.Thread.SpinWait(64);
+                        continue;
+                    }
+                    mre.Wait((int)slice.TotalMilliseconds);   // whole ms; never signaled, cancellation is caught by CheckDeadlineNow
                 }
             }
             return ctx.Values.None;
@@ -182,6 +192,9 @@ namespace Outbridge.PyLite.Modules
 
         private static double ToSeconds(EvalContext ctx, ScriptValue v)
         {
+            IntValue iv = v as IntValue;
+            if (iv != null && double.IsInfinity(iv.ToDouble()))
+                throw Raise.Overflow(ctx, "timestamp too large to convert to C PyTime_t");
             double d;
             if (Coerce.TryToReal(ctx, v, false, out d))
                 return d;

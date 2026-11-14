@@ -68,19 +68,19 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("dt.fromisoformat('2011-W54-1')", "ValueError", "Invalid isoformat string: '2011-W54-1'")]
         [InlineData("dt.fromisoformat('2011-W53-1')", "ValueError", "Invalid isoformat string: '2011-W53-1'")]
         [InlineData("dt.fromisoformat('2011-W01-8')", "ValueError", "Invalid isoformat string: '2011-W01-8'")]
-        [InlineData("dt.fromisoformat('2011-13-04')", "ValueError", "month must be in 1..12")]
-        [InlineData("dt.fromisoformat('2011-11-04T25:00')", "ValueError", "hour must be in 0..23")]
+        [InlineData("dt.fromisoformat('2011-13-04')", "ValueError", "month must be in 1..12, not 13")]
+        [InlineData("dt.fromisoformat('2011-11-04T25:00')", "ValueError", "hour must be in 0..23, not 25")]
         [InlineData("dt.fromisoformat('2011-11-04T24:01')", "ValueError", "minute, second, and microsecond must be 0 when hour is 24")]
         [InlineData("dt.fromisoformat('2011-11-04T00:05:23+24:00')", "ValueError", "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).")]
         [InlineData("dt.fromisoformat(1)", "TypeError", "fromisoformat: argument must be str")]
         [InlineData("dt.fromisoformat()", "TypeError", "fromisoformat() takes exactly one argument (0 given)")]
         [InlineData("date.fromisoformat('2019-12-4')", "ValueError", "Invalid isoformat string: '2019-12-4'")]
         [InlineData("date.fromisoformat('2019-12-04T00:00')", "ValueError", "Invalid isoformat string: '2019-12-04T00:00'")]
-        [InlineData("date.fromisoformat('2019-02-30')", "ValueError", "day is out of range for month")]
+        [InlineData("date.fromisoformat('2019-02-30')", "ValueError", "day 30 must be in range 1..28 for month 2 in year 2019")]
         [InlineData("time.fromisoformat('')", "ValueError", "Invalid isoformat string: ''")]
         [InlineData("time.fromisoformat('4:23')", "ValueError", "Invalid isoformat string: '4:23'")]
         [InlineData("time.fromisoformat('24:01')", "ValueError", "minute, second, and microsecond must be 0 when hour is 24")]
-        [InlineData("time.fromisoformat('25:00')", "ValueError", "hour must be in 0..23")]
+        [InlineData("time.fromisoformat('25:00')", "ValueError", "hour must be in 0..23, not 25")]
         public void Errors(string expr, string exc, string message)
         {
             var ex = Assert.Throws<ScriptException>(() => Ev.Run(Imp + "r = " + expr + "\n"));

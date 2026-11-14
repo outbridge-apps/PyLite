@@ -7,7 +7,7 @@ using Outbridge.PyLite.Modules.Support;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
-    // float method slots (P2 gap-closure): is_integer, as_integer_ratio, hex. fromhex is a classmethod
+    // float method slots: is_integer, as_integer_ratio, hex. fromhex is a classmethod
     // (static slot on the float TypeValue, registered in Builtins.Convert). All exact — no decimal detour.
     internal static class FloatMethods
     {
@@ -19,8 +19,8 @@ namespace Outbridge.PyLite.Runtime.Values
                 double v = ((FloatValue)self).Value;
                 return c.Values.Bool(!double.IsNaN(v) && !double.IsInfinity(v) && Math.Floor(v) == v);
             }));
-            d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio",
-                (self, a, kw, c) => AsIntegerRatio(c, ((FloatValue)self).Value));
+            d["as_integer_ratio"] = SlotDescriptor.MakeMethod("as_integer_ratio", Args.Positional("as_integer_ratio", 0, 0,
+                (self, a, kw, c) => AsIntegerRatio(c, ((FloatValue)self).Value)));
             d["hex"] = SlotDescriptor.MakeMethod("hex", Args.Positional("hex", 0, 0, (self, a, kw, c) => c.Values.Str(ToHex(((FloatValue)self).Value))));
             // The numeric tower: a float is its own real part, with a float zero imaginary part.
             d["real"] = SlotDescriptor.MakeProperty("real", (self, c) => self);
@@ -96,7 +96,13 @@ namespace Outbridge.PyLite.Runtime.Values
             StrValue s = args.Length == 1 ? args[0] as StrValue : null;
             if (s == null)
                 throw Raise.TypeError(c, "fromhex() argument must be a string");
-            string t = s.Value.Trim();
+            string t = s.Value;
+            int lead = 0, tail = t.Length;
+            while (lead < tail && PyUnicode.IsAsciiSpace(t[lead]))
+                lead++;
+            while (tail > lead && PyUnicode.IsAsciiSpace(t[tail - 1]))
+                tail--;
+            t = t.Substring(lead, tail - lead);   // Py_ISSPACE: '\xa0' is not stripped
             int i = 0;
             bool neg = false;
             if (i < t.Length && (t[i] == '+' || t[i] == '-'))
@@ -108,16 +114,19 @@ namespace Outbridge.PyLite.Runtime.Values
             if (rest.Equals("inf", StringComparison.OrdinalIgnoreCase) || rest.Equals("infinity", StringComparison.OrdinalIgnoreCase))
                 return c.Values.Float(neg ? double.NegativeInfinity : double.PositiveInfinity);
             if (rest.Equals("nan", StringComparison.OrdinalIgnoreCase))
-                return c.Values.Float(double.NaN);
+                return c.Values.Float(neg ? -NumericOps.PyNaN : NumericOps.PyNaN);
             if (i + 1 < t.Length && t[i] == '0' && (t[i + 1] == 'x' || t[i + 1] == 'X'))
                 i += 2;
 
             BigInteger mant = BigInteger.Zero;
-            int digits = 0, fracDigits = 0;
+            int digits = 0, fracDigits = 0;   // significant digits: leading zeros are free, as in CPython
+            bool anyDigit = false;
             c.Budget.Step();
+            c.Budget.ChargeLinear(t.Length);
             while (i < t.Length && IsHex(t[i]))
             {
-                if (++digits > 4096)
+                anyDigit = true;
+                if ((!mant.IsZero || t[i] != '0') && ++digits > 4096)
                     throw Raise.ValueError(c, "invalid hexadecimal floating-point string");
                 mant = (mant << 4) + Modules.Support.Hex.Nibble(t[i]);
                 i++;
@@ -127,14 +136,15 @@ namespace Outbridge.PyLite.Runtime.Values
                 i++;
                 while (i < t.Length && IsHex(t[i]))
                 {
-                    if (++digits > 4096)
+                    anyDigit = true;
+                    if ((!mant.IsZero || t[i] != '0') && ++digits > 4096)
                         throw Raise.ValueError(c, "invalid hexadecimal floating-point string");
                     mant = (mant << 4) + Modules.Support.Hex.Nibble(t[i]);
                     fracDigits++;
                     i++;
                 }
             }
-            if (digits == 0)
+            if (!anyDigit)
                 throw Raise.ValueError(c, "invalid hexadecimal floating-point string");
             int pexp = 0;
             if (i < t.Length && (t[i] == 'p' || t[i] == 'P'))
@@ -171,7 +181,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (mant.IsZero)
                 return 0.0;
-            int bitlen = BitLen(mant);
+            int bitlen = (int)NumericOps.BitLength(mant);
             int e = exp2 + bitlen - 1;                       // floor(log2(value))
             int prec = e >= -1022 ? 53 : e + 1075;           // significant bits available at this scale
             if (prec <= 0)
@@ -220,17 +230,6 @@ namespace Outbridge.PyLite.Runtime.Values
                 bits = (long)q;                               // t == -1074: the subnormal field is q itself
             }
             return BitConverter.Int64BitsToDouble(bits);
-        }
-
-        private static int BitLen(BigInteger v)
-        {
-            int n = 0;
-            while (v > 0)
-            {
-                v >>= 1;
-                n++;
-            }
-            return n;
         }
 
         private static bool IsHex(char ch)

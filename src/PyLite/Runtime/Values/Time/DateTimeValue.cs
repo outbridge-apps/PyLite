@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using static Outbridge.PyLite.Modules.Support.CalendarFormat;
@@ -47,22 +46,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static DateTimeValue Construct(EvalContext ctx, int y, int mo, int d, int h, int mi, int s, int us, TzInfoValue tz, int fold = 0)
         {
-            if (fold != 0 && fold != 1)
-                throw Raise.ValueError(ctx, "fold must be either 0 or 1");
-            if (y < 1 || y > 9999)
-                throw Raise.ValueError(ctx, "year is out of range");
-            if (mo < 1 || mo > 12)
-                throw Raise.ValueError(ctx, "month must be in 1..12");
-            if (d < 1 || d > CalendarMath.DaysInMonth(y, mo))
-                throw Raise.ValueError(ctx, "day is out of range for month");
-            if (h < 0 || h > 23)
-                throw Raise.ValueError(ctx, "hour must be in 0..23");
-            if (mi < 0 || mi > 59)
-                throw Raise.ValueError(ctx, "minute must be in 0..59");
-            if (s < 0 || s > 59)
-                throw Raise.ValueError(ctx, "second must be in 0..59");
-            if (us < 0 || us > 999999)
-                throw Raise.ValueError(ctx, "microsecond must be in 0..999999");
+            DtArgs.CheckDate(ctx, y, mo, d);
+            DtArgs.CheckTime(ctx, h, mi, s, us, fold);
             ctx.Values.PreCharge(64);
             return new DateTimeValue(y, (byte)mo, (byte)d, (byte)h, (byte)mi, (byte)s, us, tz, fold);
         }
@@ -73,15 +58,17 @@ namespace Outbridge.PyLite.Runtime.Values
             .Opt("microsecond", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Opt("fold", ArgSpec.MISSING).Seal();
 
         // fold= is keyword-only in CPython; a ninth positional would land here too, which is accepted.
-        private static int FoldArg(EvalContext ctx, ScriptValue v)
+        internal static int FoldArg(EvalContext ctx, ScriptValue v)
         {
             if (ReferenceEquals(v, ArgSpec.MISSING))
                 return 0;
             if (v.Kind != ValueKind.Int && v.Kind != ValueKind.Bool)
                 throw Raise.TypeError(ctx, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
             System.Numerics.BigInteger b = NumericOps.AsBigInteger(v);
+            if (b < int.MinValue || b > int.MaxValue)   // before any text of it: ToString is quadratic
+                throw Raise.Overflow(ctx, "Python int too large to convert to C long");
             if (b != 0 && b != 1)
-                throw Raise.ValueError(ctx, "fold must be either 0 or 1");
+                throw Raise.ValueError(ctx, "fold must be either 0 or 1, not " + b.ToString(System.Globalization.CultureInfo.InvariantCulture));
             return (int)b;
         }
 
@@ -210,12 +197,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static DateTimeValue FromOrdinal(EvalContext ctx, BigInteger n)
         {
-            if (n < 1)
-                throw Raise.ValueError(ctx, "ordinal must be >= 1");
-            if (n > CalendarMath.MaxOrdinal)
-                throw Raise.ValueError(ctx, "year is out of range");
-            int y, mo, d;
-            CalendarMath.Ord2Ymd((int)n, out y, out mo, out d);
+            DateValue day = DateValue.FromOrdinal(ctx, n);   // the same checks and texts
+            int y = day.Year, mo = day.Month, d = day.Day;
             return Construct(ctx, y, mo, d, 0, 0, 0, 0, null);
         }
 
@@ -233,7 +216,28 @@ namespace Outbridge.PyLite.Runtime.Values
             return Construct(ctx, r.Year, r.Month, r.Day, r.Hour, r.Minute, r.Second, r.Microsecond, tz);
         }
 
-        internal static DateTimeValue Combine(EvalContext ctx, ScriptValue dateArg, ScriptValue timeArg)
+        private static readonly ArgSpec CombineSpec = ArgSpec.Create("combine")
+            .Opt("date", ArgSpec.MISSING).Opt("time", ArgSpec.MISSING).Opt("tzinfo", ArgSpec.MISSING).Seal();
+
+        internal static DateTimeValue CombineFromArgs(EvalContext ctx, ScriptValue[] args, KwArgs kw)
+        {
+            for (int j = 0; j < kw.Count; j++)
+            {
+                string name = kw.NameAt(j);
+                if (name != "date" && name != "time" && name != "tzinfo")
+                    throw KwReader.UnexpectedError(ctx, "combine", name);
+            }
+            var slots = new ScriptValue[CombineSpec.SlotCount];
+            ScriptValue[] star;
+            CombineSpec.Bind(ctx, args, kw, slots, out star);
+            if (ReferenceEquals(slots[0], ArgSpec.MISSING))
+                throw Raise.TypeError(ctx, "combine() missing required argument 'date' (pos 1)");
+            if (ReferenceEquals(slots[1], ArgSpec.MISSING))
+                throw Raise.TypeError(ctx, "combine() missing required argument 'time' (pos 2)");
+            return Combine(ctx, slots[0], slots[1], slots[2]);
+        }
+
+        internal static DateTimeValue Combine(EvalContext ctx, ScriptValue dateArg, ScriptValue timeArg, ScriptValue tzArg)
         {
             int y, mo, d;
             DateValue dv = dateArg as DateValue;
@@ -251,7 +255,8 @@ namespace Outbridge.PyLite.Runtime.Values
             TimeValue tv = timeArg as TimeValue;
             if (tv == null)
                 throw Raise.TypeError(ctx, "combine() argument 2 must be datetime.time, not " + timeArg.PyTypeName);
-            return Construct(ctx, y, mo, d, tv.Hour, tv.Minute, tv.Second, tv.Microsecond, tv.Tz);
+            TzInfoValue tz = ReferenceEquals(tzArg, ArgSpec.MISSING) ? tv.Tz : DtArgs.TzArg(ctx, tzArg);
+            return Construct(ctx, y, mo, d, tv.Hour, tv.Minute, tv.Second, tv.Microsecond, tz, tv.Fold);
         }
 
         // ---- arithmetic ----
@@ -292,6 +297,8 @@ namespace Outbridge.PyLite.Runtime.Values
             bool aAware = Tz != null, bAware = o.Tz != null;
             if (aAware != bAware)
                 throw Raise.TypeError(ctx, "can't subtract offset-naive and offset-aware datetimes");
+            if (aAware && ReferenceEquals(Tz, o.Tz))   // one zone: wall-clock arithmetic, a DST change does not count
+                return TimeDeltaValue.FromUs(ctx, ToNaiveUs() - o.ToNaiveUs());
             BigInteger a = aAware ? ToNaiveUs() - OffsetUs() : ToNaiveUs();
             BigInteger b = bAware ? o.ToNaiveUs() - o.OffsetUs() : o.ToNaiveUs();
             return TimeDeltaValue.FromUs(ctx, a - b);
@@ -344,7 +351,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return false;
         }
 
-        // Immutable, so hashed once (P15); the first time through the same tuple as before.
+        // Immutable, so hashed once; the first time through the same tuple as before.
         private long _hash;
         private bool _hashed;
 
@@ -438,7 +445,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static int Keep(EvalContext ctx, ScriptValue v, int current, string rangeError)
         {
-            return ReferenceEquals(v, ArgSpec.MISSING) ? current : DtArgs.IntField(ctx, v, rangeError);
+            return ReferenceEquals(v, ArgSpec.MISSING) ? current : DtArgs.IntFieldReplace(ctx, v);
         }
 
         private ScriptValue TimeTuple(EvalContext ctx, int isdst)
@@ -483,10 +490,10 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private ScriptValue Timestamp(EvalContext ctx)
         {
-            BigInteger num = Tz != null
-                ? ToNaiveUs() - OffsetUs() - CalendarMath.EpochNaiveUs
-                : ToNaiveUs() - (BigInteger)LocalOffsetSeconds(ctx) * 1000000L - CalendarMath.EpochNaiveUs;
-            return ctx.Values.Float((double)num / 1e6);
+            if (Tz != null)   // (self - EPOCH).total_seconds(): the integers' true division, correctly rounded
+                return PyOps.BinaryOp(PyBinOp.TrueDiv, ctx.Values.Int(ToNaiveUs() - OffsetUs() - CalendarMath.EpochNaiveUs), ctx.Values.Int(1000000), ctx);
+            BigInteger seconds = (ToNaiveUs() - CalendarMath.EpochNaiveUs - Microsecond) / 1000000L - LocalOffsetSeconds(ctx);
+            return ctx.Values.Float((double)seconds + Microsecond / 1e6);
         }
 
         // astimezone(tz=None): the same instant under tz. A naive self is read as local time (the host
@@ -537,11 +544,11 @@ namespace Outbridge.PyLite.Runtime.Values
                 ["replace"] = SlotDescriptor.MakeMethod("replace", (self, a, kw, c) => ((DateTimeValue)self).Replace(c, a, kw)),
                 ["timetuple"] = SlotDescriptor.MakeMethod("timetuple", Args.Positional("timetuple", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).TimeTuple(c, -1))),
                 ["utctimetuple"] = SlotDescriptor.MakeMethod("utctimetuple", Args.Positional("utctimetuple", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).UtcTimeTuple(c))),
-                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", (self, a, kw, c) => ((DateTimeValue)self).IsoFormatMethod(c, a, kw)),
+                ["isoformat"] = SlotDescriptor.MakeMethod("isoformat", Args.Signature("isoformat", 2, (self, a, kw, c) => ((DateTimeValue)self).IsoFormatMethod(c, a, kw), "sep", "timespec")),
                 ["ctime"] = SlotDescriptor.MakeMethod("ctime", Args.Positional("ctime", 0, 0, (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).CtimeString()))),
                 ["strftime"] = SlotDescriptor.MakeMethod("strftime", Args.Positional("strftime", 1, 1, (self, a, kw, c) => c.Values.Str(((DateTimeValue)self).Strftime(c, DtArgs.StrftimeArg(c, a))))),
                 ["timestamp"] = SlotDescriptor.MakeMethod("timestamp", Args.Positional("timestamp", 0, 0, (self, a, kw, c) => ((DateTimeValue)self).Timestamp(c))),
-                ["astimezone"] = SlotDescriptor.MakeMethod("astimezone", (self, a, kw, c) => ((DateTimeValue)self).Astimezone(c, a, kw)),
+                ["astimezone"] = SlotDescriptor.MakeMethod("astimezone", Args.Signature("astimezone", 1, (self, a, kw, c) => ((DateTimeValue)self).Astimezone(c, a, kw), "tz")),
                 ["utcoffset"] = SlotDescriptor.MakeMethod("utcoffset", Args.Positional("utcoffset", 0, 0, (self, a, kw, c) =>
                 {
                     DateTimeValue dt = (DateTimeValue)self;

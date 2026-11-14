@@ -53,7 +53,12 @@ namespace Outbridge.PyLite.Runtime.Values
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
         internal override ValueKind Kind { get { return ValueKind.Slice; } }
 
-        // HashLeafCore inherits the base "unhashable type: 'slice'"; TryCompareLeafCore stays false (unorderable).
+        // hashable since 3.12, as the (start, stop, step) it compares by; TryCompareLeafCore stays false
+        protected internal override long HashLeafCore(EvalContext ctx, int depth)
+        {
+            return PyOps.Hash(new TupleValue(new[] { StartObj, StopObj, StepObj }), ctx, depth);
+        }
+
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth)
         {
             SliceValue o = other as SliceValue;
@@ -164,9 +169,9 @@ namespace Outbridge.PyLite.Runtime.Values
 
             BigInteger length;
             if (neg && stop < start)
-                length = (start - stop - 1) / (-step) + 1;
+                length = BigOps.Divide(ctx, start - stop - 1, -step) + 1;   // a million-bit length and stride: not natively
             else if (!neg && start < stop)
-                length = (stop - start - 1) / step + 1;
+                length = BigOps.Divide(ctx, stop - start - 1, step) + 1;
             else
                 length = BigInteger.Zero;
 

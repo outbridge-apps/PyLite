@@ -9,8 +9,27 @@ namespace Outbridge.PyLite.Runtime.Values
     // xml.etree.ElementTree.ElementTree: a root holder. find/findall/findtext/iter/iterfind delegate to
     // the root as in CPython; write() takes a sink with .write(): str for encoding='unicode' (io.StringIO),
     // bytes otherwise (io.BytesIO), since there are no files in this dialect.
-    internal sealed class ElementTreeValue : ScriptValue
+    internal sealed class ElementTreeValue : ScriptValue, Modules.IScriptCopyable
     {
+        public ScriptValue CopyShallow(EvalContext ctx)
+        {
+            ctx.Values.PreCharge(32);
+            return new ElementTreeValue(Root);
+        }
+
+        public ScriptValue EmptyClone(EvalContext ctx) { return CopyShallow(ctx); }
+
+        public IReadOnlyList<ScriptValue> DeepChildren()
+        {
+            return Root == null ? (IReadOnlyList<ScriptValue>)Array.Empty<ScriptValue>() : new ScriptValue[] { Root };
+        }
+
+        public void FillClone(EvalContext ctx, ScriptValue clone, Func<ScriptValue, ScriptValue> copyOf)
+        {
+            if (Root != null)
+                ((ElementTreeValue)clone).Root = (ElementValue)copyOf(Root);
+        }
+
         internal static readonly ScriptTypeInfo TreeType = new ScriptTypeInfo("xml.etree.ElementTree.ElementTree", BuildSlots());
 
         internal ElementValue Root;   // null => an empty tree
@@ -66,13 +85,13 @@ namespace Outbridge.PyLite.Runtime.Values
                     ((ElementTreeValue)self).Root = (ElementValue)ElementValue.RequireElement(c, a.Length > 0 ? a[0] : c.Values.None);
                     return c.Values.None;
                 })),
-                ["find"] = SlotDescriptor.MakeMethod("find", (self, a, kw, c) => ElementXPath.TreeFind(((ElementTreeValue)self).RequireRoot(c, "find"), a, kw, c)),
-                ["findall"] = SlotDescriptor.MakeMethod("findall", (self, a, kw, c) => ElementXPath.TreeFindAll(((ElementTreeValue)self).RequireRoot(c, "findall"), a, kw, c)),
-                ["findtext"] = SlotDescriptor.MakeMethod("findtext", (self, a, kw, c) => ElementXPath.TreeFindText(((ElementTreeValue)self).RequireRoot(c, "findtext"), a, kw, c)),
-                ["iter"] = SlotDescriptor.MakeMethod("iter", (self, a, kw, c) => ElementXPath.TreeIter(((ElementTreeValue)self).RequireRoot(c, "iter"), a, kw, c)),
-                ["iterfind"] = SlotDescriptor.MakeMethod("iterfind", (self, a, kw, c) => ElementXPath.TreeIterFind(((ElementTreeValue)self).RequireRoot(c, "iterfind"), a, kw, c)),
-                ["write"] = SlotDescriptor.MakeMethod("write", (self, a, kw, c) => ((ElementTreeValue)self).Write(c, a, kw)),
-                ["parse"] = SlotDescriptor.MakeMethod("parse", (self, a, kw, c) => Modules.XmlModule.TreeParse(c, (ElementTreeValue)self, a, kw)),
+                ["find"] = SlotDescriptor.MakeMethod("find", Args.BoundKeywords("find", 1, (self, a, kw, c) => ElementXPath.TreeFind(((ElementTreeValue)self).RequireRoot(c, "find"), a, kw, c), "path", "namespaces")),
+                ["findall"] = SlotDescriptor.MakeMethod("findall", Args.BoundKeywords("findall", 1, (self, a, kw, c) => ElementXPath.TreeFindAll(((ElementTreeValue)self).RequireRoot(c, "findall"), a, kw, c), "path", "namespaces")),
+                ["findtext"] = SlotDescriptor.MakeMethod("findtext", Args.BoundKeywords("findtext", 1, (self, a, kw, c) => ElementXPath.TreeFindText(((ElementTreeValue)self).RequireRoot(c, "findtext"), a, kw, c), "path", "default", "namespaces")),
+                ["iter"] = SlotDescriptor.MakeMethod("iter", Args.BoundKeywords("iter", (self, a, kw, c) => ElementXPath.TreeIter(((ElementTreeValue)self).RequireRoot(c, "iter"), a, kw, c), "tag")),
+                ["iterfind"] = SlotDescriptor.MakeMethod("iterfind", Args.BoundKeywords("iterfind", 1, (self, a, kw, c) => ElementXPath.TreeIterFind(((ElementTreeValue)self).RequireRoot(c, "iterfind"), a, kw, c), "path", "namespaces")),
+                ["write"] = SlotDescriptor.MakeMethod("write", Args.LeadKeywords("write", (self, a, kw, c) => ((ElementTreeValue)self).Write(c, a, kw), 1, "file_or_filename", "encoding", "xml_declaration", "default_namespace", "method", "short_empty_elements")),
+                ["parse"] = SlotDescriptor.MakeMethod("parse", Args.LeadKeywords("parse", (self, a, kw, c) => Modules.XmlModule.TreeParse(c, (ElementTreeValue)self, a, kw), 1, "source", "parser")),
             };
         }
 

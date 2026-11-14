@@ -1,6 +1,6 @@
 namespace Outbridge.PyLite.Runtime
 {
-    // Central table of budget charge constants. No magic numbers elsewhere.
+    // Central table of budget charge constants (byte sizes charged in place are still spelled at their sites).
     internal static class BudgetCost
     {
         public const int BackEdge = 1;
@@ -13,5 +13,7 @@ namespace Outbridge.PyLite.Runtime
         public const int ImportModule = 16;
         public const int LargeAllocThresholdBytes = 262_144;
         public const int DeadlineCheckInterval = 1024;
+        public const int TreeNodeStride = 8;   // tree-walk nodes per step
+        public const int MatchStride = 8;      // regex matches per step
     }
 }

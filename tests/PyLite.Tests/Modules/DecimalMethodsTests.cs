@@ -50,6 +50,17 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("format(Decimal('0.125'), '.2f')", "'0.12'")]
         [InlineData("format(Decimal('1'), '.0%')", "'100%'")]
         [InlineData("format(Decimal('1.23'), '')", "'1.23'")]
+        // digits past the value's own scale are padded zeros, not a 10**n product
+        [InlineData("format(Decimal('1.5'), '.30f')", "'1.500000000000000000000000000000'")]
+        [InlineData("format(Decimal('-0.001'), '.5f')", "'-0.00100'")]
+        [InlineData("format(Decimal('7'), '.3%')", "'700.000%'")]
+        [InlineData("len(format(Decimal(1), '.100000f'))", "100002")]
+        // a zero keeps any exponent; quantize / round / statistics on it need no power of ten
+        [InlineData("round(Decimal('0E-999999999'))", "0")]
+        [InlineData("round(Decimal('-0E-999999999'), 2)", "Decimal('-0.00')")]
+        [InlineData("Decimal('0E+999999999').quantize(Decimal('1'))", "Decimal('0')")]
+        [InlineData("Decimal('0E-999999999').to_integral_value()", "Decimal('0')")]
+        [InlineData("format(Decimal('0E-999999999'), '.2f')", "'0.00'")]
         // ---- predicates / min-max / compare ----
         [InlineData("Decimal('2').max(Decimal('3'))", "Decimal('3')")]
         [InlineData("Decimal('2').min(Decimal('3'))", "Decimal('2')")]
@@ -129,13 +140,15 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal("TypeError", ex.Value.ExcType.Name);
         }
 
-        // round() goes through the context mode too, and round(d, n) quantizes, so it pads.
+        // round(d, n) goes through the context mode and quantizes, so it pads; round(d) is half-even whatever the
+        // context says (CPython's __round__ with no ndigits).
         [Theory]
         [InlineData("ROUND_HALF_EVEN", "round(Decimal('1.5'), 3)", "Decimal('1.500')")]
         [InlineData("ROUND_HALF_EVEN", "round(Decimal('1234.5'), -2)", "Decimal('1.2E+3')")]
         [InlineData("ROUND_UP", "round(Decimal('1.111'), 2)", "Decimal('1.12')")]
-        [InlineData("ROUND_UP", "round(Decimal('1.1'))", "2")]
-        [InlineData("ROUND_DOWN", "round(Decimal('1.9'))", "1")]
+        [InlineData("ROUND_UP", "round(Decimal('1.1'))", "1")]
+        [InlineData("ROUND_DOWN", "round(Decimal('1.9'))", "2")]
+        [InlineData("ROUND_UP", "round(Decimal('1.1'), 0)", "Decimal('2')")]
         public void RoundUsesTheContextMode(string mode, string expr, string expected)
         {
             Assert.Equal(expected, Ev.Run(Prelude + "getcontext().rounding = " + mode + "\nr = (" + expr + ")\n").Repr("r"));

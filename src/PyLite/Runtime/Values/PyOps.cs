@@ -1,4 +1,3 @@
-using System;
 using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
@@ -30,6 +29,12 @@ namespace Outbridge.PyLite.Runtime.Values
             if (!ReferenceEquals(a.TypeInfo, b.TypeInfo))
             {
                 r = b.BinaryOpCore(op, a, true, ctx);
+                if (r != null)
+                    return r;
+            }
+            if (op == PyBinOp.BitOr)
+            {
+                r = UnionTypeValue.TryMake(a, b, ctx);   // int | str
                 if (r != null)
                     return r;
             }
@@ -195,7 +200,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
             SlotDescriptor d;
             if (obj.TypeInfo.Slots.TryGetValue(name, out d))
-                return d.Kind == SlotKind.Method ? ctx.Values.BoundMethod(obj, d) : d.Getter(obj, ctx);
+                return d.Kind == SlotKind.Method ? ctx.Values.BoundMethod(obj, d) : d.Get(obj, ctx);
 
             if (obj.Kind == ValueKind.Exception)
             {
@@ -206,6 +211,8 @@ namespace Outbridge.PyLite.Runtime.Values
                     return ev.Cause != null ? (ScriptValue)ev.Cause : ctx.Values.None;
                 if (name == "__context__")
                     return ev.Context != null ? (ScriptValue)ev.Context : ctx.Values.None;
+                if (name == "__suppress_context__")
+                    return ctx.Values.Bool(ev.SuppressContext);
                 if (name == "__notes__" && ev.Notes != null)
                 {
                     ListValue notes = ctx.Values.List(ev.Notes.Count);
@@ -213,14 +220,25 @@ namespace Outbridge.PyLite.Runtime.Values
                         notes.Items.Add(ctx.Values.Str(n));
                     return notes;
                 }
+                // ImportError.name and the like live in the C struct in CPython, so a subclass's class constant of
+                // that name shadows them; any other attribute the instance holds wins over the class.
+                bool cField = HasNoneDefault(ev.ExcType, name);
                 ScriptValue data;
-                if (ev.Data != null && ev.Data.TryGetValue(name, out data))
+                if (!cField && ev.Data != null && ev.Data.TryGetValue(name, out data))
                     return data;
                 for (Errors.PyExceptionType t = ev.ExcType; t != null; t = t.Parent)
                 {
                     // a constant of the exception's class body (class ApiError(Exception): CODE = 500)
                     if (t.ClassValue != null && t.ClassValue.StaticSlots != null && t.ClassValue.StaticSlots.TryGetValue(name, out data))
                         return data;
+                }
+                if (cField)
+                {
+                    if (ev.Data != null && ev.Data.TryGetValue(name, out data))
+                        return data;
+                    if (name == "name" && ev.MissingName != null)
+                        return ctx.Values.Str(ev.MissingName);
+                    return name == "msg" && ev.Args.Length == 1 ? ev.Args[0] : ctx.Values.None;
                 }
                 if (ev.Args.Length == 5 && ev.ExcType.IsUnicodeCodecError)
                 {
@@ -233,6 +251,14 @@ namespace Outbridge.PyLite.Runtime.Values
                         case "reason": return ev.Args[4];
                     }
                 }
+            }
+            else if (name == "__wrapped__")
+            {
+                FunctionValue fw = obj as FunctionValue;
+                LruCacheWrapperValue lw = obj as LruCacheWrapperValue;
+                ScriptValue w = fw != null ? fw.Wrapped : lw != null ? lw.Wrapped : null;
+                if (w != null)
+                    return w;
             }
             else if (name == "__name__" || (name == "__qualname__" && obj.Kind == ValueKind.Type))
             {
@@ -275,7 +301,52 @@ namespace Outbridge.PyLite.Runtime.Values
             EnumMemberValue em = EnumClassValue.MemberOf(obj, ctx);   // also an IntEnum/StrEnum member's int/str
             if (em != null)
                 return em.GetAttribute(name, ctx);
+            UnionTypeValue union = obj as UnionTypeValue;
+            if (union != null && name == "__args__")
+                return union.ArgsTuple(ctx);
+            // A class-level attribute of an engine type is reachable through an instance ({}.fromkeys, date.min).
+            if (!obj.TypeInfo.IsNamedByScript)
+            {
+                TypeValue own = Modules.Builtins.TypeObjectFor(obj.TypeInfo, ctx);
+                ScriptValue st;
+                if (own != null && own.StaticSlots != null && own.StaticSlots.TryGetValue(name, out st))
+                    return st;
+            }
             throw Raise.Attribute(ctx, obj.PyTypeName, name);
+        }
+
+        // The attributes CPython's constructor always sets, None when not given (ImportError's msg is its one argument).
+        private static bool HasNoneDefault(Errors.PyExceptionType t, string name)
+        {
+            if (t.IsSubtypeOf(Errors.PyExceptionTypes.ImportError))
+                return name == "name" || name == "path" || name == "msg" || name == "name_from";
+            if (t.IsSubtypeOf(Errors.PyExceptionTypes.AttributeError))
+                return name == "name" || name == "obj";
+            if (t.IsSubtypeOf(Errors.PyExceptionTypes.NameError))
+                return name == "name";
+            return false;
+        }
+
+        // GetAttr where a miss is an answer, not an error (getattr with a default, hasattr, optional protocol
+        // attributes): a module or a record instance is looked up without raising, as GetAttr would find it;
+        // any other kind goes through GetAttr, its AttributeError read as the miss (CPython's PyErr_Clear).
+        internal static bool TryGetAttr(ScriptValue obj, string name, EvalContext ctx, out ScriptValue value)
+        {
+            ModuleValue mod = obj as ModuleValue;
+            if (mod != null && name != "__name__")
+                return mod.Members.TryGetValue(name, out value);
+            if (obj.Kind == ValueKind.RecordInstance && name != "__name__" && name != "__wrapped__" && !obj.TypeInfo.Slots.ContainsKey(name))
+                return ((RecordInstanceValue)obj).TryGetAttribute(name, ctx, out value);
+            try
+            {
+                value = GetAttr(obj, name, ctx);
+                return true;
+            }
+            catch (ScriptException se) when (se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
+            {
+                value = null;
+                return false;
+            }
         }
 
         // Attribute assignment obj.attr = value; shared by the evaluator's store paths and setattr()
@@ -319,7 +390,11 @@ namespace Outbridge.PyLite.Runtime.Values
                     BoundMethodValue bm = obj as BoundMethodValue;
                     return bm != null ? bm.Descriptor.Name : null;
                 }
-                default: return null;
+                default:
+                {
+                    LruCacheWrapperValue lw = obj as LruCacheWrapperValue;   // the cached function's name, as wraps gives it
+                    return lw != null ? CallableName(lw.Wrapped) : null;
+                }
             }
         }
 

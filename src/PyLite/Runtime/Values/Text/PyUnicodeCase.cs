@@ -63,6 +63,10 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // ---- single-character mapping ----
 
+        // The simple (one-character) mappings, as CPython's sre folds case.
+        internal static char SimpleLower(char c) { return Simple(Mode.Lower, c); }
+        internal static char SimpleUpper(char c) { return Simple(Mode.Upper, c); }
+
         private static char Simple(Mode mode, char c)
         {
             byte[] page;
@@ -122,14 +126,22 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // ---- string operations ----
 
-        internal static string Upper(string s) { return Map(s, Mode.Upper); }
-        internal static string Lower(string s) { return Map(s, Mode.Lower); }
-        internal static string Fold(string s) { return Map(s, Mode.Fold); }
+        // The slow loops below (a table per char, a string per astral char) check the deadline every 64K
+        // chars: one call over 16M chars is a second of work.
+        private static void Tick(Budget b, int k)
+        {
+            if ((k & 0xFFFE) == 0xFFFE && b != null)   // k steps by 1 or 2: hit once or twice per 64K, never at 0
+                b.CheckDeadlineNow();
+        }
+
+        internal static string Upper(string s, Budget b = null) { return Map(s, Mode.Upper, b); }
+        internal static string Lower(string s, Budget b = null) { return Map(s, Mode.Lower, b); }
+        internal static string Fold(string s, Budget b = null) { return Map(s, Mode.Fold, b); }
 
         // Copy-on-first-difference over one pass: a string that needs no change is returned as-is with no
         // allocation, an ASCII one never consults a table, and only the tail from the first non-ASCII
         // character walks them.
-        private static string Map(string s, Mode mode)
+        private static string Map(string s, Mode mode, Budget b)
         {
             int n = s.Length;
             int i = 0;
@@ -137,7 +149,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 char c = s[i];
                 if (c >= 0x80)
-                    return Walk(s, i, null, mode);
+                    return Walk(s, i, null, mode, b);
                 if (AsciiMap(mode, c) != c)
                     break;
             }
@@ -150,13 +162,13 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 char c = s[k];
                 if (c >= 0x80)
-                    return Walk(s, k, buf, mode);
+                    return Walk(s, k, buf, mode, b);
                 buf[k] = AsciiMap(mode, c);
             }
             return new string(buf);
         }
 
-        private static string Walk(string s, int from, char[] buf, Mode mode)
+        private static string Walk(string s, int from, char[] buf, Mode mode, Budget b)
         {
             int n = s.Length;
             if (buf == null)
@@ -174,12 +186,12 @@ namespace Outbridge.PyLite.Runtime.Values
                     continue;
                 }
                 if (char.IsHighSurrogate(c) && k + 1 < n && char.IsLowSurrogate(s[k + 1]))
-                    return Build(s, k, buf, mode);
+                    return Build(s, k, buf, mode, b);
                 if (HasFull(c))
                 {
                     string full = Full(mode, c);
                     if (full.Length != 1)
-                        return Build(s, k, buf, mode);
+                        return Build(s, k, buf, mode, b);
                     buf[k] = full[0];
                     continue;
                 }
@@ -190,12 +202,15 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // The slow tail: a length-changing mapping or an astral pair means the result is no longer
         // one unit per input unit.
-        private static string Build(string s, int from, char[] head, Mode mode)
+        private static string Build(string s, int from, char[] head, Mode mode, Budget b)
         {
             var sb = new System.Text.StringBuilder(s.Length + 8);
             sb.Append(head, 0, from);
             for (int k = from; k < s.Length; k++)
             {
+                Tick(b, k);
+                if ((k & 0xFFFF) == 0 && b != null)
+                    b.CheckStrChars(sb.Length);   // an expanding mapping built three times the input before the refusal
                 char c = s[k];
                 if (c < 0x80)
                 {
@@ -242,7 +257,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // Titlecase the first character, lowercase the rest (CPython's do_capitalize -- the FIRST
         // character takes the TITLE mapping, so 'ssa' comes out of 'ssa' and not 'SSa').
-        internal static string Capitalize(string s)
+        internal static string Capitalize(string s, Budget b = null)
         {
             if (s.Length == 0)
                 return s;
@@ -250,6 +265,7 @@ namespace Outbridge.PyLite.Runtime.Values
             AppendMapped(sb, s, 0, Mode.Title, out int used);
             for (int k = used; k < s.Length; k++)
             {
+                Tick(b, k);
                 AppendMapped(sb, s, k, Mode.Lower, out int u);
                 k += u - 1;
             }
@@ -258,14 +274,16 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // A character starts a word when the previous cased character was not cased: it takes the TITLE
         // mapping, every other cased character takes LOWER.
-        internal static string Title(string s)
+        internal static string Title(string s, Budget b = null)
         {
             var sb = new System.Text.StringBuilder(s.Length + 4);
             bool prevCased = false;
             for (int k = 0; k < s.Length; k++)
             {
+                Tick(b, k);
                 char c = s[k];
-                bool cased = IsCased(c);
+                int cp = AstralAt(s, k);
+                bool cased = cp >= 0 ? AstralFlags(cp) != 0 : IsCased(c);
                 AppendMapped(sb, s, k, cased ? (prevCased ? Mode.Lower : Mode.Title) : (Mode?)null, out int used);
                 prevCased = cased;
                 k += used - 1;
@@ -275,17 +293,36 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // Upper <-> lower only. A titlecase-category character is neither Uppercase nor Lowercase in the
         // derived properties, so CPython leaves it alone and so do we.
-        internal static string SwapCase(string s)
+        internal static string SwapCase(string s, Budget b = null)
         {
             var sb = new System.Text.StringBuilder(s.Length + 4);
             for (int k = 0; k < s.Length; k++)
             {
+                Tick(b, k);
                 char c = s[k];
-                Mode? mode = IsUpper(c) ? Mode.Lower : IsLower(c) ? Mode.Upper : (Mode?)null;
+                int cp = AstralAt(s, k);
+                int flags = cp >= 0 ? AstralFlags(cp) : Flags(c);
+                Mode? mode = (flags & FUpper) != 0 ? Mode.Lower : (flags & FLower) != 0 ? Mode.Upper : (Mode?)null;
                 AppendMapped(sb, s, k, mode, out int used);
                 k += used - 1;
             }
             return sb.ToString();
+        }
+
+        // the code point of an astral pair at k, else -1
+        private static int AstralAt(string s, int k)
+        {
+            return char.IsHighSurrogate(s[k]) && k + 1 < s.Length && char.IsLowSurrogate(s[k + 1]) ? char.ConvertToUtf32(s[k], s[k + 1]) : -1;
+        }
+
+        // An astral letter's case from the mapping tables (no flag table spans the astral planes): one with a
+        // lower case is upper, one with an upper case is lower.
+        private static int AstralFlags(int cp)
+        {
+            int i = System.Array.BinarySearch(AstralKeys, cp);
+            if (i < 0)
+                return 0;
+            return FCased | (AstralLower[i] != cp ? FUpper : 0) | (AstralUpper[i] != cp ? FLower : 0);
         }
 
         // Appends the image of the character at `at` under `mode` (null = copy unchanged), reporting how

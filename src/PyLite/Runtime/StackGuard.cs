@@ -16,6 +16,12 @@ namespace Outbridge.PyLite.Runtime
     {
         public static void Probe(EvalContext ctx)
         {
+            Probe(ctx, ctx.CallDepth);
+        }
+
+        // depth: the call depth to report (a call that has not raised CallDepth yet passes its own).
+        public static void Probe(EvalContext ctx, int depth)
+        {
             try
             {
                 RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -23,7 +29,7 @@ namespace Outbridge.PyLite.Runtime
             catch (InsufficientExecutionStackException)
             {
                 // Routed through CreateAbort so the budget enters Terminating correctly.
-                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "CSharpStack", 0, ctx.CallDepth);
+                throw ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "CSharpStack", 0, depth);
             }
         }
 

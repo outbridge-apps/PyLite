@@ -120,21 +120,20 @@ namespace Outbridge.PyLite.Tests.Modules
             }
         }
 
-        // Marks never offer a break point, and reordering thousands of them is quadratic in the BCL, so a
-        // run that long is refused instead of run (a divergence: CPython normalizes it).
+        // A run of marks of any length is normalized, as in CPython: the marks are sorted, not inserted.
         [Fact]
-        public void CombiningRunTooLongToBreakIsRefused()
+        public void LongCombiningRunNormalizes()
         {
-            var ex = Assert.Throws<ScriptException>(
-                () => Ev.Run(Imp + "r = normalize('NFC', 'a' + chr(0x301) * 20000)\n"));
-            Assert.Equal("ValueError", ex.Value.ExcType.Name);
+            string got = ((StrValue)Ev.Run(Imp + "r = normalize('NFC', 'a' + chr(0x301) * 20000)\n").Get("r")).Value;
+            Assert.Equal("á" + new string((char)0x301, 19999), got);
         }
 
         [Fact]
-        public void CombiningRunWithinOneChunkStillNormalizes()
+        public void MarksAreOrderedByCombiningClass()
         {
-            string got = ((StrValue)Ev.Run(Imp + "r = normalize('NFC', 'a' + chr(0x301) * 4000)\n").Get("r")).Value;
-            Assert.Equal(("a" + new string(Convert.ToChar(0x301), 4000)).Normalize(NormalizationForm.FormC), got);
+            // U+0316 (class 220) goes before U+0301 (230); a + U+0301 composes, the rest stay as they are
+            string got = ((StrValue)Ev.Run(Imp + "r = normalize('NFC', 'a\u0301\u0316')\n").Get("r")).Value;
+            Assert.Equal("á̖".Normalize(NormalizationForm.FormC), got);
         }
     }
 }

@@ -29,8 +29,12 @@ namespace Outbridge.PyLite.Modules.Support
             var sb = new StringBuilder(fmt.Length + 16);
             int i = 0;
             int sinceStep = 0;
+            int max = ctx.Limits.MaxStrChars;
             while (i < fmt.Length)
             {
+                // capped as it grows: %Z of a 1M-char zone name 300 times built 600 MB before the check below
+                if (sb.Length > max)
+                    ctx.Values.CheckStrLen(sb.Length);
                 if (++sinceStep >= 64)
                 {
                     sinceStep = 0;
@@ -50,6 +54,13 @@ namespace Outbridge.PyLite.Modules.Support
                 }
                 char code = fmt[i + 1];
                 i += 2;
+                if (code == ':' && i < fmt.Length && fmt[i] == 'z')
+                {
+                    i++;   // %:z (3.12): the offset with colons
+                    if (t.OffsetUs != null)
+                        sb.Append(Outbridge.PyLite.Runtime.Values.TimezoneValue.FormatOffset(t.OffsetUs.Value, ":"));
+                    continue;
+                }
                 // glibc flags: - (no padding), _ (space padding), 0 (zero padding), ^ (upper), # (swap case)
                 char flag = '\0';
                 if ((code == '-' || code == '_' || code == '0' || code == '^' || code == '#') && i < fmt.Length)

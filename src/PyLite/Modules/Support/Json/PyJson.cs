@@ -34,6 +34,7 @@ namespace Outbridge.PyLite.Modules.Support
             public ScriptValue ParseInt;
             public ScriptValue ParseConstant;   // called with 'NaN', 'Infinity' or '-Infinity'
             public ScriptValue ObjectHook;      // called with each finished dict; its answer takes its place
+            internal LoneSurrogates Lone;       // set by Parse: the lone surrogates the reader replaced
         }
 
         public static ScriptValue Parse(EvalContext ctx, string text, bool strict = true,
@@ -56,7 +57,9 @@ namespace Outbridge.PyLite.Modules.Support
                 reader.MaxDepth = ctx.Limits.MaxDataDepth;              // second guard beside our stack
                 try
                 {
-                    return ParseCore(ctx, reader, guard, text, hooks ?? new JsonLoadHooks());
+                    hooks = hooks ?? new JsonLoadHooks();
+                    hooks.Lone = LoneSurrogates.Find(text);
+                    return ParseCore(ctx, reader, guard, text, hooks);
                 }
                 catch (JsonReaderException ex)
                 {
@@ -122,7 +125,7 @@ namespace Outbridge.PyLite.Modules.Support
                         Store(ctx, guard, stack, built, done.OwnKey, ref root, ref haveRoot);
                         break;
                     case JsonToken.PropertyName:
-                        stack.Peek().PendingKey = (string)reader.Value;
+                        stack.Peek().PendingKey = Restored(hooks, (string)reader.Value);
                         break;
                     default:
                         Store(ctx, guard, stack, Scalar(ctx, reader, guard, text, hooks), TakeKey(stack),
@@ -136,6 +139,7 @@ namespace Outbridge.PyLite.Modules.Support
             // The scan names the exact spot; the texts below stand only for a document it let through.
             if (!haveRoot || stack.Count != 0)
                 guard.Verdict();
+            guard.End();   // the reader skips a NUL or a form feed after the value; CPython calls it extra data
             if (!haveRoot)
                 throw guard.Fail("Expecting value", 0);
             if (stack.Count != 0)
@@ -179,13 +183,18 @@ namespace Outbridge.PyLite.Modules.Support
                 ((ListValue)f.Container).Add(v, ctx);
         }
 
+        private static string Restored(JsonLoadHooks hooks, string value)
+        {
+            return hooks.Lone == null ? value : hooks.Lone.Restore(value);
+        }
+
         private static ScriptValue Scalar(EvalContext ctx, JsonTextReader reader, JsonGuard guard, string text,
             JsonLoadHooks hooks)
         {
             switch (reader.TokenType)
             {
                 case JsonToken.String:
-                    return ctx.Values.Str((string)reader.Value);
+                    return ctx.Values.Str(Restored(hooks, (string)reader.Value));
                 case JsonToken.Boolean:
                     return ctx.Values.Bool((bool)reader.Value);
                 case JsonToken.Null:
@@ -202,13 +211,19 @@ namespace Outbridge.PyLite.Modules.Support
                         ? ctx.Values.Int(big)
                         : ctx.Values.Int(Convert.ToInt64(iv, CultureInfo.InvariantCulture));
                 case JsonToken.Float:
+                    // The reader's own double.Parse can miss by an ulp; while the guard knows the token's
+                    // span the text is read again (a guard switched off by an odd document keeps the reader's).
                     double d = Convert.ToDouble(reader.Value, CultureInfo.InvariantCulture);
+                    double exact;
+                    if (guard.On && !double.IsNaN(d) && !double.IsInfinity(d)
+                        && NearestDouble.TryParse(text, guard.NumberStart, guard.NumberEnd, out exact))
+                        d = exact;
                     // NaN and the infinities are parse_constant's in CPython, never parse_float's. They can
                     // only have come from the three literals: the reader refuses a finite one that overflows.
                     if (double.IsNaN(d) || double.IsInfinity(d))
                     {
                         if (hooks.ParseConstant == null)
-                            return ctx.Values.Float(d);
+                            return ctx.Values.Float(double.IsNaN(d) ? NumericOps.PyNaN : d);   // float('nan'), as CPython's
                         string name = double.IsNaN(d) ? "NaN" : double.IsPositiveInfinity(d) ? "Infinity" : "-Infinity";
                         return ctx.CallHook(hooks.ParseConstant, new ScriptValue[] { ctx.Values.Str(name) }, KwArgs.Empty);
                     }
@@ -232,38 +247,64 @@ namespace Outbridge.PyLite.Modules.Support
 
         // ---- dumps (own iterative writer; no JsonTextWriter, so floats/escaping/separators match Python) ----
 
-        // A value type (P12): pushing one allocates nothing; the count of items, and so the steps, is unchanged.
+        // A value type: pushing one allocates nothing; the count of items, and so the steps, is unchanged.
         private struct Work
         {
             public ScriptValue Node;   // non-null => serialize this node at Depth
-            public string Text;        // non-null => append verbatim, or as a JSON string when IsKey
+            public string Text;        // non-null => append verbatim
             public ScriptValue Close;  // non-null => also pop this container from the open set (cycle tracking)
             public int Depth;
-            public bool IsKey;
+            // A list or dict in progress, one element per visit, so the stack grows with the nesting and not
+            // with the length (two entries per item made json.dumps([0] * 5000000) take 850 MB).
+            public IReadOnlyList<ScriptValue> Items;   // the elements, or the dict's values
+            public List<string> Keys;                  // the dict's keys, null for a list
+            public int[] Order;                        // the dict's key order
+            public int Index;
+            public string First;                       // the separator before element 0; Text is the one after
         }
 
-        // The separator, indent and closing strings of one dumps call, built once per depth (P12).
+        // The separator, indent and closing strings of one dumps call, built once per depth and charged
+        // before they are built: a 1 MB separator or a 5,000-char indent per nesting level is memory too.
         private sealed class DumpTexts
         {
+            private readonly EvalContext _ctx;
             private readonly JsonDumpOptions _o;
             private readonly List<string> _newline = new List<string>();
             private readonly List<string> _sepNewline = new List<string>();
             private readonly List<string> _closeList = new List<string>();
             private readonly List<string> _closeDict = new List<string>();
 
-            internal DumpTexts(JsonDumpOptions o) { _o = o; }
+            internal DumpTexts(EvalContext ctx, JsonDumpOptions o)
+            {
+                _ctx = ctx;
+                _o = o;
+            }
+
+            private void Charge(long chars)
+            {
+                _ctx.Values.CheckStrLen(chars);
+                _ctx.Values.PreCharge(24 + 2 * chars);
+            }
 
             internal string Newline(int depth)
             {
                 while (_newline.Count <= depth)
-                    _newline.Add(PyJson.Newline(_o, _newline.Count));
+                {
+                    int d = _newline.Count;
+                    Charge(_o.IndentUnit == null ? 0 : 1 + (long)_o.IndentUnit.Length * d);
+                    _newline.Add(PyJson.Newline(_o, d));
+                }
                 return _newline[depth];
             }
 
             internal string SepNewline(int depth)
             {
                 while (_sepNewline.Count <= depth)
-                    _sepNewline.Add(_o.ItemSeparator + Newline(_sepNewline.Count));
+                {
+                    string nl = Newline(_sepNewline.Count);
+                    Charge((long)_o.ItemSeparator.Length + nl.Length);
+                    _sepNewline.Add(_o.ItemSeparator + nl);
+                }
                 return _sepNewline[depth];
             }
 
@@ -271,7 +312,11 @@ namespace Outbridge.PyLite.Modules.Support
             {
                 List<string> l = bracket == ']' ? _closeList : _closeDict;
                 while (l.Count <= depth)
-                    l.Add(Newline(l.Count) + bracket);
+                {
+                    string nl = Newline(l.Count);
+                    Charge(nl.Length + 1L);
+                    l.Add(nl + bracket);
+                }
                 return l[depth];
             }
         }
@@ -281,19 +326,34 @@ namespace Outbridge.PyLite.Modules.Support
             var sb = new StringBuilder();
             var open = new HashSet<object>(ReferenceEqualityComparer.Instance);
             var stack = new Stack<Work>();
-            var texts = new DumpTexts(o);
+            var texts = new DumpTexts(ctx, o);
             stack.Push(new Work { Node = value, Depth = 0 });
 
             while (stack.Count > 0)
             {
                 ctx.Budget.Step();
                 Work w = stack.Pop();
+                if (w.Items != null)
+                {
+                    int i = w.Index;
+                    if (i >= w.Items.Count)   // read live, as CPython does: a default= hook may shrink it
+                        continue;            // the closing text was pushed under the frame
+                    w.Index = i + 1;
+                    stack.Push(w);
+                    sb.Append(i == 0 ? w.First : w.Text);
+                    if (w.Keys != null)
+                    {
+                        i = w.Order[i];
+                        WriteString(ctx, sb, w.Keys[i], o.EnsureAscii);   // escaped straight into the document
+                        sb.Append(o.KeySeparator);
+                    }
+                    CheckRoom(ctx, sb, 0);
+                    stack.Push(new Work { Node = w.Items[i], Depth = w.Depth });
+                    continue;
+                }
                 if (w.Node == null)
                 {
-                    if (w.IsKey)
-                        WriteString(sb, w.Text, o.EnsureAscii);
-                    else
-                        sb.Append(w.Text);
+                    sb.Append(w.Text);
                     CheckRoom(ctx, sb, 0);
                     if (w.Close != null)
                         open.Remove(w.Close);
@@ -324,14 +384,14 @@ namespace Outbridge.PyLite.Modules.Support
                     sb.Append(((BoolValue)node).Value ? "true" : "false");
                     return;
                 case ValueKind.Int:
-                    sb.Append(((IntValue)node).Value.ToString(CultureInfo.InvariantCulture));
+                    sb.Append(((IntValue)node).DecimalDigits(ctx));
                     return;
                 case ValueKind.Float:
                     sb.Append(FloatToken(ctx, ((FloatValue)node).Value, o));
                     return;
                 case ValueKind.Str:
                     CheckRoom(ctx, sb, ((StrValue)node).Value.Length);
-                    WriteString(sb, ((StrValue)node).Value, o.EnsureAscii);
+                    WriteString(ctx, sb, ((StrValue)node).Value, o.EnsureAscii);
                     return;
                 case ValueKind.List:
                     PushList(ctx, node, ((ListValue)node).Items, depth, o, sb, open, stack, texts);
@@ -369,11 +429,7 @@ namespace Outbridge.PyLite.Modules.Support
             sb.Append('[');
             string first = texts.Newline(depth + 1), next = texts.SepNewline(depth + 1);
             stack.Push(new Work { Text = texts.Close(depth, ']'), Close = node });
-            for (int i = items.Count - 1; i >= 0; i--)
-            {
-                stack.Push(new Work { Node = items[i], Depth = depth + 1 });
-                stack.Push(new Work { Text = i == 0 ? first : next });
-            }
+            stack.Push(new Work { Items = items, Depth = depth + 1, First = first, Text = next });
         }
 
         private static void PushDict(EvalContext ctx, DictValue node, int depth, JsonDumpOptions o,
@@ -381,9 +437,10 @@ namespace Outbridge.PyLite.Modules.Support
         {
             var keys = new List<string>();
             var vals = new List<ScriptValue>();
+            List<ScriptValue> originals = null;   // sort_keys met a key that is not a str: the keys themselves
             OrderedTable t = node.Table;
             int used = t.EntriesUsed;
-            for (int pos = 0; pos < used; pos++)
+            for (int pos = t.WalkStart(ctx); pos < used; pos++)
             {
                 long h;
                 ScriptValue k, v;
@@ -394,6 +451,14 @@ namespace Outbridge.PyLite.Modules.Support
                     continue;                      // skipkeys=True: a key JSON cannot spell is dropped
                 keys.Add(ks);
                 vals.Add(v);
+                if (o.SortKeys && originals == null && !(k is StrValue))
+                {
+                    originals = new List<ScriptValue>(keys.Count + 4);
+                    for (int j = 0; j < keys.Count - 1; j++)
+                        originals.Add(ctx.Values.Str(keys[j]));   // the str keys before it: `<` reads only their text
+                }
+                if (originals != null)
+                    originals.Add(k);
             }
 
             EnterContainer(ctx, node, depth, open);
@@ -404,18 +469,11 @@ namespace Outbridge.PyLite.Modules.Support
                 return;
             }
 
-            int[] order = SortOrder(keys, o.SortKeys);
+            int[] order = SortOrder(ctx, o.SortKeys, originals, keys);
             sb.Append('{');
             string first = texts.Newline(depth + 1), next = texts.SepNewline(depth + 1);
             stack.Push(new Work { Text = texts.Close(depth, '}'), Close = node });
-            for (int idx = order.Length - 1; idx >= 0; idx--)
-            {
-                int i = order[idx];
-                stack.Push(new Work { Node = vals[i], Depth = depth + 1 });
-                stack.Push(new Work { Text = o.KeySeparator });
-                stack.Push(new Work { Text = keys[i], IsKey = true });   // escaped straight into the document
-                stack.Push(new Work { Text = idx == 0 ? first : next });
-            }
+            stack.Push(new Work { Items = vals, Keys = keys, Order = order, Depth = depth + 1, First = first, Text = next });
         }
 
         private static void EnterContainer(EvalContext ctx, ScriptValue node, int depth, HashSet<object> open)
@@ -429,13 +487,27 @@ namespace Outbridge.PyLite.Modules.Support
             }
         }
 
-        private static int[] SortOrder(List<string> keys, bool sortKeys)
+        // sort_keys sorts the keys themselves with Python's `<`, as _json sorts dict items: 9 before 10, and
+        // keys of different types are a TypeError. All-str keys (the usual case, originals null) are an ordinal
+        // sort of the text.
+        private static int[] SortOrder(EvalContext ctx, bool sortKeys, List<ScriptValue> originals, List<string> keys)
         {
-            var order = new int[keys.Count];
-            for (int i = 0; i < order.Length; i++)
+            int n = keys.Count;
+            var order = new int[n];
+            for (int i = 0; i < n; i++)
                 order[i] = i;
-            if (sortKeys)
-                Array.Sort(order, (a, b) => string.CompareOrdinal(keys[a], keys[b]));
+            if (!sortKeys)
+                return order;
+            if (originals == null)
+            {
+                return StableSort.OrderByText(ctx, order, keys);
+            }
+            var index = new ScriptValue[n];
+            for (int i = 0; i < n; i++)
+                index[i] = ctx.Values.Int(i);
+            StableSort.Sort(ctx, index, originals.ToArray());
+            for (int i = 0; i < n; i++)
+                order[i] = (int)((IntValue)index[i]).Small;
             return order;
         }
 
@@ -448,7 +520,7 @@ namespace Outbridge.PyLite.Modules.Support
                 case ValueKind.Str: text = ((StrValue)key).Value; return true;
                 case ValueKind.Bool: text = ((BoolValue)key).Value ? "true" : "false"; return true;
                 case ValueKind.None: text = "null"; return true;
-                case ValueKind.Int: text = ((IntValue)key).Value.ToString(CultureInfo.InvariantCulture); return true;
+                case ValueKind.Int: text = ((IntValue)key).DecimalDigits(ctx); return true;
                 case ValueKind.Float: text = FloatToken(ctx, ((FloatValue)key).Value, o); return true;
                 default:
                     text = null;
@@ -484,11 +556,16 @@ namespace Outbridge.PyLite.Modules.Support
             return sb.ToString();
         }
 
-        private static void WriteString(StringBuilder sb, string s, bool ensureAscii)
+        // The caller checked the raw length; an escape makes up to six chars of one, so the cap is checked
+        // again on every escape (only there: plain text costs nothing more). 16M é took 3.7 s and 6x the memory.
+        private static void WriteString(EvalContext ctx, StringBuilder sb, string s, bool ensureAscii)
         {
+            int max = ctx.Limits.MaxStrChars;
             sb.Append('"');
             for (int i = 0; i < s.Length; i++)
             {
+                if ((i & 0xFFFE) == 0xFFFE)
+                    ctx.Budget.CheckDeadlineAfterCall();   // escaping 16M chars is a second
                 char c = s[i];
                 switch (c)
                 {
@@ -501,14 +578,24 @@ namespace Outbridge.PyLite.Modules.Support
                     case '\f': sb.Append("\\f"); break;
                     default:
                         if (c < 0x20 || (ensureAscii && c > 0x7E))
-                            sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        {
+                            sb.Append("\\u").Append(Hex[c >> 12]).Append(Hex[(c >> 8) & 15]).Append(Hex[(c >> 4) & 15]).Append(Hex[c & 15]);
+                            if (sb.Length > max)
+                                ctx.Values.CheckStrLen(sb.Length);
+                        }
                         else
+                        {
                             sb.Append(c);
-                        break;
+                        }
+                        continue;
                 }
+                if (sb.Length > max)
+                    ctx.Values.CheckStrLen(sb.Length);
             }
             sb.Append('"');
         }
+
+        private const string Hex = "0123456789abcdef";
     }
 
     // Immutable dumps options. MarshalDefault is the compact form hosting uses.

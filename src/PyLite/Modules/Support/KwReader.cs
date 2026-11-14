@@ -43,12 +43,6 @@ namespace Outbridge.PyLite.Modules.Support
         }
 
         // The value, or null when the keyword was not given.
-        public ScriptValue Get(string name)
-        {
-            ScriptValue v;
-            return TryGet(name, out v) ? v : null;
-        }
-
         public ScriptValue Get(string name, ScriptValue dflt)
         {
             ScriptValue v;

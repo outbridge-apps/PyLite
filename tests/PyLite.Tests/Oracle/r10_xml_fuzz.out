@@ -1,0 +1,6775 @@
+0 r a[1] ['0'] 0 True
+0 r a[last()] ['3'] 3 True
+0 r b[2] [] None True
+0 r a[last()-1] ['0'] 0 True
+0 r *[1] ['0', '1'] 0 True
+0 r *[last()] ['1', '3'] 1 True
+0 r a/b[1] ['4', '6'] 4 True
+0 r a/b[last()] ['5', '6'] 5 True
+0 r */a[2] [] None True
+0 r .//a[1] ['0', '2'] 0 True
+0 r .//b[last()] ['5', '7', '1', '6'] 5 True
+0 r a[1]/.. ['r'] r True
+0 r b/.. ['r'] r True
+0 r .//c/.. [] None True
+0 r a[@k] ['0'] 0 True
+0 r a[@k][1] ['0'] 0 True
+0 r a[1][@k] ['0'] 0 True
+0 r b[c] [] None True
+0 r a[1]/b ['4', '5'] 4 True
+0 r */*[last()] ['2', '5', '6'] 2 True
+0 r . ['r'] r True
+0 r a[3] [] None True
+0 r c[last()-2] [] None True
+0 r {}a[1] ['0'] 0 True
+0 r a[b][last()] ['3'] 3 True
+0 r .. [] None True
+0 r .//a/../b[1] ['1', '4'] 1 True
+0 3 a[1] [] None True
+0 3 a[last()] [] None True
+0 3 b[2] [] None True
+0 3 a[last()-1] [] None True
+0 3 *[1] ['6'] 6 True
+0 3 *[last()] ['6'] 6 True
+0 3 a/b[1] [] None True
+0 3 a/b[last()] [] None True
+0 3 */a[2] [] None True
+0 3 .//a[1] [] None True
+0 3 .//b[last()] ['6'] 6 True
+0 3 a[1]/.. [] None True
+0 3 b/.. ['3'] 3 True
+0 3 .//c/.. [] None True
+0 3 a[@k] [] None True
+0 3 a[@k][1] [] None True
+0 3 a[1][@k] [] None True
+0 3 b[c] [] None True
+0 3 a[1]/b [] None True
+0 3 */*[last()] [] None True
+0 3 . ['3'] 3 True
+0 3 a[3] [] None True
+0 3 c[last()-2] [] None True
+0 3 {}a[1] [] None True
+0 3 a[b][last()] [] None True
+0 3 .. [] None True
+0 3 .//a/../b[1] [] None True
+0 r a[1] ['0'] 0 True
+0 r a[last()] ['3'] 3 True
+0 r b[2] [] None True
+0 r a[last()-1] ['0'] 0 True
+0 r *[1] ['0', '1'] 0 True
+0 r *[last()] ['1', '3'] 1 True
+0 r a/b[1] ['4', '6'] 4 True
+0 r a/b[last()] ['5', '6'] 5 True
+0 r */a[2] [] None True
+0 r .//a[1] ['0', '2'] 0 True
+0 r .//b[last()] ['5', '7', '1', '6'] 5 True
+0 r a[1]/.. ['r'] r True
+0 r b/.. ['r'] r True
+0 r .//c/.. [] None True
+0 r a[@k] ['0'] 0 True
+0 r a[@k][1] ['0'] 0 True
+0 r a[1][@k] ['0'] 0 True
+0 r b[c] [] None True
+0 r a[1]/b ['4', '5'] 4 True
+0 r */*[last()] ['2', '5', '6'] 2 True
+0 r . ['r'] r True
+0 r a[3] [] None True
+0 r c[last()-2] [] None True
+0 r {}a[1] ['0'] 0 True
+0 r a[b][last()] ['3'] 3 True
+0 r .. [] None True
+0 r .//a/../b[1] ['1', '4'] 1 True
+0 m ['3'] ['0', '1']
+0 m ['3'] ['0', '1', 'm0_1']
+0 m ['3'] ['0', '1', 'm0_1']
+0 m ['3'] ['0', '1', 'm0_1']
+0 m ['m0_4'] ['0', '1', 'm0_1']
+0 m ['m0_4'] ['0', '1', 'm0_1']
+1 w a[1] [] None True
+1 w a[last()] [] None True
+1 w b[2] [] None True
+1 w a[last()-1] [] None True
+1 w *[1] ['r'] r True
+1 w *[last()] ['r'] r True
+1 w a/b[1] [] None True
+1 w a/b[last()] [] None True
+1 w */a[2] ['9', '9'] 9 True
+1 w .//a[1] ['1', '2', '1', '2'] 1 True
+1 w .//b[last()] ['3', 's1', '7', '3', 's1', '7'] 3 True
+1 w a[1]/.. [] None True
+1 w b/.. [] None True
+1 w .//c/.. ['r'] r True
+1 w a[@k] [] None True
+1 w a[@k][1] [] None True
+1 w a[1][@k] [] None True
+1 w b[c] [] None True
+1 w a[1]/b [] None True
+1 w */*[last()] ['0', '9', '0', '9'] 0 True
+1 w . ['w'] w True
+1 w a[3] [] None True
+1 w c[last()-2] [] None True
+1 w {}a[1] [] None True
+1 w a[b][last()] [] None True
+1 w .. [] None True
+1 w .//a/../b[1] [] None True
+1 2 a[1] [] None True
+1 2 a[last()] [] None True
+1 2 b[2] [] None True
+1 2 a[last()-1] [] None True
+1 2 *[1] ['7'] 7 True
+1 2 *[last()] ['7'] 7 True
+1 2 a/b[1] [] None True
+1 2 a/b[last()] [] None True
+1 2 */a[2] [] None True
+1 2 .//a[1] [] None True
+1 2 .//b[last()] ['7'] 7 True
+1 2 a[1]/.. [] None True
+1 2 b/.. ['2'] 2 True
+1 2 .//c/.. [] None True
+1 2 a[@k] [] None True
+1 2 a[@k][1] [] None True
+1 2 a[1][@k] [] None True
+1 2 b[c] [] None True
+1 2 a[1]/b [] None True
+1 2 */*[last()] [] None True
+1 2 . ['2'] 2 True
+1 2 a[3] [] None True
+1 2 c[last()-2] [] None True
+1 2 {}a[1] [] None True
+1 2 a[b][last()] [] None True
+1 2 .. [] None True
+1 2 .//a/../b[1] [] None True
+1 1 a[1] [] None True
+1 1 a[last()] [] None True
+1 1 b[2] [] None True
+1 1 a[last()-1] [] None True
+1 1 *[1] ['3'] 3 True
+1 1 *[last()] ['3'] 3 True
+1 1 a/b[1] [] None True
+1 1 a/b[last()] [] None True
+1 1 */a[2] [] None True
+1 1 .//a[1] [] None True
+1 1 .//b[last()] ['3', 's1'] 3 True
+1 1 a[1]/.. [] None True
+1 1 b/.. ['1'] 1 True
+1 1 .//c/.. [] None True
+1 1 a[@k] [] None True
+1 1 a[@k][1] [] None True
+1 1 a[1][@k] [] None True
+1 1 b[c] [] None True
+1 1 a[1]/b [] None True
+1 1 */*[last()] ['s1'] s1 True
+1 1 . ['1'] 1 True
+1 1 a[3] [] None True
+1 1 c[last()-2] [] None True
+1 1 {}a[1] [] None True
+1 1 a[b][last()] [] None True
+1 1 .. [] None True
+1 1 .//a/../b[1] [] None True
+1 m ['m1_0'] ['r', 'm1_0']
+1 m ['m1_0'] ['r', 'm1_0', 'm1_1']
+1 m ['m1_0'] ['r', 'm1_0', 'm1_1', 'm1_2']
+1 m ['m1_0'] ['r', 'm1_0', 'm1_1', 'm1_2']
+1 m ['m1_0'] ['r', 'm1_0', 'm1_1', 'm1_2']
+1 m ['m1_0'] ['r', 'm1_0', 'm1_1', 'm1_2']
+2 r a[1] [] None True
+2 r a[last()] [] None True
+2 r b[2] ['23'] 23 True
+2 r a[last()-1] [] None True
+2 r *[1] ['0', '17'] 0 True
+2 r *[last()] ['13', '23'] 13 True
+2 r a/b[1] [] None True
+2 r a/b[last()] [] None True
+2 r */a[2] ['16'] 16 True
+2 r .//a[1] ['2', '8', '4', '5', '20'] 2 True
+2 r .//b[last()] ['10', '3', '18', '7', '9', '22', '15', '23'] 10 True
+2 r a[1]/.. [] None True
+2 r b/.. ['r'] r True
+2 r .//c/.. ['r', '3', '1', '19', '13'] r True
+2 r a[@k] [] None True
+2 r a[@k][1] [] None True
+2 r a[1][@k] [] None True
+2 r b[c] [] None True
+2 r a[1]/b [] None True
+2 r */*[last()] ['16', '3', '4', '12', '14'] 16 True
+2 r . ['r'] r True
+2 r a[3] [] None True
+2 r c[last()-2] ['1'] 1 True
+2 r {}a[1] [] None True
+2 r a[b][last()] [] None True
+2 r .. [] None True
+2 r .//a/../b[1] ['3', '7'] 3 True
+2 21 a[1] [] None True
+2 21 a[last()] [] None True
+2 21 b[2] [] None True
+2 21 a[last()-1] [] None True
+2 21 *[1] [] None True
+2 21 *[last()] [] None True
+2 21 a/b[1] [] None True
+2 21 a/b[last()] [] None True
+2 21 */a[2] [] None True
+2 21 .//a[1] [] None True
+2 21 .//b[last()] [] None True
+2 21 a[1]/.. [] None True
+2 21 b/.. [] None True
+2 21 .//c/.. [] None True
+2 21 a[@k] [] None True
+2 21 a[@k][1] [] None True
+2 21 a[1][@k] [] None True
+2 21 b[c] [] None True
+2 21 a[1]/b [] None True
+2 21 */*[last()] [] None True
+2 21 . ['21'] 21 True
+2 21 a[3] [] None True
+2 21 c[last()-2] [] None True
+2 21 {}a[1] [] None True
+2 21 a[b][last()] [] None True
+2 21 .. [] None True
+2 21 .//a/../b[1] [] None True
+2 1 a[1] ['4'] 4 True
+2 1 a[last()] ['4'] 4 True
+2 1 b[2] [] None True
+2 1 a[last()-1] [] None True
+2 1 *[1] ['3', '4', '12'] 3 True
+2 1 *[last()] ['3', '4', '12'] 3 True
+2 1 a/b[1] ['7'] 7 True
+2 1 a/b[last()] ['7'] 7 True
+2 1 */a[2] [] None True
+2 1 .//a[1] ['8', '4', '5', '20'] 8 True
+2 1 .//b[last()] ['3', '18', '7', '9', '22'] 3 True
+2 1 a[1]/.. ['1'] 1 True
+2 1 b/.. ['1'] 1 True
+2 1 .//c/.. ['3', '1', '19'] 3 True
+2 1 a[@k] [] None True
+2 1 a[@k][1] [] None True
+2 1 a[1][@k] [] None True
+2 1 b[c] ['3'] 3 True
+2 1 a[1]/b ['7'] 7 True
+2 1 */*[last()] ['8', '11', '5', '7', '22'] 8 True
+2 1 . ['1'] 1 True
+2 1 a[3] [] None True
+2 1 c[last()-2] [] None True
+2 1 {}a[1] ['4'] 4 True
+2 1 a[b][last()] ['4'] 4 True
+2 1 .. [] None True
+2 1 .//a/../b[1] ['3', '7'] 3 True
+2 m [] ['0', '17']
+2 m [] ['0', '17']
+2 m [] ['0', '17']
+2 m [] ['0', '17']
+2 m [] ['0', '17']
+2 m ['m2_5'] ['0', '17', 'm2_5']
+3 r a[1] [] None True
+3 r a[last()] [] None True
+3 r b[2] [] None True
+3 r a[last()-1] [] None True
+3 r *[1] ['0'] 0 True
+3 r *[last()] ['1'] 1 True
+3 r a/b[1] [] None True
+3 r a/b[last()] [] None True
+3 r */a[2] [] None True
+3 r .//a[1] [] None True
+3 r .//b[last()] ['3'] 3 True
+3 r a[1]/.. [] None True
+3 r b/.. [] None True
+3 r .//c/.. ['r', '1', '4'] r True
+3 r a[@k] [] None True
+3 r a[@k][1] [] None True
+3 r a[1][@k] [] None True
+3 r b[c] [] None True
+3 r a[1]/b [] None True
+3 r */*[last()] ['3', '4'] 3 True
+3 r . ['r'] r True
+3 r a[3] [] None True
+3 r c[last()-2] [] None True
+3 r {}a[1] [] None True
+3 r a[b][last()] [] None True
+3 r .. [] None True
+3 r .//a/../b[1] [] None True
+3 0 a[1] [] None True
+3 0 a[last()] [] None True
+3 0 b[2] [] None True
+3 0 a[last()-1] [] None True
+3 0 *[1] ['3'] 3 True
+3 0 *[last()] ['3'] 3 True
+3 0 a/b[1] [] None True
+3 0 a/b[last()] [] None True
+3 0 */a[2] [] None True
+3 0 .//a[1] [] None True
+3 0 .//b[last()] ['3'] 3 True
+3 0 a[1]/.. [] None True
+3 0 b/.. ['0'] 0 True
+3 0 .//c/.. [] None True
+3 0 a[@k] [] None True
+3 0 a[@k][1] [] None True
+3 0 a[1][@k] [] None True
+3 0 b[c] [] None True
+3 0 a[1]/b [] None True
+3 0 */*[last()] [] None True
+3 0 . ['0'] 0 True
+3 0 a[3] [] None True
+3 0 c[last()-2] [] None True
+3 0 {}a[1] [] None True
+3 0 a[b][last()] [] None True
+3 0 .. [] None True
+3 0 .//a/../b[1] [] None True
+3 5 a[1] [] None True
+3 5 a[last()] [] None True
+3 5 b[2] [] None True
+3 5 a[last()-1] [] None True
+3 5 *[1] [] None True
+3 5 *[last()] [] None True
+3 5 a/b[1] [] None True
+3 5 a/b[last()] [] None True
+3 5 */a[2] [] None True
+3 5 .//a[1] [] None True
+3 5 .//b[last()] [] None True
+3 5 a[1]/.. [] None True
+3 5 b/.. [] None True
+3 5 .//c/.. [] None True
+3 5 a[@k] [] None True
+3 5 a[@k][1] [] None True
+3 5 a[1][@k] [] None True
+3 5 b[c] [] None True
+3 5 a[1]/b [] None True
+3 5 */*[last()] [] None True
+3 5 . ['5'] 5 True
+3 5 a[3] [] None True
+3 5 c[last()-2] [] None True
+3 5 {}a[1] [] None True
+3 5 a[b][last()] [] None True
+3 5 .. [] None True
+3 5 .//a/../b[1] [] None True
+3 m ['m3_0'] ['0', 'm3_0']
+3 m ['m3_0'] ['0', 'm3_0']
+3 m ['m3_2'] ['0', 'm3_0']
+3 m ['m3_2'] ['0', 'm3_0', 'm3_3']
+3 m ['m3_2'] ['0', 'm3_0', 'm3_3']
+3 m ['m3_2'] ['0', 'm3_0', 'm3_3']
+4 r a[1] ['0'] 0 True
+4 r a[last()] ['0'] 0 True
+4 r b[2] [] None True
+4 r a[last()-1] [] None True
+4 r *[1] ['0', '1'] 0 True
+4 r *[last()] ['0', '1'] 0 True
+4 r a/b[1] [] None True
+4 r a/b[last()] [] None True
+4 r */a[2] [] None True
+4 r .//a[1] ['0'] 0 True
+4 r .//b[last()] [] None True
+4 r a[1]/.. ['r'] r True
+4 r b/.. [] None True
+4 r .//c/.. ['r', '1'] r True
+4 r a[@k] [] None True
+4 r a[@k][1] [] None True
+4 r a[1][@k] [] None True
+4 r b[c] [] None True
+4 r a[1]/b [] None True
+4 r */*[last()] ['2'] 2 True
+4 r . ['r'] r True
+4 r a[3] [] None True
+4 r c[last()-2] [] None True
+4 r {}a[1] ['0'] 0 True
+4 r a[b][last()] [] None True
+4 r .. [] None True
+4 r .//a/../b[1] [] None True
+4 r a[1] ['0'] 0 True
+4 r a[last()] ['0'] 0 True
+4 r b[2] [] None True
+4 r a[last()-1] [] None True
+4 r *[1] ['0', '1'] 0 True
+4 r *[last()] ['0', '1'] 0 True
+4 r a/b[1] [] None True
+4 r a/b[last()] [] None True
+4 r */a[2] [] None True
+4 r .//a[1] ['0'] 0 True
+4 r .//b[last()] [] None True
+4 r a[1]/.. ['r'] r True
+4 r b/.. [] None True
+4 r .//c/.. ['r', '1'] r True
+4 r a[@k] [] None True
+4 r a[@k][1] [] None True
+4 r a[1][@k] [] None True
+4 r b[c] [] None True
+4 r a[1]/b [] None True
+4 r */*[last()] ['2'] 2 True
+4 r . ['r'] r True
+4 r a[3] [] None True
+4 r c[last()-2] [] None True
+4 r {}a[1] ['0'] 0 True
+4 r a[b][last()] [] None True
+4 r .. [] None True
+4 r .//a/../b[1] [] None True
+4 3 a[1] ['4'] 4 True
+4 3 a[last()] ['4'] 4 True
+4 3 b[2] [] None True
+4 3 a[last()-1] [] None True
+4 3 *[1] ['4'] 4 True
+4 3 *[last()] ['4'] 4 True
+4 3 a/b[1] [] None True
+4 3 a/b[last()] [] None True
+4 3 */a[2] [] None True
+4 3 .//a[1] ['4'] 4 True
+4 3 .//b[last()] [] None True
+4 3 a[1]/.. ['3'] 3 True
+4 3 b/.. [] None True
+4 3 .//c/.. ['4'] 4 True
+4 3 a[@k] [] None True
+4 3 a[@k][1] [] None True
+4 3 a[1][@k] [] None True
+4 3 b[c] [] None True
+4 3 a[1]/b [] None True
+4 3 */*[last()] ['5'] 5 True
+4 3 . ['3'] 3 True
+4 3 a[3] [] None True
+4 3 c[last()-2] [] None True
+4 3 {}a[1] ['4'] 4 True
+4 3 a[b][last()] [] None True
+4 3 .. [] None True
+4 3 .//a/../b[1] [] None True
+4 m ['m4_0'] ['0', '1']
+4 m ['m4_0'] ['0', '1', 'm4_1']
+4 m ['m4_2'] ['0', '1', 'm4_1']
+4 m ['m4_2'] ['0', '1', 'm4_1']
+4 m ['m4_2'] ['0', '1', 'm4_1']
+4 m ['m4_2'] ['0', '1', 'm4_1']
+5 r a[1] ['2'] 2 True
+5 r a[last()] ['2'] 2 True
+5 r b[2] ['8'] 8 True
+5 r a[last()-1] [] None True
+5 r *[1] ['0', '2'] 0 True
+5 r *[last()] ['2', '8'] 2 True
+5 r a/b[1] [] None True
+5 r a/b[last()] [] None True
+5 r */a[2] [] None True
+5 r .//a[1] ['1', '4', '2', '10'] 1 True
+5 r .//b[last()] ['7', '9', '8'] 7 True
+5 r a[1]/.. ['r'] r True
+5 r b/.. ['r'] r True
+5 r .//c/.. ['2'] 2 True
+5 r a[@k] [] None True
+5 r a[@k][1] [] None True
+5 r a[1][@k] [] None True
+5 r b[c] [] None True
+5 r a[1]/b [] None True
+5 r */*[last()] ['1', '7', '6', '10'] 1 True
+5 r . ['r'] r True
+5 r a[3] [] None True
+5 r c[last()-2] [] None True
+5 r {}a[1] ['2'] 2 True
+5 r a[b][last()] [] None True
+5 r .. [] None True
+5 r .//a/../b[1] ['3', '0'] 3 True
+5 0 a[1] ['1'] 1 True
+5 0 a[last()] ['1'] 1 True
+5 0 b[2] ['7'] 7 True
+5 0 a[last()-1] [] None True
+5 0 *[1] ['1', '3'] 1 True
+5 0 *[last()] ['1', '7'] 1 True
+5 0 a/b[1] [] None True
+5 0 a/b[last()] [] None True
+5 0 */a[2] [] None True
+5 0 .//a[1] ['1', '4'] 1 True
+5 0 .//b[last()] ['7'] 7 True
+5 0 a[1]/.. ['0'] 0 True
+5 0 b/.. ['0'] 0 True
+5 0 .//c/.. [] None True
+5 0 a[@k] ['1'] 1 True
+5 0 a[@k][1] ['1'] 1 True
+5 0 a[1][@k] ['1'] 1 True
+5 0 b[c] [] None True
+5 0 a[1]/b [] None True
+5 0 */*[last()] ['4'] 4 True
+5 0 . ['0'] 0 True
+5 0 a[3] [] None True
+5 0 c[last()-2] [] None True
+5 0 {}a[1] ['1'] 1 True
+5 0 a[b][last()] [] None True
+5 0 .. [] None True
+5 0 .//a/../b[1] ['3'] 3 True
+5 9 a[1] [] None True
+5 9 a[last()] [] None True
+5 9 b[2] [] None True
+5 9 a[last()-1] [] None True
+5 9 *[1] [] None True
+5 9 *[last()] [] None True
+5 9 a/b[1] [] None True
+5 9 a/b[last()] [] None True
+5 9 */a[2] [] None True
+5 9 .//a[1] [] None True
+5 9 .//b[last()] [] None True
+5 9 a[1]/.. [] None True
+5 9 b/.. [] None True
+5 9 .//c/.. [] None True
+5 9 a[@k] [] None True
+5 9 a[@k][1] [] None True
+5 9 a[1][@k] [] None True
+5 9 b[c] [] None True
+5 9 a[1]/b [] None True
+5 9 */*[last()] [] None True
+5 9 . ['9'] 9 True
+5 9 a[3] [] None True
+5 9 c[last()-2] [] None True
+5 9 {}a[1] [] None True
+5 9 a[b][last()] [] None True
+5 9 .. [] None True
+5 9 .//a/../b[1] [] None True
+5 m ['2'] ['0', '2', 'm5_0']
+5 m ['2'] ['0', '2', 'm5_0']
+5 m ['m5_2'] ['0', '2', 'm5_0']
+5 m ['m5_2'] ['0', '2', 'm5_0']
+5 m ['m5_2'] ['0', '2', 'm5_0']
+5 m ['m5_2'] ['0', '2', 'm5_0']
+6 r a[1] ['2'] 2 True
+6 r a[last()] ['2'] 2 True
+6 r b[2] [] None True
+6 r a[last()-1] [] None True
+6 r *[1] ['0', '2', '23'] 0 True
+6 r *[last()] ['0', '2', '23'] 0 True
+6 r a/b[1] [] None True
+6 r a/b[last()] [] None True
+6 r */a[2] [] None True
+6 r .//a[1] ['7', '13', '15', '22', '2', '3', '14'] 7 True
+6 r .//b[last()] ['16', '6', '10', '17', '23'] 16 True
+6 r a[1]/.. ['r'] r True
+6 r b/.. ['r'] r True
+6 r .//c/.. ['r', '1', '0', '4', '6', '15', '10', '3'] r True
+6 r a[@k] [] None True
+6 r a[@k][1] [] None True
+6 r a[1][@k] [] None True
+6 r b[c] [] None True
+6 r a[1]/b [] None True
+6 r */*[last()] ['4', '10', '22', '3'] 4 True
+6 r . ['r'] r True
+6 r a[3] [] None True
+6 r c[last()-2] [] None True
+6 r {}a[1] ['2'] 2 True
+6 r a[b][last()] [] None True
+6 r .. [] None True
+6 r .//a/../b[1] ['9', '1', '23', '17'] 9 True
+6 6 a[1] ['13'] 13 True
+6 6 a[last()] ['13'] 13 True
+6 6 b[2] [] None True
+6 6 a[last()-1] [] None True
+6 6 *[1] ['8', '13'] 8 True
+6 6 *[last()] ['11', '13'] 11 True
+6 6 a/b[1] [] None True
+6 6 a/b[last()] [] None True
+6 6 */a[2] [] None True
+6 6 .//a[1] ['13'] 13 True
+6 6 .//b[last()] [] None True
+6 6 a[1]/.. ['6'] 6 True
+6 6 b/.. [] None True
+6 6 .//c/.. ['6'] 6 True
+6 6 a[@k] [] None True
+6 6 a[@k][1] [] None True
+6 6 a[1][@k] [] None True
+6 6 b[c] [] None True
+6 6 a[1]/b [] None True
+6 6 */*[last()] [] None True
+6 6 . ['6'] 6 True
+6 6 a[3] [] None True
+6 6 c[last()-2] [] None True
+6 6 {}a[1] ['13'] 13 True
+6 6 a[b][last()] [] None True
+6 6 .. [] None True
+6 6 .//a/../b[1] [] None True
+6 14 a[1] [] None True
+6 14 a[last()] [] None True
+6 14 b[2] [] None True
+6 14 a[last()-1] [] None True
+6 14 *[1] [] None True
+6 14 *[last()] [] None True
+6 14 a/b[1] [] None True
+6 14 a/b[last()] [] None True
+6 14 */a[2] [] None True
+6 14 .//a[1] [] None True
+6 14 .//b[last()] [] None True
+6 14 a[1]/.. [] None True
+6 14 b/.. [] None True
+6 14 .//c/.. [] None True
+6 14 a[@k] [] None True
+6 14 a[@k][1] [] None True
+6 14 a[1][@k] [] None True
+6 14 b[c] [] None True
+6 14 a[1]/b [] None True
+6 14 */*[last()] [] None True
+6 14 . ['14'] 14 True
+6 14 a[3] [] None True
+6 14 c[last()-2] [] None True
+6 14 {}a[1] [] None True
+6 14 a[b][last()] [] None True
+6 14 .. [] None True
+6 14 .//a/../b[1] [] None True
+6 m ['2'] ['0', '2', '23']
+6 m ['2'] ['0', '2', '23']
+6 m ['2'] ['0', '2', '23']
+6 m ['m6_3'] ['0', '2', '23']
+6 m ['m6_3'] ['0', '2', '23']
+6 m ['m6_3'] ['0', '2', '23']
+7 r a[1] ['1'] 1 True
+7 r a[last()] ['16'] 16 True
+7 r b[2] [] None True
+7 r a[last()-1] ['2'] 2 True
+7 r *[1] ['0', '1'] 0 True
+7 r *[last()] ['3', '16'] 3 True
+7 r a/b[1] ['22'] 22 True
+7 r a/b[last()] ['22'] 22 True
+7 r */a[2] ['23'] 23 True
+7 r .//a[1] ['10', '1', 'n0', '9', '20'] 10 True
+7 r .//b[last()] ['24', '22', '5', '13', '14', '18', '15'] 24 True
+7 r a[1]/.. ['r'] r True
+7 r b/.. [] None True
+7 r .//c/.. ['r', '9', '6', '14'] r True
+7 r a[@k] [] None True
+7 r a[@k][1] [] None True
+7 r a[1][@k] [] None True
+7 r b[c] [] None True
+7 r a[1]/b [] None True
+7 r */*[last()] ['23', 'n0', '22', '15'] 23 True
+7 r . ['r'] r True
+7 r a[3] ['16'] 16 True
+7 r c[last()-2] [] None True
+7 r {}a[1] ['1'] 1 True
+7 r a[b][last()] [] None True
+7 r .. [] None True
+7 r .//a/../b[1] ['5', '8'] 5 True
+7 20 a[1] [] None True
+7 20 a[last()] [] None True
+7 20 b[2] [] None True
+7 20 a[last()-1] [] None True
+7 20 *[1] [] None True
+7 20 *[last()] [] None True
+7 20 a/b[1] [] None True
+7 20 a/b[last()] [] None True
+7 20 */a[2] [] None True
+7 20 .//a[1] [] None True
+7 20 .//b[last()] [] None True
+7 20 a[1]/.. [] None True
+7 20 b/.. [] None True
+7 20 .//c/.. [] None True
+7 20 a[@k] [] None True
+7 20 a[@k][1] [] None True
+7 20 a[1][@k] [] None True
+7 20 b[c] [] None True
+7 20 a[1]/b [] None True
+7 20 */*[last()] [] None True
+7 20 . ['20'] 20 True
+7 20 a[3] [] None True
+7 20 c[last()-2] [] None True
+7 20 {}a[1] [] None True
+7 20 a[b][last()] [] None True
+7 20 .. [] None True
+7 20 .//a/../b[1] [] None True
+7 6 a[1] ['20'] 20 True
+7 6 a[last()] ['20'] 20 True
+7 6 b[2] ['14'] 14 True
+7 6 a[last()-1] [] None True
+7 6 *[1] ['7', '8', '20'] 7 True
+7 6 *[last()] ['14', '19', '20'] 14 True
+7 6 a/b[1] [] None True
+7 6 a/b[last()] [] None True
+7 6 */a[2] [] None True
+7 6 .//a[1] ['20'] 20 True
+7 6 .//b[last()] ['13', '14', '18'] 13 True
+7 6 a[1]/.. ['6'] 6 True
+7 6 b/.. ['6'] 6 True
+7 6 .//c/.. ['6', '14'] 6 True
+7 6 a[@k] ['20'] 20 True
+7 6 a[@k][1] ['20'] 20 True
+7 6 a[1][@k] ['20'] 20 True
+7 6 b[c] ['14'] 14 True
+7 6 a[1]/b [] None True
+7 6 */*[last()] ['13', '21'] 13 True
+7 6 . ['6'] 6 True
+7 6 a[3] [] None True
+7 6 c[last()-2] [] None True
+7 6 {}a[1] ['20'] 20 True
+7 6 a[b][last()] [] None True
+7 6 .. [] None True
+7 6 .//a/../b[1] ['8'] 8 True
+7 m ['16'] ['0', '1', 'm7_0']
+7 m ['m7_1'] ['0', '1', 'm7_0']
+7 m ['m7_2'] ['0', '1', 'm7_0']
+7 m ['m7_2'] ['0', '1', 'm7_0']
+7 m ['m7_2'] ['0', '1', 'm7_0']
+7 m ['m7_2'] ['0', '1', 'm7_0']
+8 w a[1] [] None True
+8 w a[last()] [] None True
+8 w b[2] [] None True
+8 w a[last()-1] [] None True
+8 w *[1] ['r'] r True
+8 w *[last()] ['r'] r True
+8 w a/b[1] [] None True
+8 w a/b[last()] [] None True
+8 w */a[2] [] None True
+8 w .//a[1] ['0', '12', '14', '19', '8', '0', '12', '14', '19', '8'] 0 True
+8 w .//b[last()] ['13', '11', '9', '10', '13', '11', '9', '10'] 13 True
+8 w a[1]/.. [] None True
+8 w b/.. [] None True
+8 w .//c/.. ['0', '3', '5', '12', 'r', '1', '2', '9'] 0 True
+8 w a[@k] [] None True
+8 w a[@k][1] [] None True
+8 w a[1][@k] [] None True
+8 w b[c] [] None True
+8 w a[1]/b [] None True
+8 w */*[last()] ['0', '2', '0', '2'] 0 True
+8 w . ['w'] w True
+8 w a[3] [] None True
+8 w c[last()-2] [] None True
+8 w {}a[1] [] None True
+8 w a[b][last()] [] None True
+8 w .. [] None True
+8 w .//a/../b[1] ['13'] 13 True
+8 13 a[1] [] None True
+8 13 a[last()] [] None True
+8 13 b[2] [] None True
+8 13 a[last()-1] [] None True
+8 13 *[1] [] None True
+8 13 *[last()] [] None True
+8 13 a/b[1] [] None True
+8 13 a/b[last()] [] None True
+8 13 */a[2] [] None True
+8 13 .//a[1] [] None True
+8 13 .//b[last()] [] None True
+8 13 a[1]/.. [] None True
+8 13 b/.. [] None True
+8 13 .//c/.. [] None True
+8 13 a[@k] [] None True
+8 13 a[@k][1] [] None True
+8 13 a[1][@k] [] None True
+8 13 b[c] [] None True
+8 13 a[1]/b [] None True
+8 13 */*[last()] [] None True
+8 13 . ['13'] 13 True
+8 13 a[3] [] None True
+8 13 c[last()-2] [] None True
+8 13 {}a[1] [] None True
+8 13 a[b][last()] [] None True
+8 13 .. [] None True
+8 13 .//a/../b[1] [] None True
+8 12 a[1] [] None True
+8 12 a[last()] [] None True
+8 12 b[2] [] None True
+8 12 a[last()-1] [] None True
+8 12 *[1] ['17'] 17 True
+8 12 *[last()] ['17'] 17 True
+8 12 a/b[1] [] None True
+8 12 a/b[last()] [] None True
+8 12 */a[2] [] None True
+8 12 .//a[1] [] None True
+8 12 .//b[last()] [] None True
+8 12 a[1]/.. [] None True
+8 12 b/.. [] None True
+8 12 .//c/.. ['12'] 12 True
+8 12 a[@k] [] None True
+8 12 a[@k][1] [] None True
+8 12 a[1][@k] [] None True
+8 12 b[c] [] None True
+8 12 a[1]/b [] None True
+8 12 */*[last()] [] None True
+8 12 . ['12'] 12 True
+8 12 a[3] [] None True
+8 12 c[last()-2] [] None True
+8 12 {}a[1] [] None True
+8 12 a[b][last()] [] None True
+8 12 .. [] None True
+8 12 .//a/../b[1] [] None True
+8 m ['m8_0'] ['r', 'm8_0']
+8 m ['m8_0'] ['r', 'm8_0', 'm8_1']
+8 m ['m8_2'] ['r', 'm8_0', 'm8_1']
+8 m ['m8_3'] ['r', 'm8_0', 'm8_1']
+8 m ['m8_3'] ['r', 'm8_0', 'm8_1']
+8 m ['m8_3'] ['r', 'm8_0', 'm8_1', 'm8_5']
+9 r a[1] [] None True
+9 r a[last()] [] None True
+9 r b[2] [] None True
+9 r a[last()-1] [] None True
+9 r *[1] ['0', '1'] 0 True
+9 r *[last()] ['0', '1'] 0 True
+9 r a/b[1] [] None True
+9 r a/b[last()] [] None True
+9 r */a[2] [] None True
+9 r .//a[1] [] None True
+9 r .//b[last()] ['0'] 0 True
+9 r a[1]/.. [] None True
+9 r b/.. ['r'] r True
+9 r .//c/.. ['0', 'r'] 0 True
+9 r a[@k] [] None True
+9 r a[@k][1] [] None True
+9 r a[1][@k] [] None True
+9 r b[c] ['0'] 0 True
+9 r a[1]/b [] None True
+9 r */*[last()] ['2'] 2 True
+9 r . ['r'] r True
+9 r a[3] [] None True
+9 r c[last()-2] [] None True
+9 r {}a[1] [] None True
+9 r a[b][last()] [] None True
+9 r .. [] None True
+9 r .//a/../b[1] [] None True
+9 1 a[1] [] None True
+9 1 a[last()] [] None True
+9 1 b[2] [] None True
+9 1 a[last()-1] [] None True
+9 1 *[1] [] None True
+9 1 *[last()] [] None True
+9 1 a/b[1] [] None True
+9 1 a/b[last()] [] None True
+9 1 */a[2] [] None True
+9 1 .//a[1] [] None True
+9 1 .//b[last()] [] None True
+9 1 a[1]/.. [] None True
+9 1 b/.. [] None True
+9 1 .//c/.. [] None True
+9 1 a[@k] [] None True
+9 1 a[@k][1] [] None True
+9 1 a[1][@k] [] None True
+9 1 b[c] [] None True
+9 1 a[1]/b [] None True
+9 1 */*[last()] [] None True
+9 1 . ['1'] 1 True
+9 1 a[3] [] None True
+9 1 c[last()-2] [] None True
+9 1 {}a[1] [] None True
+9 1 a[b][last()] [] None True
+9 1 .. [] None True
+9 1 .//a/../b[1] [] None True
+9 0 a[1] [] None True
+9 0 a[last()] [] None True
+9 0 b[2] [] None True
+9 0 a[last()-1] [] None True
+9 0 *[1] ['2'] 2 True
+9 0 *[last()] ['2'] 2 True
+9 0 a/b[1] [] None True
+9 0 a/b[last()] [] None True
+9 0 */a[2] [] None True
+9 0 .//a[1] [] None True
+9 0 .//b[last()] [] None True
+9 0 a[1]/.. [] None True
+9 0 b/.. [] None True
+9 0 .//c/.. ['0'] 0 True
+9 0 a[@k] [] None True
+9 0 a[@k][1] [] None True
+9 0 a[1][@k] [] None True
+9 0 b[c] [] None True
+9 0 a[1]/b [] None True
+9 0 */*[last()] [] None True
+9 0 . ['0'] 0 True
+9 0 a[3] [] None True
+9 0 c[last()-2] [] None True
+9 0 {}a[1] [] None True
+9 0 a[b][last()] [] None True
+9 0 .. [] None True
+9 0 .//a/../b[1] [] None True
+9 m [] ['0', '1']
+9 m [] ['0', '1']
+9 m [] ['0', '1']
+9 m ['m9_3'] ['0', '1', 'm9_3']
+9 m ['m9_4'] ['0', '1', 'm9_3']
+9 m ['m9_4'] ['0', '1', 'm9_3']
+10 r a[1] [] None True
+10 r a[last()] [] None True
+10 r b[2] [] None True
+10 r a[last()-1] [] None True
+10 r *[1] ['0', 's1'] 0 True
+10 r *[last()] ['0', '3'] 0 True
+10 r a/b[1] [] None True
+10 r a/b[last()] [] None True
+10 r */a[2] ['n0'] n0 True
+10 r .//a[1] ['2'] 2 True
+10 r .//b[last()] ['0', '4'] 0 True
+10 r a[1]/.. [] None True
+10 r b/.. ['r'] r True
+10 r .//c/.. ['r'] r True
+10 r a[@k] [] None True
+10 r a[@k][1] [] None True
+10 r a[1][@k] [] None True
+10 r b[c] [] None True
+10 r a[1]/b [] None True
+10 r */*[last()] ['n0'] n0 True
+10 r . ['r'] r True
+10 r a[3] [] None True
+10 r c[last()-2] [] None True
+10 r {}a[1] [] None True
+10 r a[b][last()] [] None True
+10 r .. [] None True
+10 r .//a/../b[1] [] None True
+10 r a[1] [] None True
+10 r a[last()] [] None True
+10 r b[2] [] None True
+10 r a[last()-1] [] None True
+10 r *[1] ['0', 's1'] 0 True
+10 r *[last()] ['0', '3'] 0 True
+10 r a/b[1] [] None True
+10 r a/b[last()] [] None True
+10 r */a[2] ['n0'] n0 True
+10 r .//a[1] ['2'] 2 True
+10 r .//b[last()] ['0', '4'] 0 True
+10 r a[1]/.. [] None True
+10 r b/.. ['r'] r True
+10 r .//c/.. ['r'] r True
+10 r a[@k] [] None True
+10 r a[@k][1] [] None True
+10 r a[1][@k] [] None True
+10 r b[c] [] None True
+10 r a[1]/b [] None True
+10 r */*[last()] ['n0'] n0 True
+10 r . ['r'] r True
+10 r a[3] [] None True
+10 r c[last()-2] [] None True
+10 r {}a[1] [] None True
+10 r a[b][last()] [] None True
+10 r .. [] None True
+10 r .//a/../b[1] [] None True
+10 3 a[1] [] None True
+10 3 a[last()] [] None True
+10 3 b[2] [] None True
+10 3 a[last()-1] [] None True
+10 3 *[1] [] None True
+10 3 *[last()] [] None True
+10 3 a/b[1] [] None True
+10 3 a/b[last()] [] None True
+10 3 */a[2] [] None True
+10 3 .//a[1] [] None True
+10 3 .//b[last()] [] None True
+10 3 a[1]/.. [] None True
+10 3 b/.. [] None True
+10 3 .//c/.. [] None True
+10 3 a[@k] [] None True
+10 3 a[@k][1] [] None True
+10 3 a[1][@k] [] None True
+10 3 b[c] [] None True
+10 3 a[1]/b [] None True
+10 3 */*[last()] [] None True
+10 3 . ['3'] 3 True
+10 3 a[3] [] None True
+10 3 c[last()-2] [] None True
+10 3 {}a[1] [] None True
+10 3 a[b][last()] [] None True
+10 3 .. [] None True
+10 3 .//a/../b[1] [] None True
+10 m ['m10_0'] ['0', 's1', 'm10_0']
+10 m ['m10_0'] ['0', 's1', 'm10_0']
+10 m ['m10_0'] ['0', 's1', 'm10_0']
+10 m ['m10_0'] ['0', 's1', 'm10_0']
+10 m ['m10_4'] ['0', 's1', 'm10_0']
+10 m ['m10_4'] ['0', 's1', 'm10_0']
+11 r a[1] [] None True
+11 r a[last()] [] None True
+11 r b[2] ['2'] 2 True
+11 r a[last()-1] [] None True
+11 r *[1] ['0', '1'] 0 True
+11 r *[last()] ['0', '2'] 0 True
+11 r a/b[1] [] None True
+11 r a/b[last()] [] None True
+11 r */a[2] [] None True
+11 r .//a[1] ['4', '16'] 4 True
+11 r .//b[last()] ['8', '14', '2', 's0', '15'] 8 True
+11 r a[1]/.. [] None True
+11 r b/.. ['r'] r True
+11 r .//c/.. ['r', '1', '2'] r True
+11 r a[@k] [] None True
+11 r a[@k][1] [] None True
+11 r a[1][@k] [] None True
+11 r b[c] ['1', '2'] 1 True
+11 r a[1]/b [] None True
+11 r */*[last()] ['4', '5', '8', 's0', '10'] 4 True
+11 r . ['r'] r True
+11 r a[3] [] None True
+11 r c[last()-2] [] None True
+11 r {}a[1] [] None True
+11 r a[b][last()] [] None True
+11 r .. [] None True
+11 r .//a/../b[1] ['8'] 8 True
+11 1 a[1] ['4'] 4 True
+11 1 a[last()] ['4'] 4 True
+11 1 b[2] [] None True
+11 1 a[last()-1] [] None True
+11 1 *[1] ['4', '5', '8'] 4 True
+11 1 *[last()] ['4', '5', '8'] 4 True
+11 1 a/b[1] [] None True
+11 1 a/b[last()] [] None True
+11 1 */a[2] [] None True
+11 1 .//a[1] ['4'] 4 True
+11 1 .//b[last()] ['8', '14'] 8 True
+11 1 a[1]/.. ['1'] 1 True
+11 1 b/.. ['1'] 1 True
+11 1 .//c/.. ['1'] 1 True
+11 1 a[@k] [] None True
+11 1 a[@k][1] [] None True
+11 1 a[1][@k] [] None True
+11 1 b[c] [] None True
+11 1 a[1]/b [] None True
+11 1 */*[last()] ['14'] 14 True
+11 1 . ['1'] 1 True
+11 1 a[3] [] None True
+11 1 c[last()-2] [] None True
+11 1 {}a[1] ['4'] 4 True
+11 1 a[b][last()] [] None True
+11 1 .. [] None True
+11 1 .//a/../b[1] ['8'] 8 True
+11 9 a[1] ['12'] 12 True
+11 9 a[last()] ['12'] 12 True
+11 9 b[2] [] None True
+11 9 a[last()-1] [] None True
+11 9 *[1] ['12'] 12 True
+11 9 *[last()] ['12'] 12 True
+11 9 a/b[1] [] None True
+11 9 a/b[last()] [] None True
+11 9 */a[2] [] None True
+11 9 .//a[1] ['12'] 12 True
+11 9 .//b[last()] [] None True
+11 9 a[1]/.. ['9'] 9 True
+11 9 b/.. [] None True
+11 9 .//c/.. [] None True
+11 9 a[@k] [] None True
+11 9 a[@k][1] [] None True
+11 9 a[1][@k] [] None True
+11 9 b[c] [] None True
+11 9 a[1]/b [] None True
+11 9 */*[last()] [] None True
+11 9 . ['9'] 9 True
+11 9 a[3] [] None True
+11 9 c[last()-2] [] None True
+11 9 {}a[1] ['12'] 12 True
+11 9 a[b][last()] [] None True
+11 9 .. [] None True
+11 9 .//a/../b[1] [] None True
+11 m [] ['0', '1']
+11 m ['m11_1'] ['0', '1', 'm11_1']
+11 m ['m11_2'] ['0', '1', 'm11_1']
+11 m ['m11_3'] ['0', '1', 'm11_1']
+11 m ['m11_3'] ['0', '1', 'm11_1']
+11 m ['m11_5'] ['0', '1', 'm11_1']
+12 r a[1] ['4'] 4 True
+12 r a[last()] ['17'] 17 True
+12 r b[2] ['8'] 8 True
+12 r a[last()-1] ['4'] 4 True
+12 r *[1] ['0', '1', '4'] 0 True
+12 r *[last()] ['8', '14', '17'] 8 True
+12 r a/b[1] ['16'] 16 True
+12 r a/b[last()] ['16'] 16 True
+12 r */a[2] [] None True
+12 r .//a[1] ['12', '4', '19'] 12 True
+12 r .//b[last()] ['3', '18', '10', '20', '16', '8'] 3 True
+12 r a[1]/.. ['r'] r True
+12 r b/.. ['r'] r True
+12 r .//c/.. ['r', '0', '10', '2', '5', '8'] r True
+12 r a[@k] ['4'] 4 True
+12 r a[@k][1] ['4'] 4 True
+12 r a[1][@k] ['4'] 4 True
+12 r b[c] ['8'] 8 True
+12 r a[1]/b ['16'] 16 True
+12 r */*[last()] ['3', '9', '12', '20', '6', '16', '7', '13'] 3 True
+12 r . ['r'] r True
+12 r a[3] [] None True
+12 r c[last()-2] ['2'] 2 True
+12 r {}a[1] ['4'] 4 True
+12 r a[b][last()] [] None True
+12 r .. [] None True
+12 r .//a/../b[1] ['3', '1'] 3 True
+12 15 a[1] [] None True
+12 15 a[last()] [] None True
+12 15 b[2] [] None True
+12 15 a[last()-1] [] None True
+12 15 *[1] [] None True
+12 15 *[last()] [] None True
+12 15 a/b[1] [] None True
+12 15 a/b[last()] [] None True
+12 15 */a[2] [] None True
+12 15 .//a[1] [] None True
+12 15 .//b[last()] [] None True
+12 15 a[1]/.. [] None True
+12 15 b/.. [] None True
+12 15 .//c/.. [] None True
+12 15 a[@k] [] None True
+12 15 a[@k][1] [] None True
+12 15 a[1][@k] [] None True
+12 15 b[c] [] None True
+12 15 a[1]/b [] None True
+12 15 */*[last()] [] None True
+12 15 . ['15'] 15 True
+12 15 a[3] [] None True
+12 15 c[last()-2] [] None True
+12 15 {}a[1] [] None True
+12 15 a[b][last()] [] None True
+12 15 .. [] None True
+12 15 .//a/../b[1] [] None True
+12 4 a[1] [] None True
+12 4 a[last()] [] None True
+12 4 b[2] [] None True
+12 4 a[last()-1] [] None True
+12 4 *[1] ['16'] 16 True
+12 4 *[last()] ['16'] 16 True
+12 4 a/b[1] [] None True
+12 4 a/b[last()] [] None True
+12 4 */a[2] [] None True
+12 4 .//a[1] [] None True
+12 4 .//b[last()] ['16'] 16 True
+12 4 a[1]/.. [] None True
+12 4 b/.. ['4'] 4 True
+12 4 .//c/.. [] None True
+12 4 a[@k] [] None True
+12 4 a[@k][1] [] None True
+12 4 a[1][@k] [] None True
+12 4 b[c] [] None True
+12 4 a[1]/b [] None True
+12 4 */*[last()] [] None True
+12 4 . ['4'] 4 True
+12 4 a[3] [] None True
+12 4 c[last()-2] [] None True
+12 4 {}a[1] [] None True
+12 4 a[b][last()] [] None True
+12 4 .. [] None True
+12 4 .//a/../b[1] [] None True
+12 m ['17'] ['0', '1', '4']
+12 m ['m12_1'] ['0', '1', '4']
+12 m ['m12_1'] ['0', '1', '4']
+12 m ['m12_1'] ['0', '1', '4']
+12 m ['m12_4'] ['0', '1', '4']
+12 m ['m12_5'] ['0', '1', '4']
+13 r a[1] [] None True
+13 r a[last()] [] None True
+13 r b[2] [] None True
+13 r a[last()-1] [] None True
+13 r *[1] ['0', '1'] 0 True
+13 r *[last()] ['0', '1'] 0 True
+13 r a/b[1] [] None True
+13 r a/b[last()] [] None True
+13 r */a[2] [] None True
+13 r .//a[1] [] None True
+13 r .//b[last()] ['0'] 0 True
+13 r a[1]/.. [] None True
+13 r b/.. ['r'] r True
+13 r .//c/.. ['r', '1'] r True
+13 r a[@k] [] None True
+13 r a[@k][1] [] None True
+13 r a[1][@k] [] None True
+13 r b[c] [] None True
+13 r a[1]/b [] None True
+13 r */*[last()] ['2'] 2 True
+13 r . ['r'] r True
+13 r a[3] [] None True
+13 r c[last()-2] [] None True
+13 r {}a[1] [] None True
+13 r a[b][last()] [] None True
+13 r .. [] None True
+13 r .//a/../b[1] [] None True
+13 r a[1] [] None True
+13 r a[last()] [] None True
+13 r b[2] [] None True
+13 r a[last()-1] [] None True
+13 r *[1] ['0', '1'] 0 True
+13 r *[last()] ['0', '1'] 0 True
+13 r a/b[1] [] None True
+13 r a/b[last()] [] None True
+13 r */a[2] [] None True
+13 r .//a[1] [] None True
+13 r .//b[last()] ['0'] 0 True
+13 r a[1]/.. [] None True
+13 r b/.. ['r'] r True
+13 r .//c/.. ['r', '1'] r True
+13 r a[@k] [] None True
+13 r a[@k][1] [] None True
+13 r a[1][@k] [] None True
+13 r b[c] [] None True
+13 r a[1]/b [] None True
+13 r */*[last()] ['2'] 2 True
+13 r . ['r'] r True
+13 r a[3] [] None True
+13 r c[last()-2] [] None True
+13 r {}a[1] [] None True
+13 r a[b][last()] [] None True
+13 r .. [] None True
+13 r .//a/../b[1] [] None True
+13 0 a[1] [] None True
+13 0 a[last()] [] None True
+13 0 b[2] [] None True
+13 0 a[last()-1] [] None True
+13 0 *[1] [] None True
+13 0 *[last()] [] None True
+13 0 a/b[1] [] None True
+13 0 a/b[last()] [] None True
+13 0 */a[2] [] None True
+13 0 .//a[1] [] None True
+13 0 .//b[last()] [] None True
+13 0 a[1]/.. [] None True
+13 0 b/.. [] None True
+13 0 .//c/.. [] None True
+13 0 a[@k] [] None True
+13 0 a[@k][1] [] None True
+13 0 a[1][@k] [] None True
+13 0 b[c] [] None True
+13 0 a[1]/b [] None True
+13 0 */*[last()] [] None True
+13 0 . ['0'] 0 True
+13 0 a[3] [] None True
+13 0 c[last()-2] [] None True
+13 0 {}a[1] [] None True
+13 0 a[b][last()] [] None True
+13 0 .. [] None True
+13 0 .//a/../b[1] [] None True
+13 m ['m13_0'] ['0', '1', 'm13_0']
+13 m ['m13_0'] ['0', '1', 'm13_0']
+13 m ['m13_0'] ['0', '1', 'm13_0']
+13 m ['m13_3'] ['0', '1', 'm13_0']
+13 m ['m13_3'] ['0', '1', 'm13_0']
+13 m ['m13_3'] ['0', '1', 'm13_0']
+14 r a[1] ['1'] 1 True
+14 r a[last()] ['3'] 3 True
+14 r b[2] [] None True
+14 r a[last()-1] ['1'] 1 True
+14 r *[1] ['0', '1'] 0 True
+14 r *[last()] ['0', '3'] 0 True
+14 r a/b[1] ['5'] 5 True
+14 r a/b[last()] ['5'] 5 True
+14 r */a[2] ['10'] 10 True
+14 r .//a[1] ['7', '8', '9', '9', '1', '6'] 7 True
+14 r .//b[last()] ['12', '13', '4', '5', '11'] 12 True
+14 r a[1]/.. ['r'] r True
+14 r b/.. [] None True
+14 r .//c/.. ['r', '1'] r True
+14 r a[@k] [] None True
+14 r a[@k][1] [] None True
+14 r a[1][@k] [] None True
+14 r b[c] [] None True
+14 r a[1]/b [] None True
+14 r */*[last()] ['4', 's0', '5', '10'] 4 True
+14 r . ['r'] r True
+14 r a[3] [] None True
+14 r c[last()-2] [] None True
+14 r {}a[1] ['1'] 1 True
+14 r a[b][last()] ['3'] 3 True
+14 r .. [] None True
+14 r .//a/../b[1] ['13', '5'] 13 True
+14 1 a[1] [] None True
+14 1 a[last()] [] None True
+14 1 b[2] [] None True
+14 1 a[last()-1] [] None True
+14 1 *[1] ['s0'] s0 True
+14 1 *[last()] ['s0'] s0 True
+14 1 a/b[1] [] None True
+14 1 a/b[last()] [] None True
+14 1 */a[2] [] None True
+14 1 .//a[1] [] None True
+14 1 .//b[last()] [] None True
+14 1 a[1]/.. [] None True
+14 1 b/.. [] None True
+14 1 .//c/.. ['1'] 1 True
+14 1 a[@k] [] None True
+14 1 a[@k][1] [] None True
+14 1 a[1][@k] [] None True
+14 1 b[c] [] None True
+14 1 a[1]/b [] None True
+14 1 */*[last()] [] None True
+14 1 . ['1'] 1 True
+14 1 a[3] [] None True
+14 1 c[last()-2] [] None True
+14 1 {}a[1] [] None True
+14 1 a[b][last()] [] None True
+14 1 .. [] None True
+14 1 .//a/../b[1] [] None True
+14 13 a[1] [] None True
+14 13 a[last()] [] None True
+14 13 b[2] [] None True
+14 13 a[last()-1] [] None True
+14 13 *[1] [] None True
+14 13 *[last()] [] None True
+14 13 a/b[1] [] None True
+14 13 a/b[last()] [] None True
+14 13 */a[2] [] None True
+14 13 .//a[1] [] None True
+14 13 .//b[last()] [] None True
+14 13 a[1]/.. [] None True
+14 13 b/.. [] None True
+14 13 .//c/.. [] None True
+14 13 a[@k] [] None True
+14 13 a[@k][1] [] None True
+14 13 a[1][@k] [] None True
+14 13 b[c] [] None True
+14 13 a[1]/b [] None True
+14 13 */*[last()] [] None True
+14 13 . ['13'] 13 True
+14 13 a[3] [] None True
+14 13 c[last()-2] [] None True
+14 13 {}a[1] [] None True
+14 13 a[b][last()] [] None True
+14 13 .. [] None True
+14 13 .//a/../b[1] [] None True
+14 m ['m14_0'] ['0', '1']
+14 m ['m14_0'] ['0', '1']
+14 m ['m14_2'] ['0', '1']
+14 m ['m14_2'] ['0', '1', 'm14_3']
+14 m ['m14_2'] ['0', '1', 'm14_3']
+14 m ['m14_5'] ['0', '1', 'm14_3']
+15 w a[1] [] None True
+15 w a[last()] [] None True
+15 w b[2] [] None True
+15 w a[last()-1] [] None True
+15 w *[1] ['r'] r True
+15 w *[last()] ['r'] r True
+15 w a/b[1] [] None True
+15 w a/b[last()] [] None True
+15 w */a[2] [] None True
+15 w .//a[1] ['12', '7', '12', '7'] 12 True
+15 w .//b[last()] ['5', '4', '8', '9', '11', '5', '4', '8', '9', '11'] 5 True
+15 w a[1]/.. [] None True
+15 w b/.. [] None True
+15 w .//c/.. ['0', '4'] 0 True
+15 w a[@k] [] None True
+15 w a[@k][1] [] None True
+15 w a[1][@k] [] None True
+15 w b[c] [] None True
+15 w a[1]/b [] None True
+15 w */*[last()] ['11', '11'] 11 True
+15 w . ['w'] w True
+15 w a[3] [] None True
+15 w c[last()-2] [] None True
+15 w {}a[1] [] None True
+15 w a[b][last()] [] None True
+15 w .. [] None True
+15 w .//a/../b[1] [] None True
+15 8 a[1] [] None True
+15 8 a[last()] [] None True
+15 8 b[2] [] None True
+15 8 a[last()-1] [] None True
+15 8 *[1] ['9'] 9 True
+15 8 *[last()] ['9'] 9 True
+15 8 a/b[1] [] None True
+15 8 a/b[last()] [] None True
+15 8 */a[2] [] None True
+15 8 .//a[1] [] None True
+15 8 .//b[last()] ['9'] 9 True
+15 8 a[1]/.. [] None True
+15 8 b/.. ['8'] 8 True
+15 8 .//c/.. [] None True
+15 8 a[@k] [] None True
+15 8 a[@k][1] [] None True
+15 8 a[1][@k] [] None True
+15 8 b[c] [] None True
+15 8 a[1]/b [] None True
+15 8 */*[last()] [] None True
+15 8 . ['8'] 8 True
+15 8 a[3] [] None True
+15 8 c[last()-2] [] None True
+15 8 {}a[1] [] None True
+15 8 a[b][last()] [] None True
+15 8 .. [] None True
+15 8 .//a/../b[1] [] None True
+15 r a[1] [] None True
+15 r a[last()] [] None True
+15 r b[2] ['2'] 2 True
+15 r a[last()-1] [] None True
+15 r *[1] ['0'] 0 True
+15 r *[last()] ['11'] 11 True
+15 r a/b[1] [] None True
+15 r a/b[last()] [] None True
+15 r */a[2] [] None True
+15 r .//a[1] ['12', '7'] 12 True
+15 r .//b[last()] ['5', '4', '8', '9', '11'] 5 True
+15 r a[1]/.. [] None True
+15 r b/.. ['r'] r True
+15 r .//c/.. ['0', '4'] 0 True
+15 r a[@k] [] None True
+15 r a[@k][1] [] None True
+15 r a[1][@k] [] None True
+15 r b[c] ['0'] 0 True
+15 r a[1]/b [] None True
+15 r */*[last()] ['1', '4', '7', '8'] 1 True
+15 r . ['r'] r True
+15 r a[3] [] None True
+15 r c[last()-2] [] None True
+15 r {}a[1] [] None True
+15 r a[b][last()] [] None True
+15 r .. [] None True
+15 r .//a/../b[1] [] None True
+15 m ['m15_0'] ['r', 'm15_0']
+15 m ['m15_0'] ['r', 'm15_0', 'm15_1']
+15 m ['m15_0'] ['r', 'm15_0', 'm15_1', 'm15_2']
+15 m ['m15_0'] ['r', 'm15_0', 'm15_1', 'm15_2']
+15 m ['m15_0'] ['r', 'm15_0', 'm15_1', 'm15_2']
+15 m ['m15_0'] ['r', 'm15_0', 'm15_1', 'm15_2']
+17 r a[1] [] None True
+17 r a[last()] [] None True
+17 r b[2] [] None True
+17 r a[last()-1] [] None True
+17 r *[1] ['0', '1'] 0 True
+17 r *[last()] ['0', '1'] 0 True
+17 r a/b[1] [] None True
+17 r a/b[last()] [] None True
+17 r */a[2] ['6'] 6 True
+17 r .//a[1] ['3', '10', '13', '12', '11'] 3 True
+17 r .//b[last()] ['7', '1'] 7 True
+17 r a[1]/.. [] None True
+17 r b/.. ['r'] r True
+17 r .//c/.. ['r', '0', '3', '5', '6'] r True
+17 r a[@k] [] None True
+17 r a[@k][1] [] None True
+17 r a[1][@k] [] None True
+17 r b[c] [] None True
+17 r a[1]/b [] None True
+17 r */*[last()] ['6', '15'] 6 True
+17 r . ['r'] r True
+17 r a[3] [] None True
+17 r c[last()-2] [] None True
+17 r {}a[1] [] None True
+17 r a[b][last()] [] None True
+17 r .. [] None True
+17 r .//a/../b[1] ['7'] 7 True
+17 r a[1] [] None True
+17 r a[last()] [] None True
+17 r b[2] [] None True
+17 r a[last()-1] [] None True
+17 r *[1] ['0', '1'] 0 True
+17 r *[last()] ['0', '1'] 0 True
+17 r a/b[1] [] None True
+17 r a/b[last()] [] None True
+17 r */a[2] ['6'] 6 True
+17 r .//a[1] ['3', '10', '13', '12', '11'] 3 True
+17 r .//b[last()] ['7', '1'] 7 True
+17 r a[1]/.. [] None True
+17 r b/.. ['r'] r True
+17 r .//c/.. ['r', '0', '3', '5', '6'] r True
+17 r a[@k] [] None True
+17 r a[@k][1] [] None True
+17 r a[1][@k] [] None True
+17 r b[c] [] None True
+17 r a[1]/b [] None True
+17 r */*[last()] ['6', '15'] 6 True
+17 r . ['r'] r True
+17 r a[3] [] None True
+17 r c[last()-2] [] None True
+17 r {}a[1] [] None True
+17 r a[b][last()] [] None True
+17 r .. [] None True
+17 r .//a/../b[1] ['7'] 7 True
+17 10 a[1] [] None True
+17 10 a[last()] [] None True
+17 10 b[2] [] None True
+17 10 a[last()-1] [] None True
+17 10 *[1] [] None True
+17 10 *[last()] [] None True
+17 10 a/b[1] [] None True
+17 10 a/b[last()] [] None True
+17 10 */a[2] [] None True
+17 10 .//a[1] [] None True
+17 10 .//b[last()] [] None True
+17 10 a[1]/.. [] None True
+17 10 b/.. [] None True
+17 10 .//c/.. [] None True
+17 10 a[@k] [] None True
+17 10 a[@k][1] [] None True
+17 10 a[1][@k] [] None True
+17 10 b[c] [] None True
+17 10 a[1]/b [] None True
+17 10 */*[last()] [] None True
+17 10 . ['10'] 10 True
+17 10 a[3] [] None True
+17 10 c[last()-2] [] None True
+17 10 {}a[1] [] None True
+17 10 a[b][last()] [] None True
+17 10 .. [] None True
+17 10 .//a/../b[1] [] None True
+17 m [] ['0', '1']
+17 m [] ['0', '1']
+17 m [] ['0', '1']
+17 m [] ['0', '1']
+17 m [] ['0', '1']
+17 m ['m17_5'] ['0', '1', 'm17_5']
+18 r a[1] ['1'] 1 True
+18 r a[last()] ['1'] 1 True
+18 r b[2] [] None True
+18 r a[last()-1] [] None True
+18 r *[1] ['0', '1'] 0 True
+18 r *[last()] ['0', '1'] 0 True
+18 r a/b[1] [] None True
+18 r a/b[last()] [] None True
+18 r */a[2] [] None True
+18 r .//a[1] ['1'] 1 True
+18 r .//b[last()] ['3'] 3 True
+18 r a[1]/.. ['r'] r True
+18 r b/.. [] None True
+18 r .//c/.. ['r', '1'] r True
+18 r a[@k] [] None True
+18 r a[@k][1] [] None True
+18 r a[1][@k] [] None True
+18 r b[c] [] None True
+18 r a[1]/b [] None True
+18 r */*[last()] ['2'] 2 True
+18 r . ['r'] r True
+18 r a[3] [] None True
+18 r c[last()-2] [] None True
+18 r {}a[1] ['1'] 1 True
+18 r a[b][last()] [] None True
+18 r .. [] None True
+18 r .//a/../b[1] [] None True
+18 3 a[1] [] None True
+18 3 a[last()] [] None True
+18 3 b[2] [] None True
+18 3 a[last()-1] [] None True
+18 3 *[1] [] None True
+18 3 *[last()] [] None True
+18 3 a/b[1] [] None True
+18 3 a/b[last()] [] None True
+18 3 */a[2] [] None True
+18 3 .//a[1] [] None True
+18 3 .//b[last()] [] None True
+18 3 a[1]/.. [] None True
+18 3 b/.. [] None True
+18 3 .//c/.. [] None True
+18 3 a[@k] [] None True
+18 3 a[@k][1] [] None True
+18 3 a[1][@k] [] None True
+18 3 b[c] [] None True
+18 3 a[1]/b [] None True
+18 3 */*[last()] [] None True
+18 3 . ['3'] 3 True
+18 3 a[3] [] None True
+18 3 c[last()-2] [] None True
+18 3 {}a[1] [] None True
+18 3 a[b][last()] [] None True
+18 3 .. [] None True
+18 3 .//a/../b[1] [] None True
+18 r a[1] ['1'] 1 True
+18 r a[last()] ['1'] 1 True
+18 r b[2] [] None True
+18 r a[last()-1] [] None True
+18 r *[1] ['0', '1'] 0 True
+18 r *[last()] ['0', '1'] 0 True
+18 r a/b[1] [] None True
+18 r a/b[last()] [] None True
+18 r */a[2] [] None True
+18 r .//a[1] ['1'] 1 True
+18 r .//b[last()] ['3'] 3 True
+18 r a[1]/.. ['r'] r True
+18 r b/.. [] None True
+18 r .//c/.. ['r', '1'] r True
+18 r a[@k] [] None True
+18 r a[@k][1] [] None True
+18 r a[1][@k] [] None True
+18 r b[c] [] None True
+18 r a[1]/b [] None True
+18 r */*[last()] ['2'] 2 True
+18 r . ['r'] r True
+18 r a[3] [] None True
+18 r c[last()-2] [] None True
+18 r {}a[1] ['1'] 1 True
+18 r a[b][last()] [] None True
+18 r .. [] None True
+18 r .//a/../b[1] [] None True
+18 m ['1'] ['0', '1', 'm18_0']
+18 m ['1'] ['0', '1', 'm18_0']
+18 m ['m18_2'] ['0', '1', 'm18_0']
+18 m ['m18_3'] ['0', '1', 'm18_0']
+18 m ['m18_4'] ['0', '1', 'm18_0']
+18 m ['m18_4'] ['0', '1', 'm18_0']
+19 r a[1] [] None True
+19 r a[last()] [] None True
+19 r b[2] [] None True
+19 r a[last()-1] [] None True
+19 r *[1] ['0', '2'] 0 True
+19 r *[last()] ['0', '2'] 0 True
+19 r a/b[1] [] None True
+19 r a/b[last()] [] None True
+19 r */a[2] [] None True
+19 r .//a[1] [] None True
+19 r .//b[last()] ['2'] 2 True
+19 r a[1]/.. [] None True
+19 r b/.. ['r'] r True
+19 r .//c/.. ['r'] r True
+19 r a[@k] [] None True
+19 r a[@k][1] [] None True
+19 r a[1][@k] [] None True
+19 r b[c] [] None True
+19 r a[1]/b [] None True
+19 r */*[last()] [] None True
+19 r . ['r'] r True
+19 r a[3] [] None True
+19 r c[last()-2] [] None True
+19 r {}a[1] [] None True
+19 r a[b][last()] [] None True
+19 r .. [] None True
+19 r .//a/../b[1] [] None True
+19 0 a[1] [] None True
+19 0 a[last()] [] None True
+19 0 b[2] [] None True
+19 0 a[last()-1] [] None True
+19 0 *[1] [] None True
+19 0 *[last()] [] None True
+19 0 a/b[1] [] None True
+19 0 a/b[last()] [] None True
+19 0 */a[2] [] None True
+19 0 .//a[1] [] None True
+19 0 .//b[last()] [] None True
+19 0 a[1]/.. [] None True
+19 0 b/.. [] None True
+19 0 .//c/.. [] None True
+19 0 a[@k] [] None True
+19 0 a[@k][1] [] None True
+19 0 a[1][@k] [] None True
+19 0 b[c] [] None True
+19 0 a[1]/b [] None True
+19 0 */*[last()] [] None True
+19 0 . ['0'] 0 True
+19 0 a[3] [] None True
+19 0 c[last()-2] [] None True
+19 0 {}a[1] [] None True
+19 0 a[b][last()] [] None True
+19 0 .. [] None True
+19 0 .//a/../b[1] [] None True
+19 2 a[1] [] None True
+19 2 a[last()] [] None True
+19 2 b[2] [] None True
+19 2 a[last()-1] [] None True
+19 2 *[1] [] None True
+19 2 *[last()] [] None True
+19 2 a/b[1] [] None True
+19 2 a/b[last()] [] None True
+19 2 */a[2] [] None True
+19 2 .//a[1] [] None True
+19 2 .//b[last()] [] None True
+19 2 a[1]/.. [] None True
+19 2 b/.. [] None True
+19 2 .//c/.. [] None True
+19 2 a[@k] [] None True
+19 2 a[@k][1] [] None True
+19 2 a[1][@k] [] None True
+19 2 b[c] [] None True
+19 2 a[1]/b [] None True
+19 2 */*[last()] [] None True
+19 2 . ['2'] 2 True
+19 2 a[3] [] None True
+19 2 c[last()-2] [] None True
+19 2 {}a[1] [] None True
+19 2 a[b][last()] [] None True
+19 2 .. [] None True
+19 2 .//a/../b[1] [] None True
+19 m ['m19_0'] ['0', '2', 'm19_0']
+19 m ['m19_0'] ['0', '2', 'm19_0']
+19 m ['m19_0'] ['0', '2', 'm19_0']
+19 m ['m19_0'] ['0', '2', 'm19_0']
+19 m ['m19_0'] ['0', '2', 'm19_0']
+19 m ['m19_0'] ['0', '2', 'm19_0']
+20 r a[1] ['1'] 1 True
+20 r a[last()] ['6'] 6 True
+20 r b[2] ['5'] 5 True
+20 r a[last()-1] ['1'] 1 True
+20 r *[1] ['0', '1', '3'] 0 True
+20 r *[last()] ['0', '5', '6'] 0 True
+20 r a/b[1] ['7'] 7 True
+20 r a/b[last()] ['7'] 7 True
+20 r */a[2] [] None True
+20 r .//a[1] ['1', '2', '8'] 1 True
+20 r .//b[last()] ['9', '10', '7', '5'] 9 True
+20 r a[1]/.. ['r'] r True
+20 r b/.. ['r'] r True
+20 r .//c/.. ['r', '0'] r True
+20 r a[@k] ['6'] 6 True
+20 r a[@k][1] [] None True
+20 r a[1][@k] [] None True
+20 r b[c] [] None True
+20 r a[1]/b ['7'] 7 True
+20 r */*[last()] ['4', '2', '7'] 4 True
+20 r . ['r'] r True
+20 r a[3] [] None True
+20 r c[last()-2] [] None True
+20 r {}a[1] ['1'] 1 True
+20 r a[b][last()] [] None True
+20 r .. [] None True
+20 r .//a/../b[1] ['3', '7', '9'] 3 True
+20 5 a[1] [] None True
+20 5 a[last()] [] None True
+20 5 b[2] [] None True
+20 5 a[last()-1] [] None True
+20 5 *[1] [] None True
+20 5 *[last()] [] None True
+20 5 a/b[1] [] None True
+20 5 a/b[last()] [] None True
+20 5 */a[2] [] None True
+20 5 .//a[1] [] None True
+20 5 .//b[last()] [] None True
+20 5 a[1]/.. [] None True
+20 5 b/.. [] None True
+20 5 .//c/.. [] None True
+20 5 a[@k] [] None True
+20 5 a[@k][1] [] None True
+20 5 a[1][@k] [] None True
+20 5 b[c] [] None True
+20 5 a[1]/b [] None True
+20 5 */*[last()] [] None True
+20 5 . ['5'] 5 True
+20 5 a[3] [] None True
+20 5 c[last()-2] [] None True
+20 5 {}a[1] [] None True
+20 5 a[b][last()] [] None True
+20 5 .. [] None True
+20 5 .//a/../b[1] [] None True
+20 5 a[1] [] None True
+20 5 a[last()] [] None True
+20 5 b[2] [] None True
+20 5 a[last()-1] [] None True
+20 5 *[1] [] None True
+20 5 *[last()] [] None True
+20 5 a/b[1] [] None True
+20 5 a/b[last()] [] None True
+20 5 */a[2] [] None True
+20 5 .//a[1] [] None True
+20 5 .//b[last()] [] None True
+20 5 a[1]/.. [] None True
+20 5 b/.. [] None True
+20 5 .//c/.. [] None True
+20 5 a[@k] [] None True
+20 5 a[@k][1] [] None True
+20 5 a[1][@k] [] None True
+20 5 b[c] [] None True
+20 5 a[1]/b [] None True
+20 5 */*[last()] [] None True
+20 5 . ['5'] 5 True
+20 5 a[3] [] None True
+20 5 c[last()-2] [] None True
+20 5 {}a[1] [] None True
+20 5 a[b][last()] [] None True
+20 5 .. [] None True
+20 5 .//a/../b[1] [] None True
+20 m ['6'] ['0', '1', '3']
+20 m ['6'] ['0', '1', '3']
+20 m ['6'] ['0', '1', '3']
+20 m ['6'] ['0', '1', '3']
+20 m ['m20_4'] ['0', '1', '3']
+20 m ['m20_4'] ['0', '1', '3']
+21 r a[1] [] None True
+21 r a[last()] [] None True
+21 r b[2] ['2'] 2 True
+21 r a[last()-1] [] None True
+21 r *[1] ['0', '1'] 0 True
+21 r *[last()] ['0', '2'] 0 True
+21 r a/b[1] [] None True
+21 r a/b[last()] [] None True
+21 r */a[2] [] None True
+21 r .//a[1] ['4', '5'] 4 True
+21 r .//b[last()] ['3', '2'] 3 True
+21 r a[1]/.. [] None True
+21 r b/.. ['r'] r True
+21 r .//c/.. ['r'] r True
+21 r a[@k] [] None True
+21 r a[@k][1] [] None True
+21 r a[1][@k] [] None True
+21 r b[c] [] None True
+21 r a[1]/b [] None True
+21 r */*[last()] ['3', '4', '5'] 3 True
+21 r . ['r'] r True
+21 r a[3] [] None True
+21 r c[last()-2] [] None True
+21 r {}a[1] [] None True
+21 r a[b][last()] [] None True
+21 r .. [] None True
+21 r .//a/../b[1] ['3'] 3 True
+21 0 a[1] [] None True
+21 0 a[last()] [] None True
+21 0 b[2] [] None True
+21 0 a[last()-1] [] None True
+21 0 *[1] [] None True
+21 0 *[last()] [] None True
+21 0 a/b[1] [] None True
+21 0 a/b[last()] [] None True
+21 0 */a[2] [] None True
+21 0 .//a[1] [] None True
+21 0 .//b[last()] [] None True
+21 0 a[1]/.. [] None True
+21 0 b/.. [] None True
+21 0 .//c/.. [] None True
+21 0 a[@k] [] None True
+21 0 a[@k][1] [] None True
+21 0 a[1][@k] [] None True
+21 0 b[c] [] None True
+21 0 a[1]/b [] None True
+21 0 */*[last()] [] None True
+21 0 . ['0'] 0 True
+21 0 a[3] [] None True
+21 0 c[last()-2] [] None True
+21 0 {}a[1] [] None True
+21 0 a[b][last()] [] None True
+21 0 .. [] None True
+21 0 .//a/../b[1] [] None True
+21 3 a[1] [] None True
+21 3 a[last()] [] None True
+21 3 b[2] [] None True
+21 3 a[last()-1] [] None True
+21 3 *[1] [] None True
+21 3 *[last()] [] None True
+21 3 a/b[1] [] None True
+21 3 a/b[last()] [] None True
+21 3 */a[2] [] None True
+21 3 .//a[1] [] None True
+21 3 .//b[last()] [] None True
+21 3 a[1]/.. [] None True
+21 3 b/.. [] None True
+21 3 .//c/.. [] None True
+21 3 a[@k] [] None True
+21 3 a[@k][1] [] None True
+21 3 a[1][@k] [] None True
+21 3 b[c] [] None True
+21 3 a[1]/b [] None True
+21 3 */*[last()] [] None True
+21 3 . ['3'] 3 True
+21 3 a[3] [] None True
+21 3 c[last()-2] [] None True
+21 3 {}a[1] [] None True
+21 3 a[b][last()] [] None True
+21 3 .. [] None True
+21 3 .//a/../b[1] [] None True
+21 m [] ['0', '1']
+21 m [] ['0', '1']
+21 m [] ['0', '1']
+21 m [] ['0', '1']
+21 m [] ['0', '1']
+21 m ['m21_5'] ['0', '1', 'm21_5']
+22 w a[1] [] None True
+22 w a[last()] [] None True
+22 w b[2] [] None True
+22 w a[last()-1] [] None True
+22 w *[1] ['r'] r True
+22 w *[last()] ['r'] r True
+22 w a/b[1] [] None True
+22 w a/b[last()] [] None True
+22 w */a[2] [] None True
+22 w .//a[1] ['4', '17', '9', '10', '4', '17', '9', '10'] 4 True
+22 w .//b[last()] ['11', '19', '20', '2', '7', '16', '11', '19', '20', '2', '7', '16'] 11 True
+22 w a[1]/.. [] None True
+22 w b/.. [] None True
+22 w .//c/.. ['1', '2', '3', '7', '6'] 1 True
+22 w a[@k] [] None True
+22 w a[@k][1] [] None True
+22 w a[1][@k] [] None True
+22 w b[c] [] None True
+22 w a[1]/b [] None True
+22 w */*[last()] ['2', '2'] 2 True
+22 w . ['w'] w True
+22 w a[3] [] None True
+22 w c[last()-2] [] None True
+22 w {}a[1] [] None True
+22 w a[b][last()] [] None True
+22 w .. [] None True
+22 w .//a/../b[1] ['1'] 1 True
+22 6 a[1] [] None True
+22 6 a[last()] [] None True
+22 6 b[2] [] None True
+22 6 a[last()-1] [] None True
+22 6 *[1] ['7', '15'] 7 True
+22 6 *[last()] ['7', '15'] 7 True
+22 6 a/b[1] [] None True
+22 6 a/b[last()] [] None True
+22 6 */a[2] [] None True
+22 6 .//a[1] [] None True
+22 6 .//b[last()] ['7', '16'] 7 True
+22 6 a[1]/.. [] None True
+22 6 b/.. ['6'] 6 True
+22 6 .//c/.. ['7', '6'] 7 True
+22 6 a[@k] [] None True
+22 6 a[@k][1] [] None True
+22 6 a[1][@k] [] None True
+22 6 b[c] ['7'] 7 True
+22 6 a[1]/b [] None True
+22 6 */*[last()] ['12', '16'] 12 True
+22 6 . ['6'] 6 True
+22 6 a[3] [] None True
+22 6 c[last()-2] [] None True
+22 6 {}a[1] [] None True
+22 6 a[b][last()] [] None True
+22 6 .. [] None True
+22 6 .//a/../b[1] [] None True
+22 19 a[1] [] None True
+22 19 a[last()] [] None True
+22 19 b[2] [] None True
+22 19 a[last()-1] [] None True
+22 19 *[1] ['20'] 20 True
+22 19 *[last()] ['20'] 20 True
+22 19 a/b[1] [] None True
+22 19 a/b[last()] [] None True
+22 19 */a[2] [] None True
+22 19 .//a[1] [] None True
+22 19 .//b[last()] ['20'] 20 True
+22 19 a[1]/.. [] None True
+22 19 b/.. ['19'] 19 True
+22 19 .//c/.. [] None True
+22 19 a[@k] [] None True
+22 19 a[@k][1] [] None True
+22 19 a[1][@k] [] None True
+22 19 b[c] [] None True
+22 19 a[1]/b [] None True
+22 19 */*[last()] [] None True
+22 19 . ['19'] 19 True
+22 19 a[3] [] None True
+22 19 c[last()-2] [] None True
+22 19 {}a[1] [] None True
+22 19 a[b][last()] [] None True
+22 19 .. [] None True
+22 19 .//a/../b[1] [] None True
+22 m [] ['r', 'm22_0']
+22 m ['m22_1'] ['r', 'm22_0', 'm22_1']
+22 m ['m22_1'] ['r', 'm22_0', 'm22_1']
+22 m ['m22_1'] ['r', 'm22_0', 'm22_1']
+22 m ['m22_4'] ['r', 'm22_0', 'm22_1']
+22 m ['m22_4'] ['r', 'm22_0', 'm22_1', 'm22_5']
+23 r a[1] ['0'] 0 True
+23 r a[last()] ['8'] 8 True
+23 r b[2] [] None True
+23 r a[last()-1] ['1'] 1 True
+23 r *[1] ['0', '2'] 0 True
+23 r *[last()] ['2', '8'] 2 True
+23 r a/b[1] [] None True
+23 r a/b[last()] [] None True
+23 r */a[2] ['7'] 7 True
+23 r .//a[1] ['0', '4', '3'] 0 True
+23 r .//b[last()] ['5', '16', '17'] 5 True
+23 r a[1]/.. ['r'] r True
+23 r b/.. [] None True
+23 r .//c/.. ['4', '10', '3', '9', '14', 'r', '2', '8'] 4 True
+23 r a[@k] ['0'] 0 True
+23 r a[@k][1] ['0'] 0 True
+23 r a[1][@k] ['0'] 0 True
+23 r b[c] [] None True
+23 r a[1]/b [] None True
+23 r */*[last()] ['10', '3', '6', '17', '12'] 10 True
+23 r . ['r'] r True
+23 r a[3] ['8'] 8 True
+23 r c[last()-2] [] None True
+23 r {}a[1] ['0'] 0 True
+23 r a[b][last()] [] None True
+23 r .. [] None True
+23 r .//a/../b[1] [] None True
+23 17 a[1] [] None True
+23 17 a[last()] [] None True
+23 17 b[2] [] None True
+23 17 a[last()-1] [] None True
+23 17 *[1] [] None True
+23 17 *[last()] [] None True
+23 17 a/b[1] [] None True
+23 17 a/b[last()] [] None True
+23 17 */a[2] [] None True
+23 17 .//a[1] [] None True
+23 17 .//b[last()] [] None True
+23 17 a[1]/.. [] None True
+23 17 b/.. [] None True
+23 17 .//c/.. [] None True
+23 17 a[@k] [] None True
+23 17 a[@k][1] [] None True
+23 17 a[1][@k] [] None True
+23 17 b[c] [] None True
+23 17 a[1]/b [] None True
+23 17 */*[last()] [] None True
+23 17 . ['17'] 17 True
+23 17 a[3] [] None True
+23 17 c[last()-2] [] None True
+23 17 {}a[1] [] None True
+23 17 a[b][last()] [] None True
+23 17 .. [] None True
+23 17 .//a/../b[1] [] None True
+23 17 a[1] [] None True
+23 17 a[last()] [] None True
+23 17 b[2] [] None True
+23 17 a[last()-1] [] None True
+23 17 *[1] [] None True
+23 17 *[last()] [] None True
+23 17 a/b[1] [] None True
+23 17 a/b[last()] [] None True
+23 17 */a[2] [] None True
+23 17 .//a[1] [] None True
+23 17 .//b[last()] [] None True
+23 17 a[1]/.. [] None True
+23 17 b/.. [] None True
+23 17 .//c/.. [] None True
+23 17 a[@k] [] None True
+23 17 a[@k][1] [] None True
+23 17 a[1][@k] [] None True
+23 17 b[c] [] None True
+23 17 a[1]/b [] None True
+23 17 */*[last()] [] None True
+23 17 . ['17'] 17 True
+23 17 a[3] [] None True
+23 17 c[last()-2] [] None True
+23 17 {}a[1] [] None True
+23 17 a[b][last()] [] None True
+23 17 .. [] None True
+23 17 .//a/../b[1] [] None True
+23 m ['8'] ['0', '2']
+23 m ['m23_1'] ['0', '2']
+23 m ['m23_1'] ['0', '2']
+23 m ['m23_1'] ['0', '2', 'm23_3']
+23 m ['m23_1'] ['0', '2', 'm23_3']
+23 m ['m23_1'] ['0', '2', 'm23_3']
+24 r a[1] [] None True
+24 r a[last()] [] None True
+24 r b[2] [] None True
+24 r a[last()-1] [] None True
+24 r *[1] ['0'] 0 True
+24 r *[last()] ['0'] 0 True
+24 r a/b[1] [] None True
+24 r a/b[last()] [] None True
+24 r */a[2] [] None True
+24 r .//a[1] ['1'] 1 True
+24 r .//b[last()] ['0'] 0 True
+24 r a[1]/.. [] None True
+24 r b/.. ['r'] r True
+24 r .//c/.. ['0'] 0 True
+24 r a[@k] [] None True
+24 r a[@k][1] [] None True
+24 r a[1][@k] [] None True
+24 r b[c] ['0'] 0 True
+24 r a[1]/b [] None True
+24 r */*[last()] ['1', '2'] 1 True
+24 r . ['r'] r True
+24 r a[3] [] None True
+24 r c[last()-2] [] None True
+24 r {}a[1] [] None True
+24 r a[b][last()] [] None True
+24 r .. [] None True
+24 r .//a/../b[1] [] None True
+24 1 a[1] [] None True
+24 1 a[last()] [] None True
+24 1 b[2] [] None True
+24 1 a[last()-1] [] None True
+24 1 *[1] [] None True
+24 1 *[last()] [] None True
+24 1 a/b[1] [] None True
+24 1 a/b[last()] [] None True
+24 1 */a[2] [] None True
+24 1 .//a[1] [] None True
+24 1 .//b[last()] [] None True
+24 1 a[1]/.. [] None True
+24 1 b/.. [] None True
+24 1 .//c/.. [] None True
+24 1 a[@k] [] None True
+24 1 a[@k][1] [] None True
+24 1 a[1][@k] [] None True
+24 1 b[c] [] None True
+24 1 a[1]/b [] None True
+24 1 */*[last()] [] None True
+24 1 . ['1'] 1 True
+24 1 a[3] [] None True
+24 1 c[last()-2] [] None True
+24 1 {}a[1] [] None True
+24 1 a[b][last()] [] None True
+24 1 .. [] None True
+24 1 .//a/../b[1] [] None True
+24 r a[1] [] None True
+24 r a[last()] [] None True
+24 r b[2] [] None True
+24 r a[last()-1] [] None True
+24 r *[1] ['0'] 0 True
+24 r *[last()] ['0'] 0 True
+24 r a/b[1] [] None True
+24 r a/b[last()] [] None True
+24 r */a[2] [] None True
+24 r .//a[1] ['1'] 1 True
+24 r .//b[last()] ['0'] 0 True
+24 r a[1]/.. [] None True
+24 r b/.. ['r'] r True
+24 r .//c/.. ['0'] 0 True
+24 r a[@k] [] None True
+24 r a[@k][1] [] None True
+24 r a[1][@k] [] None True
+24 r b[c] ['0'] 0 True
+24 r a[1]/b [] None True
+24 r */*[last()] ['1', '2'] 1 True
+24 r . ['r'] r True
+24 r a[3] [] None True
+24 r c[last()-2] [] None True
+24 r {}a[1] [] None True
+24 r a[b][last()] [] None True
+24 r .. [] None True
+24 r .//a/../b[1] [] None True
+24 m ['m24_0'] ['0', 'm24_0']
+24 m ['m24_0'] ['0', 'm24_0']
+24 m ['m24_2'] ['0', 'm24_0']
+24 m ['m24_2'] ['0', 'm24_0', 'm24_3']
+24 m ['m24_4'] ['0', 'm24_0', 'm24_3']
+24 m ['m24_4'] ['0', 'm24_0', 'm24_3']
+25 r a[1] ['0'] 0 True
+25 r a[last()] ['0'] 0 True
+25 r b[2] ['3'] 3 True
+25 r a[last()-1] [] None True
+25 r *[1] ['0', '1', '2'] 0 True
+25 r *[last()] ['0', '3', '7'] 0 True
+25 r a/b[1] ['4'] 4 True
+25 r a/b[last()] ['4'] 4 True
+25 r */a[2] [] None True
+25 r .//a[1] ['0', '10', '20', '22', '14', '11', '13'] 0 True
+25 r .//b[last()] ['4', '9', '17', '23', '3', '18'] 4 True
+25 r a[1]/.. ['r'] r True
+25 r b/.. ['r'] r True
+25 r .//c/.. ['5', '1', '6', '12', 'r'] 5 True
+25 r a[@k] [] None True
+25 r a[@k][1] [] None True
+25 r a[1][@k] [] None True
+25 r b[c] ['1'] 1 True
+25 r a[1]/b ['4'] 4 True
+25 r */*[last()] ['4', '22', '8', '13', '18'] 4 True
+25 r . ['r'] r True
+25 r a[3] [] None True
+25 r c[last()-2] [] None True
+25 r {}a[1] ['0'] 0 True
+25 r a[b][last()] ['0'] 0 True
+25 r .. [] None True
+25 r .//a/../b[1] ['1', '5', '16', '4', '23'] 1 True
+25 19 a[1] [] None True
+25 19 a[last()] [] None True
+25 19 b[2] [] None True
+25 19 a[last()-1] [] None True
+25 19 *[1] [] None True
+25 19 *[last()] [] None True
+25 19 a/b[1] [] None True
+25 19 a/b[last()] [] None True
+25 19 */a[2] [] None True
+25 19 .//a[1] [] None True
+25 19 .//b[last()] [] None True
+25 19 a[1]/.. [] None True
+25 19 b/.. [] None True
+25 19 .//c/.. [] None True
+25 19 a[@k] [] None True
+25 19 a[@k][1] [] None True
+25 19 a[1][@k] [] None True
+25 19 b[c] [] None True
+25 19 a[1]/b [] None True
+25 19 */*[last()] [] None True
+25 19 . ['19'] 19 True
+25 19 a[3] [] None True
+25 19 c[last()-2] [] None True
+25 19 {}a[1] [] None True
+25 19 a[b][last()] [] None True
+25 19 .. [] None True
+25 19 .//a/../b[1] [] None True
+25 0 a[1] ['22'] 22 True
+25 0 a[last()] ['22'] 22 True
+25 0 b[2] [] None True
+25 0 a[last()-1] [] None True
+25 0 *[1] ['4', '22'] 4 True
+25 0 *[last()] ['4', '22'] 4 True
+25 0 a/b[1] [] None True
+25 0 a/b[last()] [] None True
+25 0 */a[2] [] None True
+25 0 .//a[1] ['10', '20', '22'] 10 True
+25 0 .//b[last()] ['4', '9', '17'] 4 True
+25 0 a[1]/.. ['0'] 0 True
+25 0 b/.. ['0'] 0 True
+25 0 .//c/.. ['5'] 5 True
+25 0 a[@k] ['22'] 22 True
+25 0 a[@k][1] ['22'] 22 True
+25 0 a[1][@k] ['22'] 22 True
+25 0 b[c] [] None True
+25 0 a[1]/b [] None True
+25 0 */*[last()] ['9', '10'] 9 True
+25 0 . ['0'] 0 True
+25 0 a[3] [] None True
+25 0 c[last()-2] [] None True
+25 0 {}a[1] ['22'] 22 True
+25 0 a[b][last()] [] None True
+25 0 .. [] None True
+25 0 .//a/../b[1] ['5', '16', '4'] 5 True
+25 m ['0'] ['0', '1', '2']
+25 m ['0'] ['0', '1', '2']
+25 m ['0'] ['0', '1', '2']
+25 m ['0'] ['0', '1', '2']
+25 m ['m25_4'] ['0', '1', '2']
+25 m ['m25_4'] ['0', '1', '2']
+26 r a[1] [] None True
+26 r a[last()] [] None True
+26 r b[2] ['2'] 2 True
+26 r a[last()-1] [] None True
+26 r *[1] ['0', '1'] 0 True
+26 r *[last()] ['0', '14'] 0 True
+26 r a/b[1] [] None True
+26 r a/b[last()] [] None True
+26 r */a[2] ['5'] 5 True
+26 r .//a[1] ['9', '18', '3', '12', '13', '10', 'n0', '17'] 9 True
+26 r .//b[last()] ['8', '7', '11', '22', '15', '14'] 8 True
+26 r a[1]/.. [] None True
+26 r b/.. ['r'] r True
+26 r .//c/.. ['r', '1', '18', '13', '5'] r True
+26 r a[@k] [] None True
+26 r a[@k][1] [] None True
+26 r a[1][@k] [] None True
+26 r b[c] ['1'] 1 True
+26 r a[1]/b [] None True
+26 r */*[last()] ['8', '6', '18', '5', '17'] 8 True
+26 r . ['r'] r True
+26 r a[3] [] None True
+26 r c[last()-2] [] None True
+26 r {}a[1] [] None True
+26 r a[b][last()] [] None True
+26 r .. [] None True
+26 r .//a/../b[1] ['15'] 15 True
+26 0 a[1] [] None True
+26 0 a[last()] [] None True
+26 0 b[2] [] None True
+26 0 a[last()-1] [] None True
+26 0 *[1] ['8'] 8 True
+26 0 *[last()] ['8'] 8 True
+26 0 a/b[1] [] None True
+26 0 a/b[last()] [] None True
+26 0 */a[2] [] None True
+26 0 .//a[1] [] None True
+26 0 .//b[last()] ['8'] 8 True
+26 0 a[1]/.. [] None True
+26 0 b/.. ['0'] 0 True
+26 0 .//c/.. [] None True
+26 0 a[@k] [] None True
+26 0 a[@k][1] [] None True
+26 0 a[1][@k] [] None True
+26 0 b[c] [] None True
+26 0 a[1]/b [] None True
+26 0 */*[last()] [] None True
+26 0 . ['0'] 0 True
+26 0 a[3] [] None True
+26 0 c[last()-2] [] None True
+26 0 {}a[1] [] None True
+26 0 a[b][last()] [] None True
+26 0 .. [] None True
+26 0 .//a/../b[1] [] None True
+26 9 a[1] [] None True
+26 9 a[last()] [] None True
+26 9 b[2] [] None True
+26 9 a[last()-1] [] None True
+26 9 *[1] [] None True
+26 9 *[last()] [] None True
+26 9 a/b[1] [] None True
+26 9 a/b[last()] [] None True
+26 9 */a[2] [] None True
+26 9 .//a[1] [] None True
+26 9 .//b[last()] [] None True
+26 9 a[1]/.. [] None True
+26 9 b/.. [] None True
+26 9 .//c/.. [] None True
+26 9 a[@k] [] None True
+26 9 a[@k][1] [] None True
+26 9 a[1][@k] [] None True
+26 9 b[c] [] None True
+26 9 a[1]/b [] None True
+26 9 */*[last()] [] None True
+26 9 . ['9'] 9 True
+26 9 a[3] [] None True
+26 9 c[last()-2] [] None True
+26 9 {}a[1] [] None True
+26 9 a[b][last()] [] None True
+26 9 .. [] None True
+26 9 .//a/../b[1] [] None True
+26 m [] ['0', '1']
+26 m [] ['0', '1']
+26 m [] ['0', '1']
+26 m [] ['0', '1']
+26 m ['m26_4'] ['0', '1', 'm26_4']
+26 m ['m26_4'] ['0', '1', 'm26_4']
+27 r a[1] [] None True
+27 r a[last()] [] None True
+27 r b[2] [] None True
+27 r a[last()-1] [] None True
+27 r *[1] ['0', '5'] 0 True
+27 r *[last()] ['5', '9'] 5 True
+27 r a/b[1] [] None True
+27 r a/b[last()] [] None True
+27 r */a[2] ['3'] 3 True
+27 r .//a[1] ['4', '2'] 4 True
+27 r .//b[last()] ['13', '11', '5'] 13 True
+27 r a[1]/.. [] None True
+27 r b/.. ['r'] r True
+27 r .//c/.. ['r', '1', '3', '0'] r True
+27 r a[@k] [] None True
+27 r a[@k][1] [] None True
+27 r a[1][@k] [] None True
+27 r b[c] [] None True
+27 r a[1]/b [] None True
+27 r */*[last()] ['3', '6', '11'] 3 True
+27 r . ['r'] r True
+27 r a[3] [] None True
+27 r c[last()-2] [] None True
+27 r {}a[1] [] None True
+27 r a[b][last()] [] None True
+27 r .. [] None True
+27 r .//a/../b[1] ['1'] 1 True
+27 r a[1] [] None True
+27 r a[last()] [] None True
+27 r b[2] [] None True
+27 r a[last()-1] [] None True
+27 r *[1] ['0', '5'] 0 True
+27 r *[last()] ['5', '9'] 5 True
+27 r a/b[1] [] None True
+27 r a/b[last()] [] None True
+27 r */a[2] ['3'] 3 True
+27 r .//a[1] ['4', '2'] 4 True
+27 r .//b[last()] ['13', '11', '5'] 13 True
+27 r a[1]/.. [] None True
+27 r b/.. ['r'] r True
+27 r .//c/.. ['r', '1', '3', '0'] r True
+27 r a[@k] [] None True
+27 r a[@k][1] [] None True
+27 r a[1][@k] [] None True
+27 r b[c] [] None True
+27 r a[1]/b [] None True
+27 r */*[last()] ['3', '6', '11'] 3 True
+27 r . ['r'] r True
+27 r a[3] [] None True
+27 r c[last()-2] [] None True
+27 r {}a[1] [] None True
+27 r a[b][last()] [] None True
+27 r .. [] None True
+27 r .//a/../b[1] ['1'] 1 True
+27 6 a[1] [] None True
+27 6 a[last()] [] None True
+27 6 b[2] [] None True
+27 6 a[last()-1] [] None True
+27 6 *[1] [] None True
+27 6 *[last()] [] None True
+27 6 a/b[1] [] None True
+27 6 a/b[last()] [] None True
+27 6 */a[2] [] None True
+27 6 .//a[1] [] None True
+27 6 .//b[last()] [] None True
+27 6 a[1]/.. [] None True
+27 6 b/.. [] None True
+27 6 .//c/.. [] None True
+27 6 a[@k] [] None True
+27 6 a[@k][1] [] None True
+27 6 a[1][@k] [] None True
+27 6 b[c] [] None True
+27 6 a[1]/b [] None True
+27 6 */*[last()] [] None True
+27 6 . ['6'] 6 True
+27 6 a[3] [] None True
+27 6 c[last()-2] [] None True
+27 6 {}a[1] [] None True
+27 6 a[b][last()] [] None True
+27 6 .. [] None True
+27 6 .//a/../b[1] [] None True
+27 m [] ['0', '5']
+27 m [] ['0', '5']
+27 m [] ['0', '5']
+27 m [] ['0', '5']
+27 m [] ['0', '5']
+27 m ['m27_5'] ['0', '5', 'm27_5']
+28 r a[1] ['1'] 1 True
+28 r a[last()] ['3'] 3 True
+28 r b[2] [] None True
+28 r a[last()-1] ['1'] 1 True
+28 r *[1] ['0', '1'] 0 True
+28 r *[last()] ['2', '3'] 2 True
+28 r a/b[1] ['n0', '5'] n0 True
+28 r a/b[last()] ['n0', '5'] n0 True
+28 r */a[2] [] None True
+28 r .//a[1] ['6', '11', '1', '9'] 6 True
+28 r .//b[last()] ['10', '7', 'n0', '5'] 10 True
+28 r a[1]/.. ['r'] r True
+28 r b/.. [] None True
+28 r .//c/.. ['r', '6'] r True
+28 r a[@k] ['3'] 3 True
+28 r a[@k][1] [] None True
+28 r a[1][@k] [] None True
+28 r b[c] [] None True
+28 r a[1]/b ['n0'] n0 True
+28 r */*[last()] ['6', '7', 'n0', '5'] 6 True
+28 r . ['r'] r True
+28 r a[3] [] None True
+28 r c[last()-2] [] None True
+28 r {}a[1] ['1'] 1 True
+28 r a[b][last()] ['3'] 3 True
+28 r .. [] None True
+28 r .//a/../b[1] ['4'] 4 True
+28 0 a[1] ['6'] 6 True
+28 0 a[last()] ['6'] 6 True
+28 0 b[2] ['7'] 7 True
+28 0 a[last()-1] [] None True
+28 0 *[1] ['4', '6'] 4 True
+28 0 *[last()] ['6', '7'] 6 True
+28 0 a/b[1] ['10'] 10 True
+28 0 a/b[last()] ['10'] 10 True
+28 0 */a[2] [] None True
+28 0 .//a[1] ['6', '11'] 6 True
+28 0 .//b[last()] ['10', '7'] 10 True
+28 0 a[1]/.. ['0'] 0 True
+28 0 b/.. ['0'] 0 True
+28 0 .//c/.. ['6'] 6 True
+28 0 a[@k] [] None True
+28 0 a[@k][1] [] None True
+28 0 a[1][@k] [] None True
+28 0 b[c] [] None True
+28 0 a[1]/b ['10'] 10 True
+28 0 */*[last()] ['8', '10'] 8 True
+28 0 . ['0'] 0 True
+28 0 a[3] [] None True
+28 0 c[last()-2] [] None True
+28 0 {}a[1] ['6'] 6 True
+28 0 a[b][last()] ['6'] 6 True
+28 0 .. [] None True
+28 0 .//a/../b[1] ['4'] 4 True
+28 4 a[1] [] None True
+28 4 a[last()] [] None True
+28 4 b[2] [] None True
+28 4 a[last()-1] [] None True
+28 4 *[1] [] None True
+28 4 *[last()] [] None True
+28 4 a/b[1] [] None True
+28 4 a/b[last()] [] None True
+28 4 */a[2] [] None True
+28 4 .//a[1] [] None True
+28 4 .//b[last()] [] None True
+28 4 a[1]/.. [] None True
+28 4 b/.. [] None True
+28 4 .//c/.. [] None True
+28 4 a[@k] [] None True
+28 4 a[@k][1] [] None True
+28 4 a[1][@k] [] None True
+28 4 b[c] [] None True
+28 4 a[1]/b [] None True
+28 4 */*[last()] [] None True
+28 4 . ['4'] 4 True
+28 4 a[3] [] None True
+28 4 c[last()-2] [] None True
+28 4 {}a[1] [] None True
+28 4 a[b][last()] [] None True
+28 4 .. [] None True
+28 4 .//a/../b[1] [] None True
+28 m ['3'] ['0', '1']
+28 m ['3'] ['0', '1']
+28 m ['m28_2'] ['0', '1']
+28 m ['m28_2'] ['0', '1']
+28 m ['m28_2'] ['0', '1', 'm28_4']
+28 m ['m28_5'] ['0', '1', 'm28_4']
+29 w a[1] [] None True
+29 w a[last()] [] None True
+29 w b[2] [] None True
+29 w a[last()-1] [] None True
+29 w *[1] ['r'] r True
+29 w *[last()] ['r'] r True
+29 w a/b[1] [] None True
+29 w a/b[last()] [] None True
+29 w */a[2] [] None True
+29 w .//a[1] ['2', '12', '8', '10', '2', '12', '8', '10'] 2 True
+29 w .//b[last()] ['4', '7', '5', '11', '4', '7', '5', '11'] 4 True
+29 w a[1]/.. [] None True
+29 w b/.. [] None True
+29 w .//c/.. ['r', '0', '4'] r True
+29 w a[@k] [] None True
+29 w a[@k][1] [] None True
+29 w a[1][@k] [] None True
+29 w b[c] [] None True
+29 w a[1]/b [] None True
+29 w */*[last()] ['0', '10', '11', '0', '10', '11'] 0 True
+29 w . ['w'] w True
+29 w a[3] [] None True
+29 w c[last()-2] [] None True
+29 w {}a[1] [] None True
+29 w a[b][last()] [] None True
+29 w .. [] None True
+29 w .//a/../b[1] ['11'] 11 True
+29 10 a[1] [] None True
+29 10 a[last()] [] None True
+29 10 b[2] [] None True
+29 10 a[last()-1] [] None True
+29 10 *[1] [] None True
+29 10 *[last()] [] None True
+29 10 a/b[1] [] None True
+29 10 a/b[last()] [] None True
+29 10 */a[2] [] None True
+29 10 .//a[1] [] None True
+29 10 .//b[last()] [] None True
+29 10 a[1]/.. [] None True
+29 10 b/.. [] None True
+29 10 .//c/.. [] None True
+29 10 a[@k] [] None True
+29 10 a[@k][1] [] None True
+29 10 a[1][@k] [] None True
+29 10 b[c] [] None True
+29 10 a[1]/b [] None True
+29 10 */*[last()] [] None True
+29 10 . ['10'] 10 True
+29 10 a[3] [] None True
+29 10 c[last()-2] [] None True
+29 10 {}a[1] [] None True
+29 10 a[b][last()] [] None True
+29 10 .. [] None True
+29 10 .//a/../b[1] [] None True
+29 1 a[1] ['2'] 2 True
+29 1 a[last()] ['9'] 9 True
+29 1 b[2] [] None True
+29 1 a[last()-1] ['2'] 2 True
+29 1 *[1] ['2'] 2 True
+29 1 *[last()] ['9'] 9 True
+29 1 a/b[1] ['4'] 4 True
+29 1 a/b[last()] ['4'] 4 True
+29 1 */a[2] [] None True
+29 1 .//a[1] ['2', '12'] 2 True
+29 1 .//b[last()] ['4'] 4 True
+29 1 a[1]/.. ['1'] 1 True
+29 1 b/.. [] None True
+29 1 .//c/.. ['4'] 4 True
+29 1 a[@k] [] None True
+29 1 a[@k][1] [] None True
+29 1 a[1][@k] [] None True
+29 1 b[c] [] None True
+29 1 a[1]/b ['4'] 4 True
+29 1 */*[last()] ['4'] 4 True
+29 1 . ['1'] 1 True
+29 1 a[3] [] None True
+29 1 c[last()-2] [] None True
+29 1 {}a[1] ['2'] 2 True
+29 1 a[b][last()] [] None True
+29 1 .. [] None True
+29 1 .//a/../b[1] [] None True
+29 m [] ['r', 'm29_0']
+29 m [] ['r', 'm29_0']
+29 m [] ['r', 'm29_0', 'm29_2']
+29 m [] ['r', 'm29_0', 'm29_2']
+29 m ['m29_4'] ['r', 'm29_0', 'm29_2', 'm29_4']
+29 m ['m29_4'] ['r', 'm29_0', 'm29_2', 'm29_4']
+30 r a[1] ['0'] 0 True
+30 r a[last()] ['0'] 0 True
+30 r b[2] [] None True
+30 r a[last()-1] [] None True
+30 r *[1] ['0'] 0 True
+30 r *[last()] ['0'] 0 True
+30 r a/b[1] ['1'] 1 True
+30 r a/b[last()] ['1'] 1 True
+30 r */a[2] [] None True
+30 r .//a[1] ['0', '4'] 0 True
+30 r .//b[last()] ['1'] 1 True
+30 r a[1]/.. ['r'] r True
+30 r b/.. [] None True
+30 r .//c/.. ['1'] 1 True
+30 r a[@k] ['0'] 0 True
+30 r a[@k][1] ['0'] 0 True
+30 r a[1][@k] ['0'] 0 True
+30 r b[c] [] None True
+30 r a[1]/b ['1'] 1 True
+30 r */*[last()] ['1', '4'] 1 True
+30 r . ['r'] r True
+30 r a[3] [] None True
+30 r c[last()-2] [] None True
+30 r {}a[1] ['0'] 0 True
+30 r a[b][last()] ['0'] 0 True
+30 r .. [] None True
+30 r .//a/../b[1] ['1'] 1 True
+30 r a[1] ['0'] 0 True
+30 r a[last()] ['0'] 0 True
+30 r b[2] [] None True
+30 r a[last()-1] [] None True
+30 r *[1] ['0'] 0 True
+30 r *[last()] ['0'] 0 True
+30 r a/b[1] ['1'] 1 True
+30 r a/b[last()] ['1'] 1 True
+30 r */a[2] [] None True
+30 r .//a[1] ['0', '4'] 0 True
+30 r .//b[last()] ['1'] 1 True
+30 r a[1]/.. ['r'] r True
+30 r b/.. [] None True
+30 r .//c/.. ['1'] 1 True
+30 r a[@k] ['0'] 0 True
+30 r a[@k][1] ['0'] 0 True
+30 r a[1][@k] ['0'] 0 True
+30 r b[c] [] None True
+30 r a[1]/b ['1'] 1 True
+30 r */*[last()] ['1', '4'] 1 True
+30 r . ['r'] r True
+30 r a[3] [] None True
+30 r c[last()-2] [] None True
+30 r {}a[1] ['0'] 0 True
+30 r a[b][last()] ['0'] 0 True
+30 r .. [] None True
+30 r .//a/../b[1] ['1'] 1 True
+30 1 a[1] [] None True
+30 1 a[last()] [] None True
+30 1 b[2] [] None True
+30 1 a[last()-1] [] None True
+30 1 *[1] ['2'] 2 True
+30 1 *[last()] ['3'] 3 True
+30 1 a/b[1] [] None True
+30 1 a/b[last()] [] None True
+30 1 */a[2] [] None True
+30 1 .//a[1] [] None True
+30 1 .//b[last()] [] None True
+30 1 a[1]/.. [] None True
+30 1 b/.. [] None True
+30 1 .//c/.. ['1'] 1 True
+30 1 a[@k] [] None True
+30 1 a[@k][1] [] None True
+30 1 a[1][@k] [] None True
+30 1 b[c] [] None True
+30 1 a[1]/b [] None True
+30 1 */*[last()] [] None True
+30 1 . ['1'] 1 True
+30 1 a[3] [] None True
+30 1 c[last()-2] [] None True
+30 1 {}a[1] [] None True
+30 1 a[b][last()] [] None True
+30 1 .. [] None True
+30 1 .//a/../b[1] [] None True
+30 m ['0'] ['0', 'm30_0']
+30 m ['m30_1'] ['0', 'm30_0']
+30 m ['m30_1'] ['0', 'm30_0']
+30 m ['m30_1'] ['0', 'm30_0']
+30 m ['m30_4'] ['0', 'm30_0']
+30 m ['m30_4'] ['0', 'm30_0', 'm30_5']
+31 r a[1] ['2'] 2 True
+31 r a[last()] ['2'] 2 True
+31 r b[2] [] None True
+31 r a[last()-1] [] None True
+31 r *[1] ['0', '2'] 0 True
+31 r *[last()] ['2', '6'] 2 True
+31 r a/b[1] [] None True
+31 r a/b[last()] [] None True
+31 r */a[2] ['15'] 15 True
+31 r .//a[1] ['7', '2', '9'] 7 True
+31 r .//b[last()] ['5', '11', '12', '10', '14'] 5 True
+31 r a[1]/.. ['r'] r True
+31 r b/.. [] None True
+31 r .//c/.. ['r', '3', '1', '2', '13'] r True
+31 r a[@k] ['2'] 2 True
+31 r a[@k][1] ['2'] 2 True
+31 r a[1][@k] ['2'] 2 True
+31 r b[c] [] None True
+31 r a[1]/b [] None True
+31 r */*[last()] ['7', '11', '8', '10', '13', '18', '14'] 7 True
+31 r . ['r'] r True
+31 r a[3] [] None True
+31 r c[last()-2] ['0'] 0 True
+31 r {}a[1] ['2'] 2 True
+31 r a[b][last()] [] None True
+31 r .. [] None True
+31 r .//a/../b[1] ['3'] 3 True
+31 0 a[1] ['7'] 7 True
+31 0 a[last()] ['7'] 7 True
+31 0 b[2] ['11'] 11 True
+31 0 a[last()-1] [] None True
+31 0 *[1] ['3', '7'] 3 True
+31 0 *[last()] ['7', '11'] 7 True
+31 0 a/b[1] [] None True
+31 0 a/b[last()] [] None True
+31 0 */a[2] [] None True
+31 0 .//a[1] ['7'] 7 True
+31 0 .//b[last()] ['5', '11'] 5 True
+31 0 a[1]/.. ['0'] 0 True
+31 0 b/.. ['0'] 0 True
+31 0 .//c/.. ['3'] 3 True
+31 0 a[@k] ['7'] 7 True
+31 0 a[@k][1] ['7'] 7 True
+31 0 a[1][@k] ['7'] 7 True
+31 0 b[c] ['3'] 3 True
+31 0 a[1]/b [] None True
+31 0 */*[last()] ['17'] 17 True
+31 0 . ['0'] 0 True
+31 0 a[3] [] None True
+31 0 c[last()-2] [] None True
+31 0 {}a[1] ['7'] 7 True
+31 0 a[b][last()] [] None True
+31 0 .. [] None True
+31 0 .//a/../b[1] ['3'] 3 True
+31 13 a[1] [] None True
+31 13 a[last()] [] None True
+31 13 b[2] [] None True
+31 13 a[last()-1] [] None True
+31 13 *[1] ['16'] 16 True
+31 13 *[last()] ['16'] 16 True
+31 13 a/b[1] [] None True
+31 13 a/b[last()] [] None True
+31 13 */a[2] [] None True
+31 13 .//a[1] [] None True
+31 13 .//b[last()] [] None True
+31 13 a[1]/.. [] None True
+31 13 b/.. [] None True
+31 13 .//c/.. ['13'] 13 True
+31 13 a[@k] [] None True
+31 13 a[@k][1] [] None True
+31 13 a[1][@k] [] None True
+31 13 b[c] [] None True
+31 13 a[1]/b [] None True
+31 13 */*[last()] [] None True
+31 13 . ['13'] 13 True
+31 13 a[3] [] None True
+31 13 c[last()-2] [] None True
+31 13 {}a[1] [] None True
+31 13 a[b][last()] [] None True
+31 13 .. [] None True
+31 13 .//a/../b[1] [] None True
+31 m ['m31_0'] ['0', '2']
+31 m ['m31_0'] ['0', '2']
+31 m ['m31_2'] ['0', '2']
+31 m ['m31_2'] ['0', '2', 'm31_3']
+31 m ['m31_4'] ['0', '2', 'm31_3']
+31 m ['m31_4'] ['0', '2', 'm31_3']
+32 r a[1] ['1'] 1 True
+32 r a[last()] ['1'] 1 True
+32 r b[2] [] None True
+32 r a[last()-1] [] None True
+32 r *[1] ['0', '1', '7'] 0 True
+32 r *[last()] ['0', '1', '7'] 0 True
+32 r a/b[1] ['2'] 2 True
+32 r a/b[last()] ['9'] 9 True
+32 r */a[2] [] None True
+32 r .//a[1] ['21', '1', '16', '22', '12', '23', '24'] 21 True
+32 r .//b[last()] ['s0', '9', '7'] s0 True
+32 r a[1]/.. ['r'] r True
+32 r b/.. ['r'] r True
+32 r .//c/.. ['r', '2', '16', '3', '4', '9', '15'] r True
+32 r a[@k] [] None True
+32 r a[@k][1] [] None True
+32 r a[1][@k] [] None True
+32 r b[c] [] None True
+32 r a[1]/b ['2', '3', '9'] 2 True
+32 r */*[last()] ['21', '9'] 21 True
+32 r . ['r'] r True
+32 r a[3] [] None True
+32 r c[last()-2] [] None True
+32 r {}a[1] ['1'] 1 True
+32 r a[b][last()] ['1'] 1 True
+32 r .. [] None True
+32 r .//a/../b[1] ['7'] 7 True
+32 15 a[1] ['24'] 24 True
+32 15 a[last()] ['24'] 24 True
+32 15 b[2] [] None True
+32 15 a[last()-1] [] None True
+32 15 *[1] ['18', '24'] 18 True
+32 15 *[last()] ['18', '24'] 18 True
+32 15 a/b[1] [] None True
+32 15 a/b[last()] [] None True
+32 15 */a[2] [] None True
+32 15 .//a[1] ['23', '24'] 23 True
+32 15 .//b[last()] [] None True
+32 15 a[1]/.. ['15'] 15 True
+32 15 b/.. [] None True
+32 15 .//c/.. ['15'] 15 True
+32 15 a[@k] [] None True
+32 15 a[@k][1] [] None True
+32 15 a[1][@k] [] None True
+32 15 b[c] [] None True
+32 15 a[1]/b [] None True
+32 15 */*[last()] ['23'] 23 True
+32 15 . ['15'] 15 True
+32 15 a[3] [] None True
+32 15 c[last()-2] [] None True
+32 15 {}a[1] ['24'] 24 True
+32 15 a[b][last()] [] None True
+32 15 .. [] None True
+32 15 .//a/../b[1] [] None True
+32 10 a[1] [] None True
+32 10 a[last()] [] None True
+32 10 b[2] [] None True
+32 10 a[last()-1] [] None True
+32 10 *[1] [] None True
+32 10 *[last()] [] None True
+32 10 a/b[1] [] None True
+32 10 a/b[last()] [] None True
+32 10 */a[2] [] None True
+32 10 .//a[1] [] None True
+32 10 .//b[last()] [] None True
+32 10 a[1]/.. [] None True
+32 10 b/.. [] None True
+32 10 .//c/.. [] None True
+32 10 a[@k] [] None True
+32 10 a[@k][1] [] None True
+32 10 a[1][@k] [] None True
+32 10 b[c] [] None True
+32 10 a[1]/b [] None True
+32 10 */*[last()] [] None True
+32 10 . ['10'] 10 True
+32 10 a[3] [] None True
+32 10 c[last()-2] [] None True
+32 10 {}a[1] [] None True
+32 10 a[b][last()] [] None True
+32 10 .. [] None True
+32 10 .//a/../b[1] [] None True
+32 m ['1'] ['0', '1', '7']
+32 m ['1'] ['0', '1', '7']
+32 m ['1'] ['0', '1', '7']
+32 m ['1'] ['0', '1', '7']
+32 m ['m32_4'] ['0', '1', '7']
+32 m ['m32_4'] ['0', '1', '7']
+33 r a[1] ['4'] 4 True
+33 r a[last()] ['4'] 4 True
+33 r b[2] [] None True
+33 r a[last()-1] [] None True
+33 r *[1] ['0', '4', '5'] 0 True
+33 r *[last()] ['0', '4', '5'] 0 True
+33 r a/b[1] [] None True
+33 r a/b[last()] [] None True
+33 r */a[2] [] None True
+33 r .//a[1] ['4'] 4 True
+33 r .//b[last()] ['1', '2', '5'] 1 True
+33 r a[1]/.. ['r'] r True
+33 r b/.. ['r'] r True
+33 r .//c/.. ['r', '0', '4'] r True
+33 r a[@k] [] None True
+33 r a[@k][1] [] None True
+33 r a[1][@k] [] None True
+33 r b[c] [] None True
+33 r a[1]/b [] None True
+33 r */*[last()] ['1', '3', '6'] 1 True
+33 r . ['r'] r True
+33 r a[3] [] None True
+33 r c[last()-2] [] None True
+33 r {}a[1] ['4'] 4 True
+33 r a[b][last()] [] None True
+33 r .. [] None True
+33 r .//a/../b[1] ['5'] 5 True
+33 5 a[1] [] None True
+33 5 a[last()] [] None True
+33 5 b[2] [] None True
+33 5 a[last()-1] [] None True
+33 5 *[1] [] None True
+33 5 *[last()] [] None True
+33 5 a/b[1] [] None True
+33 5 a/b[last()] [] None True
+33 5 */a[2] [] None True
+33 5 .//a[1] [] None True
+33 5 .//b[last()] [] None True
+33 5 a[1]/.. [] None True
+33 5 b/.. [] None True
+33 5 .//c/.. [] None True
+33 5 a[@k] [] None True
+33 5 a[@k][1] [] None True
+33 5 a[1][@k] [] None True
+33 5 b[c] [] None True
+33 5 a[1]/b [] None True
+33 5 */*[last()] [] None True
+33 5 . ['5'] 5 True
+33 5 a[3] [] None True
+33 5 c[last()-2] [] None True
+33 5 {}a[1] [] None True
+33 5 a[b][last()] [] None True
+33 5 .. [] None True
+33 5 .//a/../b[1] [] None True
+33 2 a[1] [] None True
+33 2 a[last()] [] None True
+33 2 b[2] [] None True
+33 2 a[last()-1] [] None True
+33 2 *[1] [] None True
+33 2 *[last()] [] None True
+33 2 a/b[1] [] None True
+33 2 a/b[last()] [] None True
+33 2 */a[2] [] None True
+33 2 .//a[1] [] None True
+33 2 .//b[last()] [] None True
+33 2 a[1]/.. [] None True
+33 2 b/.. [] None True
+33 2 .//c/.. [] None True
+33 2 a[@k] [] None True
+33 2 a[@k][1] [] None True
+33 2 a[1][@k] [] None True
+33 2 b[c] [] None True
+33 2 a[1]/b [] None True
+33 2 */*[last()] [] None True
+33 2 . ['2'] 2 True
+33 2 a[3] [] None True
+33 2 c[last()-2] [] None True
+33 2 {}a[1] [] None True
+33 2 a[b][last()] [] None True
+33 2 .. [] None True
+33 2 .//a/../b[1] [] None True
+33 m ['m33_0'] ['0', '4', '5']
+33 m ['m33_0'] ['0', '4', '5']
+33 m ['m33_2'] ['0', '4', '5']
+33 m ['m33_3'] ['0', '4', '5']
+33 m ['m33_3'] ['0', '4', '5']
+33 m ['m33_3'] ['0', '4', '5']
+34 r a[1] [] None True
+34 r a[last()] [] None True
+34 r b[2] [] None True
+34 r a[last()-1] [] None True
+34 r *[1] ['0', '1'] 0 True
+34 r *[last()] ['0', '1'] 0 True
+34 r a/b[1] [] None True
+34 r a/b[last()] [] None True
+34 r */a[2] [] None True
+34 r .//a[1] ['3', '13', '10', '10'] 3 True
+34 r .//b[last()] ['0', '8', '16', '7', '15', '16', '7', '15', '11'] 0 True
+34 r a[1]/.. [] None True
+34 r b/.. ['r'] r True
+34 r .//c/.. ['3', '2', '0', '1', '5', 'r'] 3 True
+34 r a[@k] [] None True
+34 r a[@k][1] [] None True
+34 r a[1][@k] [] None True
+34 r b[c] ['0'] 0 True
+34 r a[1]/b [] None True
+34 r */*[last()] ['4', '8', '12'] 4 True
+34 r . ['r'] r True
+34 r a[3] [] None True
+34 r c[last()-2] [] None True
+34 r {}a[1] [] None True
+34 r a[b][last()] [] None True
+34 r .. [] None True
+34 r .//a/../b[1] [] None True
+34 15 a[1] [] None True
+34 15 a[last()] [] None True
+34 15 b[2] [] None True
+34 15 a[last()-1] [] None True
+34 15 *[1] [] None True
+34 15 *[last()] [] None True
+34 15 a/b[1] [] None True
+34 15 a/b[last()] [] None True
+34 15 */a[2] [] None True
+34 15 .//a[1] [] None True
+34 15 .//b[last()] [] None True
+34 15 a[1]/.. [] None True
+34 15 b/.. [] None True
+34 15 .//c/.. [] None True
+34 15 a[@k] [] None True
+34 15 a[@k][1] [] None True
+34 15 a[1][@k] [] None True
+34 15 b[c] [] None True
+34 15 a[1]/b [] None True
+34 15 */*[last()] [] None True
+34 15 . ['15'] 15 True
+34 15 a[3] [] None True
+34 15 c[last()-2] [] None True
+34 15 {}a[1] [] None True
+34 15 a[b][last()] [] None True
+34 15 .. [] None True
+34 15 .//a/../b[1] [] None True
+34 8 a[1] ['13'] 13 True
+34 8 a[last()] ['13'] 13 True
+34 8 b[2] [] None True
+34 8 a[last()-1] [] None True
+34 8 *[1] ['13', '5'] 13 True
+34 8 *[last()] ['13', '5'] 13 True
+34 8 a/b[1] [] None True
+34 8 a/b[last()] [] None True
+34 8 */a[2] [] None True
+34 8 .//a[1] ['13', '10'] 13 True
+34 8 .//b[last()] ['16', '7', '15'] 16 True
+34 8 a[1]/.. ['8'] 8 True
+34 8 b/.. [] None True
+34 8 .//c/.. ['8', '5'] 8 True
+34 8 a[@k] [] None True
+34 8 a[@k][1] [] None True
+34 8 a[1][@k] [] None True
+34 8 b[c] [] None True
+34 8 a[1]/b [] None True
+34 8 */*[last()] ['6', '7'] 6 True
+34 8 . ['8'] 8 True
+34 8 a[3] [] None True
+34 8 c[last()-2] [] None True
+34 8 {}a[1] ['13'] 13 True
+34 8 a[b][last()] [] None True
+34 8 .. [] None True
+34 8 .//a/../b[1] [] None True
+34 m [] ['0', '1']
+34 m [] ['0', '1']
+34 m [] ['0', '1']
+34 m [] ['0', '1']
+34 m [] ['0', '1']
+34 m [] ['0', '1']
+35 r a[1] ['0'] 0 True
+35 r a[last()] ['0'] 0 True
+35 r b[2] [] None True
+35 r a[last()-1] [] None True
+35 r *[1] ['0'] 0 True
+35 r *[last()] ['0'] 0 True
+35 r a/b[1] ['2'] 2 True
+35 r a/b[last()] ['2'] 2 True
+35 r */a[2] [] None True
+35 r .//a[1] ['0'] 0 True
+35 r .//b[last()] ['2'] 2 True
+35 r a[1]/.. ['r'] r True
+35 r b/.. [] None True
+35 r .//c/.. ['0'] 0 True
+35 r a[@k] [] None True
+35 r a[@k][1] [] None True
+35 r a[1][@k] [] None True
+35 r b[c] [] None True
+35 r a[1]/b ['2'] 2 True
+35 r */*[last()] ['2', '4'] 2 True
+35 r . ['r'] r True
+35 r a[3] [] None True
+35 r c[last()-2] [] None True
+35 r {}a[1] ['0'] 0 True
+35 r a[b][last()] ['0'] 0 True
+35 r .. [] None True
+35 r .//a/../b[1] [] None True
+35 4 a[1] [] None True
+35 4 a[last()] [] None True
+35 4 b[2] [] None True
+35 4 a[last()-1] [] None True
+35 4 *[1] [] None True
+35 4 *[last()] [] None True
+35 4 a/b[1] [] None True
+35 4 a/b[last()] [] None True
+35 4 */a[2] [] None True
+35 4 .//a[1] [] None True
+35 4 .//b[last()] [] None True
+35 4 a[1]/.. [] None True
+35 4 b/.. [] None True
+35 4 .//c/.. [] None True
+35 4 a[@k] [] None True
+35 4 a[@k][1] [] None True
+35 4 a[1][@k] [] None True
+35 4 b[c] [] None True
+35 4 a[1]/b [] None True
+35 4 */*[last()] [] None True
+35 4 . ['4'] 4 True
+35 4 a[3] [] None True
+35 4 c[last()-2] [] None True
+35 4 {}a[1] [] None True
+35 4 a[b][last()] [] None True
+35 4 .. [] None True
+35 4 .//a/../b[1] [] None True
+35 1 a[1] [] None True
+35 1 a[last()] [] None True
+35 1 b[2] [] None True
+35 1 a[last()-1] [] None True
+35 1 *[1] [] None True
+35 1 *[last()] [] None True
+35 1 a/b[1] [] None True
+35 1 a/b[last()] [] None True
+35 1 */a[2] [] None True
+35 1 .//a[1] [] None True
+35 1 .//b[last()] [] None True
+35 1 a[1]/.. [] None True
+35 1 b/.. [] None True
+35 1 .//c/.. [] None True
+35 1 a[@k] [] None True
+35 1 a[@k][1] [] None True
+35 1 a[1][@k] [] None True
+35 1 b[c] [] None True
+35 1 a[1]/b [] None True
+35 1 */*[last()] [] None True
+35 1 . ['1'] 1 True
+35 1 a[3] [] None True
+35 1 c[last()-2] [] None True
+35 1 {}a[1] [] None True
+35 1 a[b][last()] [] None True
+35 1 .. [] None True
+35 1 .//a/../b[1] [] None True
+35 m ['0'] ['0', 'm35_0']
+35 m ['0'] ['0', 'm35_0']
+35 m ['0'] ['0', 'm35_0']
+35 m ['m35_3'] ['0', 'm35_0']
+35 m ['m35_3'] ['0', 'm35_0', 'm35_4']
+35 m ['m35_5'] ['0', 'm35_0', 'm35_4']
+36 w a[1] [] None True
+36 w a[last()] [] None True
+36 w b[2] [] None True
+36 w a[last()-1] [] None True
+36 w *[1] ['r'] r True
+36 w *[last()] ['r'] r True
+36 w a/b[1] [] None True
+36 w a/b[last()] [] None True
+36 w */a[2] ['5', '5'] 5 True
+36 w .//a[1] ['1', '4', '1', '4'] 1 True
+36 w .//b[last()] ['0', '2', '6', '0', '2', '6'] 0 True
+36 w a[1]/.. [] None True
+36 w b/.. [] None True
+36 w .//c/.. ['4', '1', '3'] 4 True
+36 w a[@k] [] None True
+36 w a[@k][1] [] None True
+36 w a[1][@k] [] None True
+36 w b[c] [] None True
+36 w a[1]/b [] None True
+36 w */*[last()] ['0', '5', '0', '5'] 0 True
+36 w . ['w'] w True
+36 w a[3] [] None True
+36 w c[last()-2] [] None True
+36 w {}a[1] [] None True
+36 w a[b][last()] [] None True
+36 w .. [] None True
+36 w .//a/../b[1] ['0'] 0 True
+36 1 a[1] [] None True
+36 1 a[last()] [] None True
+36 1 b[2] [] None True
+36 1 a[last()-1] [] None True
+36 1 *[1] ['2', '3'] 2 True
+36 1 *[last()] ['2', '3'] 2 True
+36 1 a/b[1] [] None True
+36 1 a/b[last()] [] None True
+36 1 */a[2] [] None True
+36 1 .//a[1] ['4'] 4 True
+36 1 .//b[last()] ['2', '6'] 2 True
+36 1 a[1]/.. [] None True
+36 1 b/.. ['1'] 1 True
+36 1 .//c/.. ['4', '1', '3'] 4 True
+36 1 a[@k] [] None True
+36 1 a[@k][1] [] None True
+36 1 a[1][@k] [] None True
+36 1 b[c] [] None True
+36 1 a[1]/b [] None True
+36 1 */*[last()] ['4', '7'] 4 True
+36 1 . ['1'] 1 True
+36 1 a[3] [] None True
+36 1 c[last()-2] [] None True
+36 1 {}a[1] [] None True
+36 1 a[b][last()] [] None True
+36 1 .. [] None True
+36 1 .//a/../b[1] [] None True
+36 3 a[1] [] None True
+36 3 a[last()] [] None True
+36 3 b[2] [] None True
+36 3 a[last()-1] [] None True
+36 3 *[1] ['7'] 7 True
+36 3 *[last()] ['7'] 7 True
+36 3 a/b[1] [] None True
+36 3 a/b[last()] [] None True
+36 3 */a[2] [] None True
+36 3 .//a[1] [] None True
+36 3 .//b[last()] [] None True
+36 3 a[1]/.. [] None True
+36 3 b/.. [] None True
+36 3 .//c/.. ['3'] 3 True
+36 3 a[@k] [] None True
+36 3 a[@k][1] [] None True
+36 3 a[1][@k] [] None True
+36 3 b[c] [] None True
+36 3 a[1]/b [] None True
+36 3 */*[last()] [] None True
+36 3 . ['3'] 3 True
+36 3 a[3] [] None True
+36 3 c[last()-2] [] None True
+36 3 {}a[1] [] None True
+36 3 a[b][last()] [] None True
+36 3 .. [] None True
+36 3 .//a/../b[1] [] None True
+36 m ['m36_0'] ['r', 'm36_0']
+36 m ['m36_1'] ['r', 'm36_0']
+36 m ['m36_1'] ['r', 'm36_0', 'm36_2']
+36 m ['m36_1'] ['r', 'm36_0', 'm36_2', 'm36_3']
+36 m ['m36_4'] ['r', 'm36_0', 'm36_2', 'm36_3']
+36 m ['m36_4'] ['r', 'm36_0', 'm36_2', 'm36_3']
+37 r a[1] ['0'] 0 True
+37 r a[last()] ['7'] 7 True
+37 r b[2] [] None True
+37 r a[last()-1] ['0'] 0 True
+37 r *[1] ['0', '2'] 0 True
+37 r *[last()] ['2', '7'] 2 True
+37 r a/b[1] ['1'] 1 True
+37 r a/b[last()] ['1'] 1 True
+37 r */a[2] [] None True
+37 r .//a[1] ['0', '4', '13', '8'] 0 True
+37 r .//b[last()] ['1', '10'] 1 True
+37 r a[1]/.. ['r'] r True
+37 r b/.. [] None True
+37 r .//c/.. ['0', '3', 'r', '2', '5', '7'] 0 True
+37 r a[@k] [] None True
+37 r a[@k][1] [] None True
+37 r a[1][@k] [] None True
+37 r b[c] [] None True
+37 r a[1]/b ['1'] 1 True
+37 r */*[last()] ['1', '9', '13', '5', '10', '8', '12'] 1 True
+37 r . ['r'] r True
+37 r a[3] [] None True
+37 r c[last()-2] [] None True
+37 r {}a[1] ['0'] 0 True
+37 r a[b][last()] [] None True
+37 r .. [] None True
+37 r .//a/../b[1] ['1'] 1 True
+37 11 a[1] [] None True
+37 11 a[last()] [] None True
+37 11 b[2] [] None True
+37 11 a[last()-1] [] None True
+37 11 *[1] [] None True
+37 11 *[last()] [] None True
+37 11 a/b[1] [] None True
+37 11 a/b[last()] [] None True
+37 11 */a[2] [] None True
+37 11 .//a[1] [] None True
+37 11 .//b[last()] [] None True
+37 11 a[1]/.. [] None True
+37 11 b/.. [] None True
+37 11 .//c/.. [] None True
+37 11 a[@k] [] None True
+37 11 a[@k][1] [] None True
+37 11 a[1][@k] [] None True
+37 11 b[c] [] None True
+37 11 a[1]/b [] None True
+37 11 */*[last()] [] None True
+37 11 . ['11'] 11 True
+37 11 a[3] [] None True
+37 11 c[last()-2] [] None True
+37 11 {}a[1] [] None True
+37 11 a[b][last()] [] None True
+37 11 .. [] None True
+37 11 .//a/../b[1] [] None True
+37 9 a[1] [] None True
+37 9 a[last()] [] None True
+37 9 b[2] [] None True
+37 9 a[last()-1] [] None True
+37 9 *[1] [] None True
+37 9 *[last()] [] None True
+37 9 a/b[1] [] None True
+37 9 a/b[last()] [] None True
+37 9 */a[2] [] None True
+37 9 .//a[1] [] None True
+37 9 .//b[last()] [] None True
+37 9 a[1]/.. [] None True
+37 9 b/.. [] None True
+37 9 .//c/.. [] None True
+37 9 a[@k] [] None True
+37 9 a[@k][1] [] None True
+37 9 a[1][@k] [] None True
+37 9 b[c] [] None True
+37 9 a[1]/b [] None True
+37 9 */*[last()] [] None True
+37 9 . ['9'] 9 True
+37 9 a[3] [] None True
+37 9 c[last()-2] [] None True
+37 9 {}a[1] [] None True
+37 9 a[b][last()] [] None True
+37 9 .. [] None True
+37 9 .//a/../b[1] [] None True
+37 m ['7'] ['0', '2']
+37 m ['7'] ['0', '2', 'm37_1']
+37 m ['m37_2'] ['0', '2', 'm37_1']
+37 m ['m37_2'] ['0', '2', 'm37_1']
+37 m ['m37_4'] ['0', '2', 'm37_1']
+37 m ['m37_4'] ['0', '2', 'm37_1']
+38 r a[1] ['0'] 0 True
+38 r a[last()] ['11'] 11 True
+38 r b[2] [] None True
+38 r a[last()-1] ['0'] 0 True
+38 r *[1] ['0', '9'] 0 True
+38 r *[last()] ['11', '9'] 11 True
+38 r a/b[1] ['1'] 1 True
+38 r a/b[last()] ['5'] 5 True
+38 r */a[2] [] None True
+38 r .//a[1] ['0', '7', '4', '15'] 0 True
+38 r .//b[last()] ['17', '20', '16', '5'] 17 True
+38 r a[1]/.. ['r'] r True
+38 r b/.. [] None True
+38 r .//c/.. ['17', '0', '2', '4', '5', '6'] 17 True
+38 r a[@k] ['11'] 11 True
+38 r a[@k][1] [] None True
+38 r a[1][@k] [] None True
+38 r b[c] [] None True
+38 r a[1]/b ['1', '5'] 1 True
+38 r */*[last()] ['2', '5'] 2 True
+38 r . ['r'] r True
+38 r a[3] [] None True
+38 r c[last()-2] [] None True
+38 r {}a[1] ['0'] 0 True
+38 r a[b][last()] [] None True
+38 r .. [] None True
+38 r .//a/../b[1] ['14'] 14 True
+38 12 a[1] ['15'] 15 True
+38 12 a[last()] ['15'] 15 True
+38 12 b[2] [] None True
+38 12 a[last()-1] [] None True
+38 12 *[1] ['15'] 15 True
+38 12 *[last()] ['15'] 15 True
+38 12 a/b[1] [] None True
+38 12 a/b[last()] [] None True
+38 12 */a[2] [] None True
+38 12 .//a[1] ['15'] 15 True
+38 12 .//b[last()] [] None True
+38 12 a[1]/.. ['12'] 12 True
+38 12 b/.. [] None True
+38 12 .//c/.. [] None True
+38 12 a[@k] [] None True
+38 12 a[@k][1] [] None True
+38 12 a[1][@k] [] None True
+38 12 b[c] [] None True
+38 12 a[1]/b [] None True
+38 12 */*[last()] [] None True
+38 12 . ['12'] 12 True
+38 12 a[3] [] None True
+38 12 c[last()-2] [] None True
+38 12 {}a[1] ['15'] 15 True
+38 12 a[b][last()] [] None True
+38 12 .. [] None True
+38 12 .//a/../b[1] [] None True
+38 17 a[1] [] None True
+38 17 a[last()] [] None True
+38 17 b[2] [] None True
+38 17 a[last()-1] [] None True
+38 17 *[1] ['18'] 18 True
+38 17 *[last()] ['18'] 18 True
+38 17 a/b[1] [] None True
+38 17 a/b[last()] [] None True
+38 17 */a[2] [] None True
+38 17 .//a[1] [] None True
+38 17 .//b[last()] [] None True
+38 17 a[1]/.. [] None True
+38 17 b/.. [] None True
+38 17 .//c/.. ['17'] 17 True
+38 17 a[@k] [] None True
+38 17 a[@k][1] [] None True
+38 17 a[1][@k] [] None True
+38 17 b[c] [] None True
+38 17 a[1]/b [] None True
+38 17 */*[last()] [] None True
+38 17 . ['17'] 17 True
+38 17 a[3] [] None True
+38 17 c[last()-2] [] None True
+38 17 {}a[1] [] None True
+38 17 a[b][last()] [] None True
+38 17 .. [] None True
+38 17 .//a/../b[1] [] None True
+38 m ['11'] ['0', '9']
+38 m ['11'] ['0', '9']
+38 m ['11'] ['0', '9', 'm38_2']
+38 m ['11'] ['0', '9', 'm38_2']
+38 m ['11'] ['0', '9', 'm38_2']
+38 m ['11'] ['0', '9', 'm38_2']
+39 r a[1] ['2'] 2 True
+39 r a[last()] ['2'] 2 True
+39 r b[2] [] None True
+39 r a[last()-1] [] None True
+39 r *[1] ['0', '2', '9'] 0 True
+39 r *[last()] ['0', '2', '9'] 0 True
+39 r a/b[1] ['8'] 8 True
+39 r a/b[last()] ['8'] 8 True
+39 r */a[2] ['5'] 5 True
+39 r .//a[1] ['1', '10', '2', '11'] 1 True
+39 r .//b[last()] ['8', '9'] 8 True
+39 r a[1]/.. ['r'] r True
+39 r b/.. ['r'] r True
+39 r .//c/.. ['r', '1', '4', '0', '3'] r True
+39 r a[@k] [] None True
+39 r a[@k][1] [] None True
+39 r a[1][@k] [] None True
+39 r b[c] [] None True
+39 r a[1]/b ['8'] 8 True
+39 r */*[last()] ['3', '5', '8', '11'] 3 True
+39 r . ['r'] r True
+39 r a[3] [] None True
+39 r c[last()-2] [] None True
+39 r {}a[1] ['2'] 2 True
+39 r a[b][last()] ['2'] 2 True
+39 r .. [] None True
+39 r .//a/../b[1] ['9', '8'] 9 True
+39 1 a[1] [] None True
+39 1 a[last()] [] None True
+39 1 b[2] [] None True
+39 1 a[last()-1] [] None True
+39 1 *[1] ['4'] 4 True
+39 1 *[last()] ['4'] 4 True
+39 1 a/b[1] [] None True
+39 1 a/b[last()] [] None True
+39 1 */a[2] [] None True
+39 1 .//a[1] [] None True
+39 1 .//b[last()] [] None True
+39 1 a[1]/.. [] None True
+39 1 b/.. [] None True
+39 1 .//c/.. ['1', '4'] 1 True
+39 1 a[@k] [] None True
+39 1 a[@k][1] [] None True
+39 1 a[1][@k] [] None True
+39 1 b[c] [] None True
+39 1 a[1]/b [] None True
+39 1 */*[last()] ['7'] 7 True
+39 1 . ['1'] 1 True
+39 1 a[3] [] None True
+39 1 c[last()-2] [] None True
+39 1 {}a[1] [] None True
+39 1 a[b][last()] [] None True
+39 1 .. [] None True
+39 1 .//a/../b[1] [] None True
+39 r a[1] ['2'] 2 True
+39 r a[last()] ['2'] 2 True
+39 r b[2] [] None True
+39 r a[last()-1] [] None True
+39 r *[1] ['0', '2', '9'] 0 True
+39 r *[last()] ['0', '2', '9'] 0 True
+39 r a/b[1] ['8'] 8 True
+39 r a/b[last()] ['8'] 8 True
+39 r */a[2] ['5'] 5 True
+39 r .//a[1] ['1', '10', '2', '11'] 1 True
+39 r .//b[last()] ['8', '9'] 8 True
+39 r a[1]/.. ['r'] r True
+39 r b/.. ['r'] r True
+39 r .//c/.. ['r', '1', '4', '0', '3'] r True
+39 r a[@k] [] None True
+39 r a[@k][1] [] None True
+39 r a[1][@k] [] None True
+39 r b[c] [] None True
+39 r a[1]/b ['8'] 8 True
+39 r */*[last()] ['3', '5', '8', '11'] 3 True
+39 r . ['r'] r True
+39 r a[3] [] None True
+39 r c[last()-2] [] None True
+39 r {}a[1] ['2'] 2 True
+39 r a[b][last()] ['2'] 2 True
+39 r .. [] None True
+39 r .//a/../b[1] ['9', '8'] 9 True
+39 m ['m39_0'] ['0', '2', '9']
+39 m ['m39_1'] ['0', '2', '9']
+39 m ['m39_2'] ['0', '2', '9']
+39 m ['m39_2'] ['0', '2', '9']
+39 m ['m39_2'] ['0', '2', '9']
+39 m ['m39_5'] ['0', '2', '9']
+40 r a[1] ['5'] 5 True
+40 r a[last()] ['22'] 22 True
+40 r b[2] ['6'] 6 True
+40 r a[last()-1] ['5'] 5 True
+40 r *[1] ['0', '2', '5'] 0 True
+40 r *[last()] ['2', '7', '22'] 2 True
+40 r a/b[1] [] None True
+40 r a/b[last()] [] None True
+40 r */a[2] [] None True
+40 r .//a[1] ['17', '26', '5', '8'] 17 True
+40 r .//b[last()] ['3', '20', '7', '9', '10', '16'] 3 True
+40 r a[1]/.. ['r'] r True
+40 r b/.. ['r'] r True
+40 r .//c/.. ['1', '17', '21', 'r', '2', '13', '5', '15', '8', '10', '9'] 1 True
+40 r a[@k] ['5'] 5 True
+40 r a[@k][1] ['5'] 5 True
+40 r a[1][@k] ['5'] 5 True
+40 r b[c] [] None True
+40 r a[1]/b [] None True
+40 r */*[last()] ['3', '17', '13', '20', '15', '8', '9'] 3 True
+40 r . ['r'] r True
+40 r a[3] [] None True
+40 r c[last()-2] [] None True
+40 r {}a[1] ['5'] 5 True
+40 r a[b][last()] [] None True
+40 r .. [] None True
+40 r .//a/../b[1] ['1', '0', '9'] 1 True
+40 3 a[1] [] None True
+40 3 a[last()] [] None True
+40 3 b[2] [] None True
+40 3 a[last()-1] [] None True
+40 3 *[1] [] None True
+40 3 *[last()] [] None True
+40 3 a/b[1] [] None True
+40 3 a/b[last()] [] None True
+40 3 */a[2] [] None True
+40 3 .//a[1] [] None True
+40 3 .//b[last()] [] None True
+40 3 a[1]/.. [] None True
+40 3 b/.. [] None True
+40 3 .//c/.. [] None True
+40 3 a[@k] [] None True
+40 3 a[@k][1] [] None True
+40 3 a[1][@k] [] None True
+40 3 b[c] [] None True
+40 3 a[1]/b [] None True
+40 3 */*[last()] [] None True
+40 3 . ['3'] 3 True
+40 3 a[3] [] None True
+40 3 c[last()-2] [] None True
+40 3 {}a[1] [] None True
+40 3 a[b][last()] [] None True
+40 3 .. [] None True
+40 3 .//a/../b[1] [] None True
+40 8 a[1] [] None True
+40 8 a[last()] [] None True
+40 8 b[2] [] None True
+40 8 a[last()-1] [] None True
+40 8 *[1] ['14'] 14 True
+40 8 *[last()] ['14'] 14 True
+40 8 a/b[1] [] None True
+40 8 a/b[last()] [] None True
+40 8 */a[2] [] None True
+40 8 .//a[1] [] None True
+40 8 .//b[last()] [] None True
+40 8 a[1]/.. [] None True
+40 8 b/.. [] None True
+40 8 .//c/.. ['8'] 8 True
+40 8 a[@k] [] None True
+40 8 a[@k][1] [] None True
+40 8 a[1][@k] [] None True
+40 8 b[c] [] None True
+40 8 a[1]/b [] None True
+40 8 */*[last()] [] None True
+40 8 . ['8'] 8 True
+40 8 a[3] [] None True
+40 8 c[last()-2] [] None True
+40 8 {}a[1] [] None True
+40 8 a[b][last()] [] None True
+40 8 .. [] None True
+40 8 .//a/../b[1] [] None True
+40 m ['22'] ['0', '2', '5']
+40 m ['22'] ['0', '2', '5']
+40 m ['m40_2'] ['0', '2', '5']
+40 m ['m40_2'] ['0', '2', '5']
+40 m ['m40_2'] ['0', '2', '5']
+40 m ['m40_5'] ['0', '2', '5']
+41 r a[1] [] None True
+41 r a[last()] [] None True
+41 r b[2] ['13'] 13 True
+41 r a[last()-1] [] None True
+41 r *[1] ['0', '3'] 0 True
+41 r *[last()] ['5', '13'] 5 True
+41 r a/b[1] [] None True
+41 r a/b[last()] [] None True
+41 r */a[2] [] None True
+41 r .//a[1] ['6', '12'] 6 True
+41 r .//b[last()] ['2', '11', '8', '13'] 2 True
+41 r a[1]/.. [] None True
+41 r b/.. ['r'] r True
+41 r .//c/.. ['r', '0', '1', '3'] r True
+41 r a[@k] [] None True
+41 r a[@k][1] [] None True
+41 r a[1][@k] [] None True
+41 r b[c] ['3'] 3 True
+41 r a[1]/b [] None True
+41 r */*[last()] ['7', '11', '10', '8'] 7 True
+41 r . ['r'] r True
+41 r a[3] [] None True
+41 r c[last()-2] [] None True
+41 r {}a[1] [] None True
+41 r a[b][last()] [] None True
+41 r .. [] None True
+41 r .//a/../b[1] ['2'] 2 True
+41 0 a[1] [] None True
+41 0 a[last()] [] None True
+41 0 b[2] [] None True
+41 0 a[last()-1] [] None True
+41 0 *[1] ['1', '11'] 1 True
+41 0 *[last()] ['7', '11'] 7 True
+41 0 a/b[1] [] None True
+41 0 a/b[last()] [] None True
+41 0 */a[2] [] None True
+41 0 .//a[1] ['6', '12'] 6 True
+41 0 .//b[last()] ['2', '11'] 2 True
+41 0 a[1]/.. [] None True
+41 0 b/.. ['0'] 0 True
+41 0 .//c/.. ['0', '1'] 0 True
+41 0 a[@k] [] None True
+41 0 a[@k][1] [] None True
+41 0 a[1][@k] [] None True
+41 0 b[c] [] None True
+41 0 a[1]/b [] None True
+41 0 */*[last()] ['2', '4', '6', '12'] 2 True
+41 0 . ['0'] 0 True
+41 0 a[3] [] None True
+41 0 c[last()-2] [] None True
+41 0 {}a[1] [] None True
+41 0 a[b][last()] [] None True
+41 0 .. [] None True
+41 0 .//a/../b[1] ['2'] 2 True
+41 8 a[1] [] None True
+41 8 a[last()] [] None True
+41 8 b[2] [] None True
+41 8 a[last()-1] [] None True
+41 8 *[1] [] None True
+41 8 *[last()] [] None True
+41 8 a/b[1] [] None True
+41 8 a/b[last()] [] None True
+41 8 */a[2] [] None True
+41 8 .//a[1] [] None True
+41 8 .//b[last()] [] None True
+41 8 a[1]/.. [] None True
+41 8 b/.. [] None True
+41 8 .//c/.. [] None True
+41 8 a[@k] [] None True
+41 8 a[@k][1] [] None True
+41 8 a[1][@k] [] None True
+41 8 b[c] [] None True
+41 8 a[1]/b [] None True
+41 8 */*[last()] [] None True
+41 8 . ['8'] 8 True
+41 8 a[3] [] None True
+41 8 c[last()-2] [] None True
+41 8 {}a[1] [] None True
+41 8 a[b][last()] [] None True
+41 8 .. [] None True
+41 8 .//a/../b[1] [] None True
+41 m [] ['0', '3']
+41 m ['m41_1'] ['0', '3', 'm41_1']
+41 m ['m41_1'] ['0', '3', 'm41_1']
+41 m ['m41_1'] ['0', '3', 'm41_1']
+41 m ['m41_1'] ['0', '3', 'm41_1']
+41 m ['m41_5'] ['0', '3', 'm41_1']
+42 r a[1] ['1'] 1 True
+42 r a[last()] ['1'] 1 True
+42 r b[2] [] None True
+42 r a[last()-1] [] None True
+42 r *[1] ['0', '1', '2'] 0 True
+42 r *[last()] ['0', '1', '2'] 0 True
+42 r a/b[1] [] None True
+42 r a/b[last()] [] None True
+42 r */a[2] [] None True
+42 r .//a[1] ['1', '4'] 1 True
+42 r .//b[last()] ['2'] 2 True
+42 r a[1]/.. ['r'] r True
+42 r b/.. ['r'] r True
+42 r .//c/.. ['r', '1'] r True
+42 r a[@k] [] None True
+42 r a[@k][1] [] None True
+42 r a[1][@k] [] None True
+42 r b[c] [] None True
+42 r a[1]/b [] None True
+42 r */*[last()] ['3', '4'] 3 True
+42 r . ['r'] r True
+42 r a[3] [] None True
+42 r c[last()-2] [] None True
+42 r {}a[1] ['1'] 1 True
+42 r a[b][last()] [] None True
+42 r .. [] None True
+42 r .//a/../b[1] ['2'] 2 True
+42 4 a[1] [] None True
+42 4 a[last()] [] None True
+42 4 b[2] [] None True
+42 4 a[last()-1] [] None True
+42 4 *[1] [] None True
+42 4 *[last()] [] None True
+42 4 a/b[1] [] None True
+42 4 a/b[last()] [] None True
+42 4 */a[2] [] None True
+42 4 .//a[1] [] None True
+42 4 .//b[last()] [] None True
+42 4 a[1]/.. [] None True
+42 4 b/.. [] None True
+42 4 .//c/.. [] None True
+42 4 a[@k] [] None True
+42 4 a[@k][1] [] None True
+42 4 a[1][@k] [] None True
+42 4 b[c] [] None True
+42 4 a[1]/b [] None True
+42 4 */*[last()] [] None True
+42 4 . ['4'] 4 True
+42 4 a[3] [] None True
+42 4 c[last()-2] [] None True
+42 4 {}a[1] [] None True
+42 4 a[b][last()] [] None True
+42 4 .. [] None True
+42 4 .//a/../b[1] [] None True
+42 3 a[1] [] None True
+42 3 a[last()] [] None True
+42 3 b[2] [] None True
+42 3 a[last()-1] [] None True
+42 3 *[1] [] None True
+42 3 *[last()] [] None True
+42 3 a/b[1] [] None True
+42 3 a/b[last()] [] None True
+42 3 */a[2] [] None True
+42 3 .//a[1] [] None True
+42 3 .//b[last()] [] None True
+42 3 a[1]/.. [] None True
+42 3 b/.. [] None True
+42 3 .//c/.. [] None True
+42 3 a[@k] [] None True
+42 3 a[@k][1] [] None True
+42 3 a[1][@k] [] None True
+42 3 b[c] [] None True
+42 3 a[1]/b [] None True
+42 3 */*[last()] [] None True
+42 3 . ['3'] 3 True
+42 3 a[3] [] None True
+42 3 c[last()-2] [] None True
+42 3 {}a[1] [] None True
+42 3 a[b][last()] [] None True
+42 3 .. [] None True
+42 3 .//a/../b[1] [] None True
+42 m ['m42_0'] ['0', '1', '2']
+42 m ['m42_0'] ['0', '1', '2']
+42 m ['m42_0'] ['0', '1', '2']
+42 m ['m42_0'] ['0', '1', '2']
+42 m ['m42_0'] ['0', '1', '2']
+42 m ['m42_0'] ['0', '1', '2']
+43 w a[1] [] None True
+43 w a[last()] [] None True
+43 w b[2] [] None True
+43 w a[last()-1] [] None True
+43 w *[1] ['r'] r True
+43 w *[last()] ['r'] r True
+43 w a/b[1] [] None True
+43 w a/b[last()] [] None True
+43 w */a[2] [] None True
+43 w .//a[1] ['14', '15', '16', '6', '14', '15', '16', '6'] 14 True
+43 w .//b[last()] ['4', '11', '9', '3', '12', '4', '11', '9', '3', '12'] 4 True
+43 w a[1]/.. [] None True
+43 w b/.. [] None True
+43 w .//c/.. ['r', '0', '1', '4', '11', '2', '3'] r True
+43 w a[@k] [] None True
+43 w a[@k][1] [] None True
+43 w a[1][@k] [] None True
+43 w b[c] [] None True
+43 w a[1]/b [] None True
+43 w */*[last()] ['0', '3', '6', '0', '3', '6'] 0 True
+43 w . ['w'] w True
+43 w a[3] [] None True
+43 w c[last()-2] [] None True
+43 w {}a[1] [] None True
+43 w a[b][last()] [] None True
+43 w .. [] None True
+43 w .//a/../b[1] ['9', '3'] 9 True
+43 13 a[1] [] None True
+43 13 a[last()] [] None True
+43 13 b[2] [] None True
+43 13 a[last()-1] [] None True
+43 13 *[1] [] None True
+43 13 *[last()] [] None True
+43 13 a/b[1] [] None True
+43 13 a/b[last()] [] None True
+43 13 */a[2] [] None True
+43 13 .//a[1] [] None True
+43 13 .//b[last()] [] None True
+43 13 a[1]/.. [] None True
+43 13 b/.. [] None True
+43 13 .//c/.. [] None True
+43 13 a[@k] [] None True
+43 13 a[@k][1] [] None True
+43 13 a[1][@k] [] None True
+43 13 b[c] [] None True
+43 13 a[1]/b [] None True
+43 13 */*[last()] [] None True
+43 13 . ['13'] 13 True
+43 13 a[3] [] None True
+43 13 c[last()-2] [] None True
+43 13 {}a[1] [] None True
+43 13 a[b][last()] [] None True
+43 13 .. [] None True
+43 13 .//a/../b[1] [] None True
+43 17 a[1] [] None True
+43 17 a[last()] [] None True
+43 17 b[2] [] None True
+43 17 a[last()-1] [] None True
+43 17 *[1] [] None True
+43 17 *[last()] [] None True
+43 17 a/b[1] [] None True
+43 17 a/b[last()] [] None True
+43 17 */a[2] [] None True
+43 17 .//a[1] [] None True
+43 17 .//b[last()] [] None True
+43 17 a[1]/.. [] None True
+43 17 b/.. [] None True
+43 17 .//c/.. [] None True
+43 17 a[@k] [] None True
+43 17 a[@k][1] [] None True
+43 17 a[1][@k] [] None True
+43 17 b[c] [] None True
+43 17 a[1]/b [] None True
+43 17 */*[last()] [] None True
+43 17 . ['17'] 17 True
+43 17 a[3] [] None True
+43 17 c[last()-2] [] None True
+43 17 {}a[1] [] None True
+43 17 a[b][last()] [] None True
+43 17 .. [] None True
+43 17 .//a/../b[1] [] None True
+43 m [] ['r', 'm43_0']
+43 m [] ['r', 'm43_0']
+43 m ['m43_2'] ['r', 'm43_0', 'm43_2']
+43 m ['m43_2'] ['r', 'm43_0', 'm43_2', 'm43_3']
+43 m ['m43_4'] ['r', 'm43_0', 'm43_2', 'm43_3']
+43 m ['m43_4'] ['r', 'm43_0', 'm43_2', 'm43_3']
+44 r a[1] [] None True
+44 r a[last()] [] None True
+44 r b[2] [] None True
+44 r a[last()-1] [] None True
+44 r *[1] [] None True
+44 r *[last()] [] None True
+44 r a/b[1] [] None True
+44 r a/b[last()] [] None True
+44 r */a[2] [] None True
+44 r .//a[1] [] None True
+44 r .//b[last()] [] None True
+44 r a[1]/.. [] None True
+44 r b/.. [] None True
+44 r .//c/.. [] None True
+44 r a[@k] [] None True
+44 r a[@k][1] [] None True
+44 r a[1][@k] [] None True
+44 r b[c] [] None True
+44 r a[1]/b [] None True
+44 r */*[last()] [] None True
+44 r . ['r'] r True
+44 r a[3] [] None True
+44 r c[last()-2] [] None True
+44 r {}a[1] [] None True
+44 r a[b][last()] [] None True
+44 r .. [] None True
+44 r .//a/../b[1] [] None True
+44 1 a[1] [] None True
+44 1 a[last()] [] None True
+44 1 b[2] [] None True
+44 1 a[last()-1] [] None True
+44 1 *[1] ['2'] 2 True
+44 1 *[last()] ['2'] 2 True
+44 1 a/b[1] [] None True
+44 1 a/b[last()] [] None True
+44 1 */a[2] [] None True
+44 1 .//a[1] [] None True
+44 1 .//b[last()] ['2'] 2 True
+44 1 a[1]/.. [] None True
+44 1 b/.. ['1'] 1 True
+44 1 .//c/.. [] None True
+44 1 a[@k] [] None True
+44 1 a[@k][1] [] None True
+44 1 a[1][@k] [] None True
+44 1 b[c] [] None True
+44 1 a[1]/b [] None True
+44 1 */*[last()] [] None True
+44 1 . ['1'] 1 True
+44 1 a[3] [] None True
+44 1 c[last()-2] [] None True
+44 1 {}a[1] [] None True
+44 1 a[b][last()] [] None True
+44 1 .. [] None True
+44 1 .//a/../b[1] [] None True
+44 m ['m44_0'] ['m44_0']
+44 m ['m44_1'] ['m44_0']
+44 m ['m44_2'] ['m44_0']
+44 m ['m44_2'] ['m44_0', 'm44_3']
+44 m ['m44_2'] ['m44_0', 'm44_3', 'm44_4']
+44 m ['m44_5'] ['m44_0', 'm44_3', 'm44_4']
+45 r a[1] ['2'] 2 True
+45 r a[last()] ['4'] 4 True
+45 r b[2] [] None True
+45 r a[last()-1] ['2'] 2 True
+45 r *[1] ['0', '2'] 0 True
+45 r *[last()] ['0', '4'] 0 True
+45 r a/b[1] ['5'] 5 True
+45 r a/b[last()] ['5'] 5 True
+45 r */a[2] [] None True
+45 r .//a[1] ['2'] 2 True
+45 r .//b[last()] ['3', '5'] 3 True
+45 r a[1]/.. ['r'] r True
+45 r b/.. [] None True
+45 r .//c/.. ['r', '0', '2'] r True
+45 r a[@k] [] None True
+45 r a[@k][1] [] None True
+45 r a[1][@k] [] None True
+45 r b[c] [] None True
+45 r a[1]/b ['5'] 5 True
+45 r */*[last()] ['1', '5', '6'] 1 True
+45 r . ['r'] r True
+45 r a[3] [] None True
+45 r c[last()-2] [] None True
+45 r {}a[1] ['2'] 2 True
+45 r a[b][last()] [] None True
+45 r .. [] None True
+45 r .//a/../b[1] [] None True
+45 6 a[1] [] None True
+45 6 a[last()] [] None True
+45 6 b[2] [] None True
+45 6 a[last()-1] [] None True
+45 6 *[1] [] None True
+45 6 *[last()] [] None True
+45 6 a/b[1] [] None True
+45 6 a/b[last()] [] None True
+45 6 */a[2] [] None True
+45 6 .//a[1] [] None True
+45 6 .//b[last()] [] None True
+45 6 a[1]/.. [] None True
+45 6 b/.. [] None True
+45 6 .//c/.. [] None True
+45 6 a[@k] [] None True
+45 6 a[@k][1] [] None True
+45 6 a[1][@k] [] None True
+45 6 b[c] [] None True
+45 6 a[1]/b [] None True
+45 6 */*[last()] [] None True
+45 6 . ['6'] 6 True
+45 6 a[3] [] None True
+45 6 c[last()-2] [] None True
+45 6 {}a[1] [] None True
+45 6 a[b][last()] [] None True
+45 6 .. [] None True
+45 6 .//a/../b[1] [] None True
+45 5 a[1] [] None True
+45 5 a[last()] [] None True
+45 5 b[2] [] None True
+45 5 a[last()-1] [] None True
+45 5 *[1] [] None True
+45 5 *[last()] [] None True
+45 5 a/b[1] [] None True
+45 5 a/b[last()] [] None True
+45 5 */a[2] [] None True
+45 5 .//a[1] [] None True
+45 5 .//b[last()] [] None True
+45 5 a[1]/.. [] None True
+45 5 b/.. [] None True
+45 5 .//c/.. [] None True
+45 5 a[@k] [] None True
+45 5 a[@k][1] [] None True
+45 5 a[1][@k] [] None True
+45 5 b[c] [] None True
+45 5 a[1]/b [] None True
+45 5 */*[last()] [] None True
+45 5 . ['5'] 5 True
+45 5 a[3] [] None True
+45 5 c[last()-2] [] None True
+45 5 {}a[1] [] None True
+45 5 a[b][last()] [] None True
+45 5 .. [] None True
+45 5 .//a/../b[1] [] None True
+45 m ['m45_0'] ['0', '2']
+45 m ['m45_0'] ['0', '2']
+45 m ['m45_0'] ['0', '2', 'm45_2']
+45 m ['m45_0'] ['0', '2', 'm45_2']
+45 m ['m45_0'] ['0', '2', 'm45_2']
+45 m ['m45_0'] ['0', '2', 'm45_2']
+46 r a[1] ['0'] 0 True
+46 r a[last()] ['6'] 6 True
+46 r b[2] [] None True
+46 r a[last()-1] ['0'] 0 True
+46 r *[1] ['0', '1'] 0 True
+46 r *[last()] ['1', '6'] 1 True
+46 r a/b[1] [] None True
+46 r a/b[last()] [] None True
+46 r */a[2] [] None True
+46 r .//a[1] ['0', '4', '5'] 0 True
+46 r .//b[last()] ['8'] 8 True
+46 r a[1]/.. ['r'] r True
+46 r b/.. [] None True
+46 r .//c/.. ['0', 'r', '1', '3'] 0 True
+46 r a[@k] ['0'] 0 True
+46 r a[@k][1] ['0'] 0 True
+46 r a[1][@k] ['0'] 0 True
+46 r b[c] [] None True
+46 r a[1]/b [] None True
+46 r */*[last()] ['2', '4', '3', '5', '8'] 2 True
+46 r . ['r'] r True
+46 r a[3] [] None True
+46 r c[last()-2] [] None True
+46 r {}a[1] ['0'] 0 True
+46 r a[b][last()] [] None True
+46 r .. [] None True
+46 r .//a/../b[1] ['8'] 8 True
+46 5 a[1] [] None True
+46 5 a[last()] [] None True
+46 5 b[2] [] None True
+46 5 a[last()-1] [] None True
+46 5 *[1] [] None True
+46 5 *[last()] [] None True
+46 5 a/b[1] [] None True
+46 5 a/b[last()] [] None True
+46 5 */a[2] [] None True
+46 5 .//a[1] [] None True
+46 5 .//b[last()] [] None True
+46 5 a[1]/.. [] None True
+46 5 b/.. [] None True
+46 5 .//c/.. [] None True
+46 5 a[@k] [] None True
+46 5 a[@k][1] [] None True
+46 5 a[1][@k] [] None True
+46 5 b[c] [] None True
+46 5 a[1]/b [] None True
+46 5 */*[last()] [] None True
+46 5 . ['5'] 5 True
+46 5 a[3] [] None True
+46 5 c[last()-2] [] None True
+46 5 {}a[1] [] None True
+46 5 a[b][last()] [] None True
+46 5 .. [] None True
+46 5 .//a/../b[1] [] None True
+46 1 a[1] ['5'] 5 True
+46 1 a[last()] ['5'] 5 True
+46 1 b[2] [] None True
+46 1 a[last()-1] [] None True
+46 1 *[1] ['3', '5', '8'] 3 True
+46 1 *[last()] ['3', '5', '8'] 3 True
+46 1 a/b[1] [] None True
+46 1 a/b[last()] [] None True
+46 1 */a[2] [] None True
+46 1 .//a[1] ['5'] 5 True
+46 1 .//b[last()] ['8'] 8 True
+46 1 a[1]/.. ['1'] 1 True
+46 1 b/.. ['1'] 1 True
+46 1 .//c/.. ['1', '3'] 1 True
+46 1 a[@k] [] None True
+46 1 a[@k][1] [] None True
+46 1 a[1][@k] [] None True
+46 1 b[c] [] None True
+46 1 a[1]/b [] None True
+46 1 */*[last()] ['7'] 7 True
+46 1 . ['1'] 1 True
+46 1 a[3] [] None True
+46 1 c[last()-2] [] None True
+46 1 {}a[1] ['5'] 5 True
+46 1 a[b][last()] [] None True
+46 1 .. [] None True
+46 1 .//a/../b[1] ['8'] 8 True
+46 m ['m46_0'] ['0', '1']
+46 m ['m46_0'] ['0', '1', 'm46_1']
+46 m ['m46_0'] ['0', '1', 'm46_1']
+46 m ['m46_0'] ['0', '1', 'm46_1']
+46 m ['m46_0'] ['0', '1', 'm46_1']
+46 m ['m46_0'] ['0', '1', 'm46_1']
+47 r a[1] ['0'] 0 True
+47 r a[last()] ['0'] 0 True
+47 r b[2] [] None True
+47 r a[last()-1] [] None True
+47 r *[1] ['0', '6'] 0 True
+47 r *[last()] ['0', '6'] 0 True
+47 r a/b[1] ['1'] 1 True
+47 r a/b[last()] ['1'] 1 True
+47 r */a[2] [] None True
+47 r .//a[1] ['0', '4', '13', '2', '5', '15', '16', '19', '25'] 0 True
+47 r .//b[last()] ['1', '10', '17', '22', '11', '14'] 1 True
+47 r a[1]/.. ['r'] r True
+47 r b/.. [] None True
+47 r .//c/.. ['17', '1', '9', '2', '5', '14', 'r', '6'] 17 True
+47 r a[@k] [] None True
+47 r a[@k][1] [] None True
+47 r a[1][@k] [] None True
+47 r b[c] [] None True
+47 r a[1]/b ['1'] 1 True
+47 r */*[last()] ['1', '2', '12', '19'] 1 True
+47 r . ['r'] r True
+47 r a[3] [] None True
+47 r c[last()-2] [] None True
+47 r {}a[1] ['0'] 0 True
+47 r a[b][last()] ['0'] 0 True
+47 r .. [] None True
+47 r .//a/../b[1] ['10', '1', '11'] 10 True
+47 25 a[1] [] None True
+47 25 a[last()] [] None True
+47 25 b[2] [] None True
+47 25 a[last()-1] [] None True
+47 25 *[1] [] None True
+47 25 *[last()] [] None True
+47 25 a/b[1] [] None True
+47 25 a/b[last()] [] None True
+47 25 */a[2] [] None True
+47 25 .//a[1] [] None True
+47 25 .//b[last()] [] None True
+47 25 a[1]/.. [] None True
+47 25 b/.. [] None True
+47 25 .//c/.. [] None True
+47 25 a[@k] [] None True
+47 25 a[@k][1] [] None True
+47 25 a[1][@k] [] None True
+47 25 b[c] [] None True
+47 25 a[1]/b [] None True
+47 25 */*[last()] [] None True
+47 25 . ['25'] 25 True
+47 25 a[3] [] None True
+47 25 c[last()-2] [] None True
+47 25 {}a[1] [] None True
+47 25 a[b][last()] [] None True
+47 25 .. [] None True
+47 25 .//a/../b[1] [] None True
+47 15 a[1] [] None True
+47 15 a[last()] [] None True
+47 15 b[2] [] None True
+47 15 a[last()-1] [] None True
+47 15 *[1] [] None True
+47 15 *[last()] [] None True
+47 15 a/b[1] [] None True
+47 15 a/b[last()] [] None True
+47 15 */a[2] [] None True
+47 15 .//a[1] [] None True
+47 15 .//b[last()] [] None True
+47 15 a[1]/.. [] None True
+47 15 b/.. [] None True
+47 15 .//c/.. [] None True
+47 15 a[@k] [] None True
+47 15 a[@k][1] [] None True
+47 15 a[1][@k] [] None True
+47 15 b[c] [] None True
+47 15 a[1]/b [] None True
+47 15 */*[last()] [] None True
+47 15 . ['15'] 15 True
+47 15 a[3] [] None True
+47 15 c[last()-2] [] None True
+47 15 {}a[1] [] None True
+47 15 a[b][last()] [] None True
+47 15 .. [] None True
+47 15 .//a/../b[1] [] None True
+47 m ['m47_0'] ['0', '6']
+47 m ['m47_0'] ['0', '6']
+47 m ['m47_0'] ['0', '6', 'm47_2']
+47 m ['m47_0'] ['0', '6', 'm47_2']
+47 m ['m47_4'] ['0', '6', 'm47_2']
+47 m ['m47_5'] ['0', '6', 'm47_2']
+48 r a[1] [] None True
+48 r a[last()] [] None True
+48 r b[2] [] None True
+48 r a[last()-1] [] None True
+48 r *[1] ['0'] 0 True
+48 r *[last()] ['1'] 1 True
+48 r a/b[1] [] None True
+48 r a/b[last()] [] None True
+48 r */a[2] ['20'] 20 True
+48 r .//a[1] ['3', '14', '8', '6', '7'] 3 True
+48 r .//b[last()] ['4', '24', '11', '15', '22', '17', '12', '19'] 4 True
+48 r a[1]/.. [] None True
+48 r b/.. [] None True
+48 r .//c/.. ['r', '3', '10', '1', '2', '8', '22'] r True
+48 r a[@k] [] None True
+48 r a[@k][1] [] None True
+48 r a[1][@k] [] None True
+48 r b[c] [] None True
+48 r a[1]/b [] None True
+48 r */*[last()] ['20', '2', '6', '19'] 20 True
+48 r . ['r'] r True
+48 r a[3] [] None True
+48 r c[last()-2] [] None True
+48 r {}a[1] [] None True
+48 r a[b][last()] [] None True
+48 r .. [] None True
+48 r .//a/../b[1] ['4', '17', '19', '12'] 4 True
+48 1 a[1] ['6'] 6 True
+48 1 a[last()] ['6'] 6 True
+48 1 b[2] [] None True
+48 1 a[last()-1] [] None True
+48 1 *[1] ['2', '6', '19'] 2 True
+48 1 *[last()] ['2', '6', '19'] 2 True
+48 1 a/b[1] ['12'] 12 True
+48 1 a/b[last()] ['12'] 12 True
+48 1 */a[2] ['16'] 16 True
+48 1 .//a[1] ['8', '6', '7'] 8 True
+48 1 .//b[last()] ['11', '15', '22', '17', '12', '19'] 11 True
+48 1 a[1]/.. ['1'] 1 True
+48 1 b/.. ['1'] 1 True
+48 1 .//c/.. ['1', '2', '8', '22'] 1 True
+48 1 a[@k] [] None True
+48 1 a[@k][1] [] None True
+48 1 a[1][@k] [] None True
+48 1 b[c] [] None True
+48 1 a[1]/b ['12'] 12 True
+48 1 */*[last()] ['8', '13', '17', '12', '16'] 8 True
+48 1 . ['1'] 1 True
+48 1 a[3] [] None True
+48 1 c[last()-2] [] None True
+48 1 {}a[1] ['6'] 6 True
+48 1 a[b][last()] ['6'] 6 True
+48 1 .. [] None True
+48 1 .//a/../b[1] ['17', '19', '12'] 17 True
+48 21 a[1] [] None True
+48 21 a[last()] [] None True
+48 21 b[2] [] None True
+48 21 a[last()-1] [] None True
+48 21 *[1] [] None True
+48 21 *[last()] [] None True
+48 21 a/b[1] [] None True
+48 21 a/b[last()] [] None True
+48 21 */a[2] [] None True
+48 21 .//a[1] [] None True
+48 21 .//b[last()] [] None True
+48 21 a[1]/.. [] None True
+48 21 b/.. [] None True
+48 21 .//c/.. [] None True
+48 21 a[@k] [] None True
+48 21 a[@k][1] [] None True
+48 21 a[1][@k] [] None True
+48 21 b[c] [] None True
+48 21 a[1]/b [] None True
+48 21 */*[last()] [] None True
+48 21 . ['21'] 21 True
+48 21 a[3] [] None True
+48 21 c[last()-2] [] None True
+48 21 {}a[1] [] None True
+48 21 a[b][last()] [] None True
+48 21 .. [] None True
+48 21 .//a/../b[1] [] None True
+48 m ['m48_0'] ['0', 'm48_0']
+48 m ['m48_0'] ['0', 'm48_0']
+48 m ['m48_0'] ['0', 'm48_0', 'm48_2']
+48 m ['m48_0'] ['0', 'm48_0', 'm48_2']
+48 m ['m48_0'] ['0', 'm48_0', 'm48_2']
+48 m ['m48_0'] ['0', 'm48_0', 'm48_2']
+49 r a[1] ['2'] 2 True
+49 r a[last()] ['2'] 2 True
+49 r b[2] [] None True
+49 r a[last()-1] [] None True
+49 r *[1] ['0', '2'] 0 True
+49 r *[last()] ['0', '2'] 0 True
+49 r a/b[1] [] None True
+49 r a/b[last()] [] None True
+49 r */a[2] [] None True
+49 r .//a[1] ['1', '8', '10', '2', '16'] 1 True
+49 r .//b[last()] ['4', '4', '12', '15'] 4 True
+49 r a[1]/.. ['r'] r True
+49 r b/.. [] None True
+49 r .//c/.. ['r', '3', '7', '1', '2'] r True
+49 r a[@k] ['2'] 2 True
+49 r a[@k][1] ['2'] 2 True
+49 r a[1][@k] ['2'] 2 True
+49 r b[c] [] None True
+49 r a[1]/b [] None True
+49 r */*[last()] ['1', '6'] 1 True
+49 r . ['r'] r True
+49 r a[3] [] None True
+49 r c[last()-2] [] None True
+49 r {}a[1] ['2'] 2 True
+49 r a[b][last()] [] None True
+49 r .. [] None True
+49 r .//a/../b[1] ['3', '4'] 3 True
+49 15 a[1] ['16'] 16 True
+49 15 a[last()] ['16'] 16 True
+49 15 b[2] [] None True
+49 15 a[last()-1] [] None True
+49 15 *[1] ['16'] 16 True
+49 15 *[last()] ['16'] 16 True
+49 15 a/b[1] [] None True
+49 15 a/b[last()] [] None True
+49 15 */a[2] [] None True
+49 15 .//a[1] ['16'] 16 True
+49 15 .//b[last()] [] None True
+49 15 a[1]/.. ['15'] 15 True
+49 15 b/.. [] None True
+49 15 .//c/.. [] None True
+49 15 a[@k] [] None True
+49 15 a[@k][1] [] None True
+49 15 a[1][@k] [] None True
+49 15 b[c] [] None True
+49 15 a[1]/b [] None True
+49 15 */*[last()] [] None True
+49 15 . ['15'] 15 True
+49 15 a[3] [] None True
+49 15 c[last()-2] [] None True
+49 15 {}a[1] ['16'] 16 True
+49 15 a[b][last()] [] None True
+49 15 .. [] None True
+49 15 .//a/../b[1] [] None True
+49 15 a[1] ['16'] 16 True
+49 15 a[last()] ['16'] 16 True
+49 15 b[2] [] None True
+49 15 a[last()-1] [] None True
+49 15 *[1] ['16'] 16 True
+49 15 *[last()] ['16'] 16 True
+49 15 a/b[1] [] None True
+49 15 a/b[last()] [] None True
+49 15 */a[2] [] None True
+49 15 .//a[1] ['16'] 16 True
+49 15 .//b[last()] [] None True
+49 15 a[1]/.. ['15'] 15 True
+49 15 b/.. [] None True
+49 15 .//c/.. [] None True
+49 15 a[@k] [] None True
+49 15 a[@k][1] [] None True
+49 15 a[1][@k] [] None True
+49 15 b[c] [] None True
+49 15 a[1]/b [] None True
+49 15 */*[last()] [] None True
+49 15 . ['15'] 15 True
+49 15 a[3] [] None True
+49 15 c[last()-2] [] None True
+49 15 {}a[1] ['16'] 16 True
+49 15 a[b][last()] [] None True
+49 15 .. [] None True
+49 15 .//a/../b[1] [] None True
+49 m ['2'] ['0', '2']
+49 m ['m49_1'] ['0', '2']
+49 m ['m49_2'] ['0', '2']
+49 m ['m49_3'] ['0', '2']
+49 m ['m49_4'] ['0', '2']
+49 m ['m49_4'] ['0', '2', 'm49_5']
+50 w a[1] [] None True
+50 w a[last()] [] None True
+50 w b[2] [] None True
+50 w a[last()-1] [] None True
+50 w *[1] ['r'] r True
+50 w *[last()] ['r'] r True
+50 w a/b[1] [] None True
+50 w a/b[last()] [] None True
+50 w */a[2] [] None True
+50 w .//a[1] ['5', '2', '10', '4', '5', '2', '10', '4'] 5 True
+50 w .//b[last()] ['7', '9', '7', '9'] 7 True
+50 w a[1]/.. [] None True
+50 w b/.. [] None True
+50 w .//c/.. ['0', 'r', '3'] 0 True
+50 w a[@k] [] None True
+50 w a[@k][1] [] None True
+50 w a[1][@k] [] None True
+50 w b[c] [] None True
+50 w a[1]/b [] None True
+50 w */*[last()] ['1', '4', '9', '1', '4', '9'] 1 True
+50 w . ['w'] w True
+50 w a[3] [] None True
+50 w c[last()-2] [] None True
+50 w {}a[1] [] None True
+50 w a[b][last()] [] None True
+50 w .. [] None True
+50 w .//a/../b[1] ['0'] 0 True
+50 6 a[1] [] None True
+50 6 a[last()] [] None True
+50 6 b[2] [] None True
+50 6 a[last()-1] [] None True
+50 6 *[1] [] None True
+50 6 *[last()] [] None True
+50 6 a/b[1] [] None True
+50 6 a/b[last()] [] None True
+50 6 */a[2] [] None True
+50 6 .//a[1] [] None True
+50 6 .//b[last()] [] None True
+50 6 a[1]/.. [] None True
+50 6 b/.. [] None True
+50 6 .//c/.. [] None True
+50 6 a[@k] [] None True
+50 6 a[@k][1] [] None True
+50 6 a[1][@k] [] None True
+50 6 b[c] [] None True
+50 6 a[1]/b [] None True
+50 6 */*[last()] [] None True
+50 6 . ['6'] 6 True
+50 6 a[3] [] None True
+50 6 c[last()-2] [] None True
+50 6 {}a[1] [] None True
+50 6 a[b][last()] [] None True
+50 6 .. [] None True
+50 6 .//a/../b[1] [] None True
+50 7 a[1] [] None True
+50 7 a[last()] [] None True
+50 7 b[2] [] None True
+50 7 a[last()-1] [] None True
+50 7 *[1] [] None True
+50 7 *[last()] [] None True
+50 7 a/b[1] [] None True
+50 7 a/b[last()] [] None True
+50 7 */a[2] [] None True
+50 7 .//a[1] [] None True
+50 7 .//b[last()] [] None True
+50 7 a[1]/.. [] None True
+50 7 b/.. [] None True
+50 7 .//c/.. [] None True
+50 7 a[@k] [] None True
+50 7 a[@k][1] [] None True
+50 7 a[1][@k] [] None True
+50 7 b[c] [] None True
+50 7 a[1]/b [] None True
+50 7 */*[last()] [] None True
+50 7 . ['7'] 7 True
+50 7 a[3] [] None True
+50 7 c[last()-2] [] None True
+50 7 {}a[1] [] None True
+50 7 a[b][last()] [] None True
+50 7 .. [] None True
+50 7 .//a/../b[1] [] None True
+50 m [] ['r', 'm50_0']
+50 m ['m50_1'] ['r', 'm50_0', 'm50_1']
+50 m ['m50_1'] ['r', 'm50_0', 'm50_1', 'm50_2']
+50 m ['m50_1'] ['r', 'm50_0', 'm50_1', 'm50_2']
+50 m ['m50_1'] ['r', 'm50_0', 'm50_1', 'm50_2']
+50 m ['m50_1'] ['r', 'm50_0', 'm50_1', 'm50_2']
+51 r a[1] ['9'] 9 True
+51 r a[last()] ['9'] 9 True
+51 r b[2] ['10'] 10 True
+51 r a[last()-1] [] None True
+51 r *[1] ['0', '2', '9'] 0 True
+51 r *[last()] ['1', '9', '14'] 1 True
+51 r a/b[1] [] None True
+51 r a/b[last()] [] None True
+51 r */a[2] [] None True
+51 r .//a[1] ['5', '6', '9'] 5 True
+51 r .//b[last()] ['4', '3', '7', '11', '13', '14'] 4 True
+51 r a[1]/.. ['r'] r True
+51 r b/.. ['r'] r True
+51 r .//c/.. ['r', '7', '13', '10'] r True
+51 r a[@k] [] None True
+51 r a[@k][1] [] None True
+51 r a[1][@k] [] None True
+51 r b[c] ['10'] 10 True
+51 r a[1]/b [] None True
+51 r */*[last()] ['4', '3', '12'] 4 True
+51 r . ['r'] r True
+51 r a[3] [] None True
+51 r c[last()-2] [] None True
+51 r {}a[1] ['9'] 9 True
+51 r a[b][last()] [] None True
+51 r .. [] None True
+51 r .//a/../b[1] ['2'] 2 True
+51 15 a[1] [] None True
+51 15 a[last()] [] None True
+51 15 b[2] [] None True
+51 15 a[last()-1] [] None True
+51 15 *[1] [] None True
+51 15 *[last()] [] None True
+51 15 a/b[1] [] None True
+51 15 a/b[last()] [] None True
+51 15 */a[2] [] None True
+51 15 .//a[1] [] None True
+51 15 .//b[last()] [] None True
+51 15 a[1]/.. [] None True
+51 15 b/.. [] None True
+51 15 .//c/.. [] None True
+51 15 a[@k] [] None True
+51 15 a[@k][1] [] None True
+51 15 a[1][@k] [] None True
+51 15 b[c] [] None True
+51 15 a[1]/b [] None True
+51 15 */*[last()] [] None True
+51 15 . ['15'] 15 True
+51 15 a[3] [] None True
+51 15 c[last()-2] [] None True
+51 15 {}a[1] [] None True
+51 15 a[b][last()] [] None True
+51 15 .. [] None True
+51 15 .//a/../b[1] [] None True
+51 6 a[1] [] None True
+51 6 a[last()] [] None True
+51 6 b[2] [] None True
+51 6 a[last()-1] [] None True
+51 6 *[1] ['7'] 7 True
+51 6 *[last()] ['7'] 7 True
+51 6 a/b[1] [] None True
+51 6 a/b[last()] [] None True
+51 6 */a[2] [] None True
+51 6 .//a[1] [] None True
+51 6 .//b[last()] ['7', '11', '13'] 7 True
+51 6 a[1]/.. [] None True
+51 6 b/.. ['6'] 6 True
+51 6 .//c/.. ['7', '13'] 7 True
+51 6 a[@k] [] None True
+51 6 a[@k][1] [] None True
+51 6 a[1][@k] [] None True
+51 6 b[c] ['7'] 7 True
+51 6 a[1]/b [] None True
+51 6 */*[last()] ['8', '13'] 8 True
+51 6 . ['6'] 6 True
+51 6 a[3] [] None True
+51 6 c[last()-2] [] None True
+51 6 {}a[1] [] None True
+51 6 a[b][last()] [] None True
+51 6 .. [] None True
+51 6 .//a/../b[1] [] None True
+51 m ['m51_0'] ['0', '2', '9']
+51 m ['m51_1'] ['0', '2', '9']
+51 m ['m51_1'] ['0', '2', '9']
+51 m ['m51_1'] ['0', '2', '9']
+51 m ['m51_1'] ['0', '2', '9']
+51 m ['m51_1'] ['0', '2', '9']
+52 r a[1] [] None True
+52 r a[last()] [] None True
+52 r b[2] [] None True
+52 r a[last()-1] [] None True
+52 r *[1] ['6'] 6 True
+52 r *[last()] ['6'] 6 True
+52 r a/b[1] [] None True
+52 r a/b[last()] [] None True
+52 r */a[2] [] None True
+52 r .//a[1] [] None True
+52 r .//b[last()] ['6', '7'] 6 True
+52 r a[1]/.. [] None True
+52 r b/.. ['r'] r True
+52 r .//c/.. [] None True
+52 r a[@k] [] None True
+52 r a[@k][1] [] None True
+52 r a[1][@k] [] None True
+52 r b[c] [] None True
+52 r a[1]/b [] None True
+52 r */*[last()] ['7'] 7 True
+52 r . ['r'] r True
+52 r a[3] [] None True
+52 r c[last()-2] [] None True
+52 r {}a[1] [] None True
+52 r a[b][last()] [] None True
+52 r .. [] None True
+52 r .//a/../b[1] [] None True
+52 7 a[1] [] None True
+52 7 a[last()] [] None True
+52 7 b[2] [] None True
+52 7 a[last()-1] [] None True
+52 7 *[1] [] None True
+52 7 *[last()] [] None True
+52 7 a/b[1] [] None True
+52 7 a/b[last()] [] None True
+52 7 */a[2] [] None True
+52 7 .//a[1] [] None True
+52 7 .//b[last()] [] None True
+52 7 a[1]/.. [] None True
+52 7 b/.. [] None True
+52 7 .//c/.. [] None True
+52 7 a[@k] [] None True
+52 7 a[@k][1] [] None True
+52 7 a[1][@k] [] None True
+52 7 b[c] [] None True
+52 7 a[1]/b [] None True
+52 7 */*[last()] [] None True
+52 7 . ['7'] 7 True
+52 7 a[3] [] None True
+52 7 c[last()-2] [] None True
+52 7 {}a[1] [] None True
+52 7 a[b][last()] [] None True
+52 7 .. [] None True
+52 7 .//a/../b[1] [] None True
+52 1 a[1] [] None True
+52 1 a[last()] [] None True
+52 1 b[2] [] None True
+52 1 a[last()-1] [] None True
+52 1 *[1] [] None True
+52 1 *[last()] [] None True
+52 1 a/b[1] [] None True
+52 1 a/b[last()] [] None True
+52 1 */a[2] [] None True
+52 1 .//a[1] [] None True
+52 1 .//b[last()] [] None True
+52 1 a[1]/.. [] None True
+52 1 b/.. [] None True
+52 1 .//c/.. [] None True
+52 1 a[@k] [] None True
+52 1 a[@k][1] [] None True
+52 1 a[1][@k] [] None True
+52 1 b[c] [] None True
+52 1 a[1]/b [] None True
+52 1 */*[last()] [] None True
+52 1 . ['1'] 1 True
+52 1 a[3] [] None True
+52 1 c[last()-2] [] None True
+52 1 {}a[1] [] None True
+52 1 a[b][last()] [] None True
+52 1 .. [] None True
+52 1 .//a/../b[1] [] None True
+52 m [] ['6']
+52 m [] ['6']
+52 m [] ['6']
+52 m ['m52_3'] ['6', 'm52_3']
+52 m ['m52_4'] ['6', 'm52_3']
+52 m ['m52_4'] ['6', 'm52_3', 'm52_5']
+53 r a[1] [] None True
+53 r a[last()] [] None True
+53 r b[2] [] None True
+53 r a[last()-1] [] None True
+53 r *[1] ['0'] 0 True
+53 r *[last()] ['0'] 0 True
+53 r a/b[1] [] None True
+53 r a/b[last()] [] None True
+53 r */a[2] ['2'] 2 True
+53 r .//a[1] ['1'] 1 True
+53 r .//b[last()] ['0', '3'] 0 True
+53 r a[1]/.. [] None True
+53 r b/.. ['r'] r True
+53 r .//c/.. ['3', '2'] 3 True
+53 r a[@k] [] None True
+53 r a[@k][1] [] None True
+53 r a[1][@k] [] None True
+53 r b[c] [] None True
+53 r a[1]/b [] None True
+53 r */*[last()] ['2'] 2 True
+53 r . ['r'] r True
+53 r a[3] [] None True
+53 r c[last()-2] [] None True
+53 r {}a[1] [] None True
+53 r a[b][last()] [] None True
+53 r .. [] None True
+53 r .//a/../b[1] [] None True
+53 2 a[1] [] None True
+53 2 a[last()] [] None True
+53 2 b[2] [] None True
+53 2 a[last()-1] [] None True
+53 2 *[1] ['3', '5'] 3 True
+53 2 *[last()] ['3', '5'] 3 True
+53 2 a/b[1] [] None True
+53 2 a/b[last()] [] None True
+53 2 */a[2] [] None True
+53 2 .//a[1] [] None True
+53 2 .//b[last()] ['3'] 3 True
+53 2 a[1]/.. [] None True
+53 2 b/.. ['2'] 2 True
+53 2 .//c/.. ['3', '2'] 3 True
+53 2 a[@k] [] None True
+53 2 a[@k][1] [] None True
+53 2 a[1][@k] [] None True
+53 2 b[c] ['3'] 3 True
+53 2 a[1]/b [] None True
+53 2 */*[last()] ['4'] 4 True
+53 2 . ['2'] 2 True
+53 2 a[3] [] None True
+53 2 c[last()-2] [] None True
+53 2 {}a[1] [] None True
+53 2 a[b][last()] [] None True
+53 2 .. [] None True
+53 2 .//a/../b[1] [] None True
+53 4 a[1] [] None True
+53 4 a[last()] [] None True
+53 4 b[2] [] None True
+53 4 a[last()-1] [] None True
+53 4 *[1] [] None True
+53 4 *[last()] [] None True
+53 4 a/b[1] [] None True
+53 4 a/b[last()] [] None True
+53 4 */a[2] [] None True
+53 4 .//a[1] [] None True
+53 4 .//b[last()] [] None True
+53 4 a[1]/.. [] None True
+53 4 b/.. [] None True
+53 4 .//c/.. [] None True
+53 4 a[@k] [] None True
+53 4 a[@k][1] [] None True
+53 4 a[1][@k] [] None True
+53 4 b[c] [] None True
+53 4 a[1]/b [] None True
+53 4 */*[last()] [] None True
+53 4 . ['4'] 4 True
+53 4 a[3] [] None True
+53 4 c[last()-2] [] None True
+53 4 {}a[1] [] None True
+53 4 a[b][last()] [] None True
+53 4 .. [] None True
+53 4 .//a/../b[1] [] None True
+53 m [] ['0']
+53 m ['m53_1'] ['0', 'm53_1']
+53 m ['m53_1'] ['0', 'm53_1', 'm53_2']
+53 m ['m53_3'] ['0', 'm53_1', 'm53_2']
+53 m ['m53_3'] ['0', 'm53_1', 'm53_2']
+53 m ['m53_5'] ['0', 'm53_1', 'm53_2']
+54 r a[1] [] None True
+54 r a[last()] [] None True
+54 r b[2] [] None True
+54 r a[last()-1] [] None True
+54 r *[1] ['0'] 0 True
+54 r *[last()] ['1'] 1 True
+54 r a/b[1] [] None True
+54 r a/b[last()] [] None True
+54 r */a[2] [] None True
+54 r .//a[1] ['7', '17', '6', '13', '4'] 7 True
+54 r .//b[last()] ['15', '5', '8', '11'] 15 True
+54 r a[1]/.. [] None True
+54 r b/.. [] None True
+54 r .//c/.. ['r', '3', '1', '13', '2', '11'] r True
+54 r a[@k] [] None True
+54 r a[@k][1] [] None True
+54 r a[1][@k] [] None True
+54 r b[c] [] None True
+54 r a[1]/b [] None True
+54 r */*[last()] ['5', '17', '2', '4'] 5 True
+54 r . ['r'] r True
+54 r a[3] [] None True
+54 r c[last()-2] [] None True
+54 r {}a[1] [] None True
+54 r a[b][last()] [] None True
+54 r .. [] None True
+54 r .//a/../b[1] ['15', '3', '8'] 15 True
+54 11 a[1] [] None True
+54 11 a[last()] [] None True
+54 11 b[2] [] None True
+54 11 a[last()-1] [] None True
+54 11 *[1] ['12'] 12 True
+54 11 *[last()] ['12'] 12 True
+54 11 a/b[1] [] None True
+54 11 a/b[last()] [] None True
+54 11 */a[2] [] None True
+54 11 .//a[1] [] None True
+54 11 .//b[last()] [] None True
+54 11 a[1]/.. [] None True
+54 11 b/.. [] None True
+54 11 .//c/.. ['11'] 11 True
+54 11 a[@k] [] None True
+54 11 a[@k][1] [] None True
+54 11 a[1][@k] [] None True
+54 11 b[c] [] None True
+54 11 a[1]/b [] None True
+54 11 */*[last()] [] None True
+54 11 . ['11'] 11 True
+54 11 a[3] [] None True
+54 11 c[last()-2] [] None True
+54 11 {}a[1] [] None True
+54 11 a[b][last()] [] None True
+54 11 .. [] None True
+54 11 .//a/../b[1] [] None True
+54 13 a[1] [] None True
+54 13 a[last()] [] None True
+54 13 b[2] [] None True
+54 13 a[last()-1] [] None True
+54 13 *[1] ['16'] 16 True
+54 13 *[last()] ['16'] 16 True
+54 13 a/b[1] [] None True
+54 13 a/b[last()] [] None True
+54 13 */a[2] [] None True
+54 13 .//a[1] [] None True
+54 13 .//b[last()] [] None True
+54 13 a[1]/.. [] None True
+54 13 b/.. [] None True
+54 13 .//c/.. ['13'] 13 True
+54 13 a[@k] [] None True
+54 13 a[@k][1] [] None True
+54 13 a[1][@k] [] None True
+54 13 b[c] [] None True
+54 13 a[1]/b [] None True
+54 13 */*[last()] [] None True
+54 13 . ['13'] 13 True
+54 13 a[3] [] None True
+54 13 c[last()-2] [] None True
+54 13 {}a[1] [] None True
+54 13 a[b][last()] [] None True
+54 13 .. [] None True
+54 13 .//a/../b[1] [] None True
+54 m [] ['0']
+54 m [] ['0', 'm54_1']
+54 m [] ['0', 'm54_1']
+54 m [] ['0', 'm54_1']
+54 m [] ['0', 'm54_1']
+54 m [] ['0', 'm54_1']
+55 r a[1] ['1'] 1 True
+55 r a[last()] ['1'] 1 True
+55 r b[2] [] None True
+55 r a[last()-1] [] None True
+55 r *[1] ['0', '1'] 0 True
+55 r *[last()] ['0', '1'] 0 True
+55 r a/b[1] ['s0'] s0 True
+55 r a/b[last()] ['s0'] s0 True
+55 r */a[2] [] None True
+55 r .//a[1] ['1'] 1 True
+55 r .//b[last()] ['s0'] s0 True
+55 r a[1]/.. ['r'] r True
+55 r b/.. [] None True
+55 r .//c/.. ['r'] r True
+55 r a[@k] ['1'] 1 True
+55 r a[@k][1] ['1'] 1 True
+55 r a[1][@k] ['1'] 1 True
+55 r b[c] [] None True
+55 r a[1]/b ['s0'] s0 True
+55 r */*[last()] ['s0'] s0 True
+55 r . ['r'] r True
+55 r a[3] [] None True
+55 r c[last()-2] [] None True
+55 r {}a[1] ['1'] 1 True
+55 r a[b][last()] ['1'] 1 True
+55 r .. [] None True
+55 r .//a/../b[1] [] None True
+55 6 a[1] [] None True
+55 6 a[last()] [] None True
+55 6 b[2] [] None True
+55 6 a[last()-1] [] None True
+55 6 *[1] [] None True
+55 6 *[last()] [] None True
+55 6 a/b[1] [] None True
+55 6 a/b[last()] [] None True
+55 6 */a[2] [] None True
+55 6 .//a[1] [] None True
+55 6 .//b[last()] [] None True
+55 6 a[1]/.. [] None True
+55 6 b/.. [] None True
+55 6 .//c/.. [] None True
+55 6 a[@k] [] None True
+55 6 a[@k][1] [] None True
+55 6 a[1][@k] [] None True
+55 6 b[c] [] None True
+55 6 a[1]/b [] None True
+55 6 */*[last()] [] None True
+55 6 . ['6'] 6 True
+55 6 a[3] [] None True
+55 6 c[last()-2] [] None True
+55 6 {}a[1] [] None True
+55 6 a[b][last()] [] None True
+55 6 .. [] None True
+55 6 .//a/../b[1] [] None True
+55 6 a[1] [] None True
+55 6 a[last()] [] None True
+55 6 b[2] [] None True
+55 6 a[last()-1] [] None True
+55 6 *[1] [] None True
+55 6 *[last()] [] None True
+55 6 a/b[1] [] None True
+55 6 a/b[last()] [] None True
+55 6 */a[2] [] None True
+55 6 .//a[1] [] None True
+55 6 .//b[last()] [] None True
+55 6 a[1]/.. [] None True
+55 6 b/.. [] None True
+55 6 .//c/.. [] None True
+55 6 a[@k] [] None True
+55 6 a[@k][1] [] None True
+55 6 a[1][@k] [] None True
+55 6 b[c] [] None True
+55 6 a[1]/b [] None True
+55 6 */*[last()] [] None True
+55 6 . ['6'] 6 True
+55 6 a[3] [] None True
+55 6 c[last()-2] [] None True
+55 6 {}a[1] [] None True
+55 6 a[b][last()] [] None True
+55 6 .. [] None True
+55 6 .//a/../b[1] [] None True
+55 m ['1'] ['0', '1']
+55 m ['1'] ['0', '1', 'm55_1']
+55 m ['1'] ['0', '1', 'm55_1']
+55 m ['1'] ['0', '1', 'm55_1']
+55 m ['1'] ['0', '1', 'm55_1']
+55 m ['m55_5'] ['0', '1', 'm55_1']
+56 r a[1] ['1'] 1 True
+56 r a[last()] ['1'] 1 True
+56 r b[2] [] None True
+56 r a[last()-1] [] None True
+56 r *[1] ['0', '1'] 0 True
+56 r *[last()] ['1', '2'] 1 True
+56 r a/b[1] [] None True
+56 r a/b[last()] [] None True
+56 r */a[2] [] None True
+56 r .//a[1] ['1', '5', '3'] 1 True
+56 r .//b[last()] ['4'] 4 True
+56 r a[1]/.. ['r'] r True
+56 r b/.. [] None True
+56 r .//c/.. ['r'] r True
+56 r a[@k] [] None True
+56 r a[@k][1] [] None True
+56 r a[1][@k] [] None True
+56 r b[c] [] None True
+56 r a[1]/b [] None True
+56 r */*[last()] ['4', '5', '3'] 4 True
+56 r . ['r'] r True
+56 r a[3] [] None True
+56 r c[last()-2] [] None True
+56 r {}a[1] ['1'] 1 True
+56 r a[b][last()] [] None True
+56 r .. [] None True
+56 r .//a/../b[1] [] None True
+56 0 a[1] [] None True
+56 0 a[last()] [] None True
+56 0 b[2] [] None True
+56 0 a[last()-1] [] None True
+56 0 *[1] ['4'] 4 True
+56 0 *[last()] ['4'] 4 True
+56 0 a/b[1] [] None True
+56 0 a/b[last()] [] None True
+56 0 */a[2] [] None True
+56 0 .//a[1] [] None True
+56 0 .//b[last()] ['4'] 4 True
+56 0 a[1]/.. [] None True
+56 0 b/.. ['0'] 0 True
+56 0 .//c/.. [] None True
+56 0 a[@k] [] None True
+56 0 a[@k][1] [] None True
+56 0 a[1][@k] [] None True
+56 0 b[c] [] None True
+56 0 a[1]/b [] None True
+56 0 */*[last()] [] None True
+56 0 . ['0'] 0 True
+56 0 a[3] [] None True
+56 0 c[last()-2] [] None True
+56 0 {}a[1] [] None True
+56 0 a[b][last()] [] None True
+56 0 .. [] None True
+56 0 .//a/../b[1] [] None True
+56 5 a[1] [] None True
+56 5 a[last()] [] None True
+56 5 b[2] [] None True
+56 5 a[last()-1] [] None True
+56 5 *[1] [] None True
+56 5 *[last()] [] None True
+56 5 a/b[1] [] None True
+56 5 a/b[last()] [] None True
+56 5 */a[2] [] None True
+56 5 .//a[1] [] None True
+56 5 .//b[last()] [] None True
+56 5 a[1]/.. [] None True
+56 5 b/.. [] None True
+56 5 .//c/.. [] None True
+56 5 a[@k] [] None True
+56 5 a[@k][1] [] None True
+56 5 a[1][@k] [] None True
+56 5 b[c] [] None True
+56 5 a[1]/b [] None True
+56 5 */*[last()] [] None True
+56 5 . ['5'] 5 True
+56 5 a[3] [] None True
+56 5 c[last()-2] [] None True
+56 5 {}a[1] [] None True
+56 5 a[b][last()] [] None True
+56 5 .. [] None True
+56 5 .//a/../b[1] [] None True
+56 m ['1'] ['0', '1']
+56 m ['1'] ['0', '1', 'm56_1']
+56 m ['1'] ['0', '1', 'm56_1']
+56 m ['m56_3'] ['0', '1', 'm56_1']
+56 m ['m56_3'] ['0', '1', 'm56_1']
+56 m ['m56_3'] ['0', '1', 'm56_1']
+57 w a[1] [] None True
+57 w a[last()] [] None True
+57 w b[2] [] None True
+57 w a[last()-1] [] None True
+57 w *[1] ['r'] r True
+57 w *[last()] ['r'] r True
+57 w a/b[1] [] None True
+57 w a/b[last()] [] None True
+57 w */a[2] [] None True
+57 w .//a[1] ['11', '11'] 11 True
+57 w .//b[last()] ['10', '2', '4', '5', '10', '2', '4', '5'] 10 True
+57 w a[1]/.. [] None True
+57 w b/.. [] None True
+57 w .//c/.. ['0', '2', '4', '6'] 0 True
+57 w a[@k] [] None True
+57 w a[@k][1] [] None True
+57 w a[1][@k] [] None True
+57 w b[c] [] None True
+57 w a[1]/b [] None True
+57 w */*[last()] ['2', '2'] 2 True
+57 w . ['w'] w True
+57 w a[3] [] None True
+57 w c[last()-2] [] None True
+57 w {}a[1] [] None True
+57 w a[b][last()] [] None True
+57 w .. [] None True
+57 w .//a/../b[1] ['5'] 5 True
+57 6 a[1] [] None True
+57 6 a[last()] [] None True
+57 6 b[2] [] None True
+57 6 a[last()-1] [] None True
+57 6 *[1] ['7'] 7 True
+57 6 *[last()] ['7'] 7 True
+57 6 a/b[1] [] None True
+57 6 a/b[last()] [] None True
+57 6 */a[2] [] None True
+57 6 .//a[1] [] None True
+57 6 .//b[last()] [] None True
+57 6 a[1]/.. [] None True
+57 6 b/.. [] None True
+57 6 .//c/.. ['6'] 6 True
+57 6 a[@k] [] None True
+57 6 a[@k][1] [] None True
+57 6 a[1][@k] [] None True
+57 6 b[c] [] None True
+57 6 a[1]/b [] None True
+57 6 */*[last()] [] None True
+57 6 . ['6'] 6 True
+57 6 a[3] [] None True
+57 6 c[last()-2] [] None True
+57 6 {}a[1] [] None True
+57 6 a[b][last()] [] None True
+57 6 .. [] None True
+57 6 .//a/../b[1] [] None True
+57 4 a[1] ['11'] 11 True
+57 4 a[last()] ['11'] 11 True
+57 4 b[2] [] None True
+57 4 a[last()-1] [] None True
+57 4 *[1] ['5', '9', '11'] 5 True
+57 4 *[last()] ['5', '9', '11'] 5 True
+57 4 a/b[1] [] None True
+57 4 a/b[last()] [] None True
+57 4 */a[2] [] None True
+57 4 .//a[1] ['11'] 11 True
+57 4 .//b[last()] ['5'] 5 True
+57 4 a[1]/.. ['4'] 4 True
+57 4 b/.. ['4'] 4 True
+57 4 .//c/.. ['4'] 4 True
+57 4 a[@k] ['11'] 11 True
+57 4 a[@k][1] ['11'] 11 True
+57 4 a[1][@k] ['11'] 11 True
+57 4 b[c] [] None True
+57 4 a[1]/b [] None True
+57 4 */*[last()] [] None True
+57 4 . ['4'] 4 True
+57 4 a[3] [] None True
+57 4 c[last()-2] [] None True
+57 4 {}a[1] ['11'] 11 True
+57 4 a[b][last()] [] None True
+57 4 .. [] None True
+57 4 .//a/../b[1] ['5'] 5 True
+57 m ['m57_0'] ['r', 'm57_0']
+57 m ['m57_0'] ['r', 'm57_0', 'm57_1']
+57 m ['m57_0'] ['r', 'm57_0', 'm57_1']
+57 m ['m57_0'] ['r', 'm57_0', 'm57_1', 'm57_3']
+57 m ['m57_0'] ['r', 'm57_0', 'm57_1', 'm57_3']
+57 m ['m57_0'] ['r', 'm57_0', 'm57_1', 'm57_3']
+58 r a[1] ['0'] 0 True
+58 r a[last()] ['3'] 3 True
+58 r b[2] [] None True
+58 r a[last()-1] ['0'] 0 True
+58 r *[1] ['0'] 0 True
+58 r *[last()] ['3'] 3 True
+58 r a/b[1] [] None True
+58 r a/b[last()] [] None True
+58 r */a[2] [] None True
+58 r .//a[1] ['0', '4'] 0 True
+58 r .//b[last()] ['9'] 9 True
+58 r a[1]/.. ['r'] r True
+58 r b/.. [] None True
+58 r .//c/.. [] None True
+58 r a[@k] [] None True
+58 r a[@k][1] [] None True
+58 r a[1][@k] [] None True
+58 r b[c] [] None True
+58 r a[1]/b [] None True
+58 r */*[last()] ['4'] 4 True
+58 r . ['r'] r True
+58 r a[3] [] None True
+58 r c[last()-2] [] None True
+58 r {}a[1] ['0'] 0 True
+58 r a[b][last()] [] None True
+58 r .. [] None True
+58 r .//a/../b[1] [] None True
+58 5 a[1] [] None True
+58 5 a[last()] [] None True
+58 5 b[2] [] None True
+58 5 a[last()-1] [] None True
+58 5 *[1] [] None True
+58 5 *[last()] [] None True
+58 5 a/b[1] [] None True
+58 5 a/b[last()] [] None True
+58 5 */a[2] [] None True
+58 5 .//a[1] [] None True
+58 5 .//b[last()] [] None True
+58 5 a[1]/.. [] None True
+58 5 b/.. [] None True
+58 5 .//c/.. [] None True
+58 5 a[@k] [] None True
+58 5 a[@k][1] [] None True
+58 5 a[1][@k] [] None True
+58 5 b[c] [] None True
+58 5 a[1]/b [] None True
+58 5 */*[last()] [] None True
+58 5 . ['5'] 5 True
+58 5 a[3] [] None True
+58 5 c[last()-2] [] None True
+58 5 {}a[1] [] None True
+58 5 a[b][last()] [] None True
+58 5 .. [] None True
+58 5 .//a/../b[1] [] None True
+58 7 a[1] [] None True
+58 7 a[last()] [] None True
+58 7 b[2] [] None True
+58 7 a[last()-1] [] None True
+58 7 *[1] ['8'] 8 True
+58 7 *[last()] ['8'] 8 True
+58 7 a/b[1] [] None True
+58 7 a/b[last()] [] None True
+58 7 */a[2] [] None True
+58 7 .//a[1] [] None True
+58 7 .//b[last()] [] None True
+58 7 a[1]/.. [] None True
+58 7 b/.. [] None True
+58 7 .//c/.. ['7', '8'] 7 True
+58 7 a[@k] [] None True
+58 7 a[@k][1] [] None True
+58 7 a[1][@k] [] None True
+58 7 b[c] [] None True
+58 7 a[1]/b [] None True
+58 7 */*[last()] ['10'] 10 True
+58 7 . ['7'] 7 True
+58 7 a[3] [] None True
+58 7 c[last()-2] [] None True
+58 7 {}a[1] [] None True
+58 7 a[b][last()] [] None True
+58 7 .. [] None True
+58 7 .//a/../b[1] [] None True
+58 m ['3'] ['0', 'm58_0']
+58 m ['3'] ['0', 'm58_0']
+58 m ['3'] ['0', 'm58_0']
+58 m ['m58_3'] ['0', 'm58_0']
+58 m ['m58_3'] ['0', 'm58_0']
+58 m ['m58_3'] ['0', 'm58_0', 'm58_5']
+59 r a[1] ['2'] 2 True
+59 r a[last()] ['2'] 2 True
+59 r b[2] ['1'] 1 True
+59 r a[last()-1] [] None True
+59 r *[1] ['0', '2', '8'] 0 True
+59 r *[last()] ['1', '2', '8'] 1 True
+59 r a/b[1] [] None True
+59 r a/b[last()] [] None True
+59 r */a[2] [] None True
+59 r .//a[1] ['6', '10', '2'] 6 True
+59 r .//b[last()] ['1', '4', '3'] 1 True
+59 r a[1]/.. ['r'] r True
+59 r b/.. ['r'] r True
+59 r .//c/.. ['0', '1', 'r'] 0 True
+59 r a[@k] [] None True
+59 r a[@k][1] [] None True
+59 r a[1][@k] [] None True
+59 r b[c] ['0', '1'] 0 True
+59 r a[1]/b [] None True
+59 r */*[last()] ['9', '4', '7', '10'] 9 True
+59 r . ['r'] r True
+59 r a[3] [] None True
+59 r c[last()-2] [] None True
+59 r {}a[1] ['2'] 2 True
+59 r a[b][last()] [] None True
+59 r .. [] None True
+59 r .//a/../b[1] ['4', '0'] 4 True
+59 10 a[1] [] None True
+59 10 a[last()] [] None True
+59 10 b[2] [] None True
+59 10 a[last()-1] [] None True
+59 10 *[1] ['3'] 3 True
+59 10 *[last()] ['3'] 3 True
+59 10 a/b[1] [] None True
+59 10 a/b[last()] [] None True
+59 10 */a[2] [] None True
+59 10 .//a[1] [] None True
+59 10 .//b[last()] ['3'] 3 True
+59 10 a[1]/.. [] None True
+59 10 b/.. ['10'] 10 True
+59 10 .//c/.. [] None True
+59 10 a[@k] [] None True
+59 10 a[@k][1] [] None True
+59 10 a[1][@k] [] None True
+59 10 b[c] [] None True
+59 10 a[1]/b [] None True
+59 10 */*[last()] [] None True
+59 10 . ['10'] 10 True
+59 10 a[3] [] None True
+59 10 c[last()-2] [] None True
+59 10 {}a[1] [] None True
+59 10 a[b][last()] [] None True
+59 10 .. [] None True
+59 10 .//a/../b[1] [] None True
+59 7 a[1] [] None True
+59 7 a[last()] [] None True
+59 7 b[2] [] None True
+59 7 a[last()-1] [] None True
+59 7 *[1] [] None True
+59 7 *[last()] [] None True
+59 7 a/b[1] [] None True
+59 7 a/b[last()] [] None True
+59 7 */a[2] [] None True
+59 7 .//a[1] [] None True
+59 7 .//b[last()] [] None True
+59 7 a[1]/.. [] None True
+59 7 b/.. [] None True
+59 7 .//c/.. [] None True
+59 7 a[@k] [] None True
+59 7 a[@k][1] [] None True
+59 7 a[1][@k] [] None True
+59 7 b[c] [] None True
+59 7 a[1]/b [] None True
+59 7 */*[last()] [] None True
+59 7 . ['7'] 7 True
+59 7 a[3] [] None True
+59 7 c[last()-2] [] None True
+59 7 {}a[1] [] None True
+59 7 a[b][last()] [] None True
+59 7 .. [] None True
+59 7 .//a/../b[1] [] None True
+59 m ['2'] ['0', '2', '8']
+59 m ['2'] ['0', '2', '8']
+59 m ['2'] ['0', '2', '8']
+59 m ['m59_3'] ['0', '2', '8']
+59 m ['m59_4'] ['0', '2', '8']
+59 m ['m59_4'] ['0', '2', '8']
+60 r a[1] [] None True
+60 r a[last()] [] None True
+60 r b[2] [] None True
+60 r a[last()-1] [] None True
+60 r *[1] ['0'] 0 True
+60 r *[last()] ['6'] 6 True
+60 r a/b[1] [] None True
+60 r a/b[last()] [] None True
+60 r */a[2] [] None True
+60 r .//a[1] ['3', '8', '17', '16', '2', '10'] 3 True
+60 r .//b[last()] ['7', '4', '18', '9'] 7 True
+60 r a[1]/.. [] None True
+60 r b/.. [] None True
+60 r .//c/.. ['r', '1', '10', '9'] r True
+60 r a[@k] [] None True
+60 r a[@k][1] [] None True
+60 r a[1][@k] [] None True
+60 r b[c] [] None True
+60 r a[1]/b [] None True
+60 r */*[last()] ['2', '9'] 2 True
+60 r . ['r'] r True
+60 r a[3] [] None True
+60 r c[last()-2] [] None True
+60 r {}a[1] [] None True
+60 r a[b][last()] [] None True
+60 r .. [] None True
+60 r .//a/../b[1] ['4', '1'] 4 True
+60 11 a[1] [] None True
+60 11 a[last()] [] None True
+60 11 b[2] [] None True
+60 11 a[last()-1] [] None True
+60 11 *[1] [] None True
+60 11 *[last()] [] None True
+60 11 a/b[1] [] None True
+60 11 a/b[last()] [] None True
+60 11 */a[2] [] None True
+60 11 .//a[1] [] None True
+60 11 .//b[last()] [] None True
+60 11 a[1]/.. [] None True
+60 11 b/.. [] None True
+60 11 .//c/.. [] None True
+60 11 a[@k] [] None True
+60 11 a[@k][1] [] None True
+60 11 a[1][@k] [] None True
+60 11 b[c] [] None True
+60 11 a[1]/b [] None True
+60 11 */*[last()] [] None True
+60 11 . ['11'] 11 True
+60 11 a[3] [] None True
+60 11 c[last()-2] [] None True
+60 11 {}a[1] [] None True
+60 11 a[b][last()] [] None True
+60 11 .. [] None True
+60 11 .//a/../b[1] [] None True
+60 10 a[1] [] None True
+60 10 a[last()] [] None True
+60 10 b[2] [] None True
+60 10 a[last()-1] [] None True
+60 10 *[1] ['14'] 14 True
+60 10 *[last()] ['14'] 14 True
+60 10 a/b[1] [] None True
+60 10 a/b[last()] [] None True
+60 10 */a[2] [] None True
+60 10 .//a[1] [] None True
+60 10 .//b[last()] [] None True
+60 10 a[1]/.. [] None True
+60 10 b/.. [] None True
+60 10 .//c/.. ['10'] 10 True
+60 10 a[@k] [] None True
+60 10 a[@k][1] [] None True
+60 10 a[1][@k] [] None True
+60 10 b[c] [] None True
+60 10 a[1]/b [] None True
+60 10 */*[last()] [] None True
+60 10 . ['10'] 10 True
+60 10 a[3] [] None True
+60 10 c[last()-2] [] None True
+60 10 {}a[1] [] None True
+60 10 a[b][last()] [] None True
+60 10 .. [] None True
+60 10 .//a/../b[1] [] None True
+60 m [] ['0', 'm60_0']
+60 m [] ['0', 'm60_0']
+60 m ['m60_2'] ['0', 'm60_0', 'm60_2']
+60 m ['m60_2'] ['0', 'm60_0', 'm60_2']
+60 m ['m60_2'] ['0', 'm60_0', 'm60_2']
+60 m ['m60_2'] ['0', 'm60_0', 'm60_2']
+61 r a[1] ['0'] 0 True
+61 r a[last()] ['0'] 0 True
+61 r b[2] [] None True
+61 r a[last()-1] [] None True
+61 r *[1] ['0', '2'] 0 True
+61 r *[last()] ['0', '2'] 0 True
+61 r a/b[1] [] None True
+61 r a/b[last()] [] None True
+61 r */a[2] [] None True
+61 r .//a[1] ['0', '5'] 0 True
+61 r .//b[last()] ['3', '6'] 3 True
+61 r a[1]/.. ['r'] r True
+61 r b/.. [] None True
+61 r .//c/.. ['r', '5'] r True
+61 r a[@k] [] None True
+61 r a[@k][1] [] None True
+61 r a[1][@k] [] None True
+61 r b[c] [] None True
+61 r a[1]/b [] None True
+61 r */*[last()] ['3'] 3 True
+61 r . ['r'] r True
+61 r a[3] [] None True
+61 r c[last()-2] [] None True
+61 r {}a[1] ['0'] 0 True
+61 r a[b][last()] [] None True
+61 r .. [] None True
+61 r .//a/../b[1] [] None True
+61 6 a[1] [] None True
+61 6 a[last()] [] None True
+61 6 b[2] [] None True
+61 6 a[last()-1] [] None True
+61 6 *[1] [] None True
+61 6 *[last()] [] None True
+61 6 a/b[1] [] None True
+61 6 a/b[last()] [] None True
+61 6 */a[2] [] None True
+61 6 .//a[1] [] None True
+61 6 .//b[last()] [] None True
+61 6 a[1]/.. [] None True
+61 6 b/.. [] None True
+61 6 .//c/.. [] None True
+61 6 a[@k] [] None True
+61 6 a[@k][1] [] None True
+61 6 a[1][@k] [] None True
+61 6 b[c] [] None True
+61 6 a[1]/b [] None True
+61 6 */*[last()] [] None True
+61 6 . ['6'] 6 True
+61 6 a[3] [] None True
+61 6 c[last()-2] [] None True
+61 6 {}a[1] [] None True
+61 6 a[b][last()] [] None True
+61 6 .. [] None True
+61 6 .//a/../b[1] [] None True
+61 7 a[1] [] None True
+61 7 a[last()] [] None True
+61 7 b[2] [] None True
+61 7 a[last()-1] [] None True
+61 7 *[1] [] None True
+61 7 *[last()] [] None True
+61 7 a/b[1] [] None True
+61 7 a/b[last()] [] None True
+61 7 */a[2] [] None True
+61 7 .//a[1] [] None True
+61 7 .//b[last()] [] None True
+61 7 a[1]/.. [] None True
+61 7 b/.. [] None True
+61 7 .//c/.. [] None True
+61 7 a[@k] [] None True
+61 7 a[@k][1] [] None True
+61 7 a[1][@k] [] None True
+61 7 b[c] [] None True
+61 7 a[1]/b [] None True
+61 7 */*[last()] [] None True
+61 7 . ['7'] 7 True
+61 7 a[3] [] None True
+61 7 c[last()-2] [] None True
+61 7 {}a[1] [] None True
+61 7 a[b][last()] [] None True
+61 7 .. [] None True
+61 7 .//a/../b[1] [] None True
+61 m ['0'] ['0', '2']
+61 m ['0'] ['0', '2']
+61 m ['m61_2'] ['0', '2']
+61 m ['m61_2'] ['0', '2', 'm61_3']
+61 m ['m61_2'] ['0', '2', 'm61_3']
+61 m ['m61_2'] ['0', '2', 'm61_3']
+62 r a[1] ['4'] 4 True
+62 r a[last()] ['4'] 4 True
+62 r b[2] ['1'] 1 True
+62 r a[last()-1] [] None True
+62 r *[1] ['0', '4'] 0 True
+62 r *[last()] ['1', '4'] 1 True
+62 r a/b[1] [] None True
+62 r a/b[last()] [] None True
+62 r */a[2] [] None True
+62 r .//a[1] ['10', '5', '10', '15', '4'] 10 True
+62 r .//b[last()] ['14', '11', '1', '13'] 14 True
+62 r a[1]/.. ['r'] r True
+62 r b/.. ['r'] r True
+62 r .//c/.. ['0', '2', '6'] 0 True
+62 r a[@k] [] None True
+62 r a[@k][1] [] None True
+62 r a[1][@k] [] None True
+62 r b[c] ['0'] 0 True
+62 r a[1]/b [] None True
+62 r */*[last()] ['5', '6', '13'] 5 True
+62 r . ['r'] r True
+62 r a[3] [] None True
+62 r c[last()-2] [] None True
+62 r {}a[1] ['4'] 4 True
+62 r a[b][last()] [] None True
+62 r .. [] None True
+62 r .//a/../b[1] ['0'] 0 True
+62 1 a[1] [] None True
+62 1 a[last()] [] None True
+62 1 b[2] ['13'] 13 True
+62 1 a[last()-1] [] None True
+62 1 *[1] ['12'] 12 True
+62 1 *[last()] ['13'] 13 True
+62 1 a/b[1] [] None True
+62 1 a/b[last()] [] None True
+62 1 */a[2] [] None True
+62 1 .//a[1] ['15'] 15 True
+62 1 .//b[last()] ['13'] 13 True
+62 1 a[1]/.. [] None True
+62 1 b/.. ['1'] 1 True
+62 1 .//c/.. [] None True
+62 1 a[@k] [] None True
+62 1 a[@k][1] [] None True
+62 1 a[1][@k] [] None True
+62 1 b[c] [] None True
+62 1 a[1]/b [] None True
+62 1 */*[last()] ['15'] 15 True
+62 1 . ['1'] 1 True
+62 1 a[3] [] None True
+62 1 c[last()-2] [] None True
+62 1 {}a[1] [] None True
+62 1 a[b][last()] [] None True
+62 1 .. [] None True
+62 1 .//a/../b[1] [] None True
+62 13 a[1] ['15'] 15 True
+62 13 a[last()] ['15'] 15 True
+62 13 b[2] [] None True
+62 13 a[last()-1] [] None True
+62 13 *[1] ['15'] 15 True
+62 13 *[last()] ['15'] 15 True
+62 13 a/b[1] [] None True
+62 13 a/b[last()] [] None True
+62 13 */a[2] [] None True
+62 13 .//a[1] ['15'] 15 True
+62 13 .//b[last()] [] None True
+62 13 a[1]/.. ['13'] 13 True
+62 13 b/.. [] None True
+62 13 .//c/.. [] None True
+62 13 a[@k] [] None True
+62 13 a[@k][1] [] None True
+62 13 a[1][@k] [] None True
+62 13 b[c] [] None True
+62 13 a[1]/b [] None True
+62 13 */*[last()] [] None True
+62 13 . ['13'] 13 True
+62 13 a[3] [] None True
+62 13 c[last()-2] [] None True
+62 13 {}a[1] ['15'] 15 True
+62 13 a[b][last()] [] None True
+62 13 .. [] None True
+62 13 .//a/../b[1] [] None True
+62 m ['4'] ['0', '4', 'm62_0']
+62 m ['m62_1'] ['0', '4', 'm62_0']
+62 m ['m62_1'] ['0', '4', 'm62_0']
+62 m ['m62_1'] ['0', '4', 'm62_0']
+62 m ['m62_1'] ['0', '4', 'm62_0']
+62 m ['m62_5'] ['0', '4', 'm62_0']
+63 r a[1] ['9'] 9 True
+63 r a[last()] ['9'] 9 True
+63 r b[2] [] None True
+63 r a[last()-1] [] None True
+63 r *[1] ['0', '9'] 0 True
+63 r *[last()] ['0', '9'] 0 True
+63 r a/b[1] [] None True
+63 r a/b[last()] [] None True
+63 r */a[2] [] None True
+63 r .//a[1] ['2', '12', '10', '20', '11', '9'] 2 True
+63 r .//b[last()] ['0', '3', '18', '15', '6'] 0 True
+63 r a[1]/.. ['r'] r True
+63 r b/.. ['r'] r True
+63 r .//c/.. ['3', '4', '12', '7', '2', '1', '6'] 3 True
+63 r a[@k] ['9'] 9 True
+63 r a[@k][1] ['9'] 9 True
+63 r a[1][@k] ['9'] 9 True
+63 r b[c] [] None True
+63 r a[1]/b [] None True
+63 r */*[last()] ['6'] 6 True
+63 r . ['r'] r True
+63 r a[3] [] None True
+63 r c[last()-2] [] None True
+63 r {}a[1] ['9'] 9 True
+63 r a[b][last()] [] None True
+63 r .. [] None True
+63 r .//a/../b[1] ['5', '3', '0'] 5 True
+63 20 a[1] [] None True
+63 20 a[last()] [] None True
+63 20 b[2] [] None True
+63 20 a[last()-1] [] None True
+63 20 *[1] [] None True
+63 20 *[last()] [] None True
+63 20 a/b[1] [] None True
+63 20 a/b[last()] [] None True
+63 20 */a[2] [] None True
+63 20 .//a[1] [] None True
+63 20 .//b[last()] [] None True
+63 20 a[1]/.. [] None True
+63 20 b/.. [] None True
+63 20 .//c/.. [] None True
+63 20 a[@k] [] None True
+63 20 a[@k][1] [] None True
+63 20 a[1][@k] [] None True
+63 20 b[c] [] None True
+63 20 a[1]/b [] None True
+63 20 */*[last()] [] None True
+63 20 . ['20'] 20 True
+63 20 a[3] [] None True
+63 20 c[last()-2] [] None True
+63 20 {}a[1] [] None True
+63 20 a[b][last()] [] None True
+63 20 .. [] None True
+63 20 .//a/../b[1] [] None True
+63 4 a[1] [] None True
+63 4 a[last()] [] None True
+63 4 b[2] [] None True
+63 4 a[last()-1] [] None True
+63 4 *[1] ['7', '18'] 7 True
+63 4 *[last()] ['7', '18'] 7 True
+63 4 a/b[1] [] None True
+63 4 a/b[last()] [] None True
+63 4 */a[2] [] None True
+63 4 .//a[1] ['12'] 12 True
+63 4 .//b[last()] ['18'] 18 True
+63 4 a[1]/.. [] None True
+63 4 b/.. ['4'] 4 True
+63 4 .//c/.. ['4', '12', '7'] 4 True
+63 4 a[@k] [] None True
+63 4 a[@k][1] [] None True
+63 4 a[1][@k] [] None True
+63 4 b[c] [] None True
+63 4 a[1]/b [] None True
+63 4 */*[last()] ['12', '14'] 12 True
+63 4 . ['4'] 4 True
+63 4 a[3] [] None True
+63 4 c[last()-2] [] None True
+63 4 {}a[1] [] None True
+63 4 a[b][last()] [] None True
+63 4 .. [] None True
+63 4 .//a/../b[1] [] None True
+63 m ['9'] ['0', '9', 'm63_0']
+63 m ['m63_1'] ['0', '9', 'm63_0']
+63 m ['m63_1'] ['0', '9', 'm63_0']
+63 m ['m63_1'] ['0', '9', 'm63_0']
+63 m ['m63_4'] ['0', '9', 'm63_0']
+63 m ['m63_5'] ['0', '9', 'm63_0']
+64 w a[1] [] None True
+64 w a[last()] [] None True
+64 w b[2] [] None True
+64 w a[last()-1] [] None True
+64 w *[1] ['r'] r True
+64 w *[last()] ['r'] r True
+64 w a/b[1] [] None True
+64 w a/b[last()] [] None True
+64 w */a[2] ['2', '2'] 2 True
+64 w .//a[1] ['0', '1', '6', '0', '1', '6'] 0 True
+64 w .//b[last()] ['3', '4', '5', '3', '3', '4', '5', '3'] 3 True
+64 w a[1]/.. [] None True
+64 w b/.. [] None True
+64 w .//c/.. [] None True
+64 w a[@k] [] None True
+64 w a[@k][1] [] None True
+64 w a[1][@k] [] None True
+64 w b[c] [] None True
+64 w a[1]/b [] None True
+64 w */*[last()] ['2', '2'] 2 True
+64 w . ['w'] w True
+64 w a[3] [] None True
+64 w c[last()-2] [] None True
+64 w {}a[1] [] None True
+64 w a[b][last()] [] None True
+64 w .. [] None True
+64 w .//a/../b[1] ['3', '5'] 3 True
+64 3 a[1] [] None True
+64 3 a[last()] [] None True
+64 3 b[2] [] None True
+64 3 a[last()-1] [] None True
+64 3 *[1] [] None True
+64 3 *[last()] [] None True
+64 3 a/b[1] [] None True
+64 3 a/b[last()] [] None True
+64 3 */a[2] [] None True
+64 3 .//a[1] [] None True
+64 3 .//b[last()] [] None True
+64 3 a[1]/.. [] None True
+64 3 b/.. [] None True
+64 3 .//c/.. [] None True
+64 3 a[@k] [] None True
+64 3 a[@k][1] [] None True
+64 3 a[1][@k] [] None True
+64 3 b[c] [] None True
+64 3 a[1]/b [] None True
+64 3 */*[last()] [] None True
+64 3 . ['3'] 3 True
+64 3 a[3] [] None True
+64 3 c[last()-2] [] None True
+64 3 {}a[1] [] None True
+64 3 a[b][last()] [] None True
+64 3 .. [] None True
+64 3 .//a/../b[1] [] None True
+64 2 a[1] ['1'] 1 True
+64 2 a[last()] ['1'] 1 True
+64 2 b[2] ['4'] 4 True
+64 2 a[last()-1] [] None True
+64 2 *[1] ['1', '3'] 1 True
+64 2 *[last()] ['1', '3', '4'] 1 True
+64 2 a/b[1] [] None True
+64 2 a/b[last()] [] None True
+64 2 */a[2] [] None True
+64 2 .//a[1] ['1', '6'] 1 True
+64 2 .//b[last()] ['3', '4', '5', '3'] 3 True
+64 2 a[1]/.. ['2'] 2 True
+64 2 b/.. ['5', '2'] 5 True
+64 2 .//c/.. [] None True
+64 2 a[@k] [] None True
+64 2 a[@k][1] [] None True
+64 2 a[1][@k] [] None True
+64 2 b[c] [] None True
+64 2 a[1]/b [] None True
+64 2 */*[last()] ['5', '6'] 5 True
+64 2 . ['2'] 2 True
+64 2 a[3] [] None True
+64 2 c[last()-2] [] None True
+64 2 {}a[1] ['1'] 1 True
+64 2 a[b][last()] [] None True
+64 2 .. [] None True
+64 2 .//a/../b[1] ['3', '5'] 3 True
+64 m ['m64_0'] ['r', 'm64_0']
+64 m ['m64_0'] ['r', 'm64_0', 'm64_1']
+64 m ['m64_2'] ['r', 'm64_0', 'm64_1']
+64 m ['m64_3'] ['r', 'm64_0', 'm64_1']
+64 m ['m64_3'] ['r', 'm64_0', 'm64_1']
+64 m ['m64_5'] ['r', 'm64_0', 'm64_1']
+65 r a[1] ['0'] 0 True
+65 r a[last()] ['5'] 5 True
+65 r b[2] [] None True
+65 r a[last()-1] ['2'] 2 True
+65 r *[1] ['0', '1'] 0 True
+65 r *[last()] ['1', '5'] 1 True
+65 r a/b[1] ['4'] 4 True
+65 r a/b[last()] ['4'] 4 True
+65 r */a[2] [] None True
+65 r .//a[1] ['0', '7'] 0 True
+65 r .//b[last()] ['6', '4', 's0'] 6 True
+65 r a[1]/.. ['r'] r True
+65 r b/.. [] None True
+65 r .//c/.. ['0', 'r'] 0 True
+65 r a[@k] [] None True
+65 r a[@k][1] [] None True
+65 r a[1][@k] [] None True
+65 r b[c] [] None True
+65 r a[1]/b ['4'] 4 True
+65 r */*[last()] ['3', '4', '7'] 3 True
+65 r . ['r'] r True
+65 r a[3] ['5'] 5 True
+65 r c[last()-2] [] None True
+65 r {}a[1] ['0'] 0 True
+65 r a[b][last()] [] None True
+65 r .. [] None True
+65 r .//a/../b[1] [] None True
+65 r a[1] ['0'] 0 True
+65 r a[last()] ['5'] 5 True
+65 r b[2] [] None True
+65 r a[last()-1] ['2'] 2 True
+65 r *[1] ['0', '1'] 0 True
+65 r *[last()] ['1', '5'] 1 True
+65 r a/b[1] ['4'] 4 True
+65 r a/b[last()] ['4'] 4 True
+65 r */a[2] [] None True
+65 r .//a[1] ['0', '7'] 0 True
+65 r .//b[last()] ['6', '4', 's0'] 6 True
+65 r a[1]/.. ['r'] r True
+65 r b/.. [] None True
+65 r .//c/.. ['0', 'r'] 0 True
+65 r a[@k] [] None True
+65 r a[@k][1] [] None True
+65 r a[1][@k] [] None True
+65 r b[c] [] None True
+65 r a[1]/b ['4'] 4 True
+65 r */*[last()] ['3', '4', '7'] 3 True
+65 r . ['r'] r True
+65 r a[3] ['5'] 5 True
+65 r c[last()-2] [] None True
+65 r {}a[1] ['0'] 0 True
+65 r a[b][last()] [] None True
+65 r .. [] None True
+65 r .//a/../b[1] [] None True
+65 4 a[1] [] None True
+65 4 a[last()] [] None True
+65 4 b[2] [] None True
+65 4 a[last()-1] [] None True
+65 4 *[1] ['s0'] s0 True
+65 4 *[last()] ['s0'] s0 True
+65 4 a/b[1] [] None True
+65 4 a/b[last()] [] None True
+65 4 */a[2] [] None True
+65 4 .//a[1] [] None True
+65 4 .//b[last()] ['s0'] s0 True
+65 4 a[1]/.. [] None True
+65 4 b/.. ['4'] 4 True
+65 4 .//c/.. [] None True
+65 4 a[@k] [] None True
+65 4 a[@k][1] [] None True
+65 4 a[1][@k] [] None True
+65 4 b[c] [] None True
+65 4 a[1]/b [] None True
+65 4 */*[last()] [] None True
+65 4 . ['4'] 4 True
+65 4 a[3] [] None True
+65 4 c[last()-2] [] None True
+65 4 {}a[1] [] None True
+65 4 a[b][last()] [] None True
+65 4 .. [] None True
+65 4 .//a/../b[1] [] None True
+65 m ['m65_0'] ['0', '1']
+65 m ['m65_1'] ['0', '1']
+65 m ['m65_1'] ['0', '1', 'm65_2']
+65 m ['m65_1'] ['0', '1', 'm65_2']
+65 m ['m65_1'] ['0', '1', 'm65_2']
+65 m ['m65_1'] ['0', '1', 'm65_2']
+66 r a[1] [] None True
+66 r a[last()] [] None True
+66 r b[2] [] None True
+66 r a[last()-1] [] None True
+66 r *[1] ['0'] 0 True
+66 r *[last()] ['2'] 2 True
+66 r a/b[1] [] None True
+66 r a/b[last()] [] None True
+66 r */a[2] [] None True
+66 r .//a[1] [] None True
+66 r .//b[last()] [] None True
+66 r a[1]/.. [] None True
+66 r b/.. [] None True
+66 r .//c/.. ['r', '0'] r True
+66 r a[@k] [] None True
+66 r a[@k][1] [] None True
+66 r a[1][@k] [] None True
+66 r b[c] [] None True
+66 r a[1]/b [] None True
+66 r */*[last()] ['1'] 1 True
+66 r . ['r'] r True
+66 r a[3] [] None True
+66 r c[last()-2] [] None True
+66 r {}a[1] [] None True
+66 r a[b][last()] [] None True
+66 r .. [] None True
+66 r .//a/../b[1] [] None True
+66 0 a[1] [] None True
+66 0 a[last()] [] None True
+66 0 b[2] [] None True
+66 0 a[last()-1] [] None True
+66 0 *[1] ['1'] 1 True
+66 0 *[last()] ['1'] 1 True
+66 0 a/b[1] [] None True
+66 0 a/b[last()] [] None True
+66 0 */a[2] [] None True
+66 0 .//a[1] [] None True
+66 0 .//b[last()] [] None True
+66 0 a[1]/.. [] None True
+66 0 b/.. [] None True
+66 0 .//c/.. ['0'] 0 True
+66 0 a[@k] [] None True
+66 0 a[@k][1] [] None True
+66 0 a[1][@k] [] None True
+66 0 b[c] [] None True
+66 0 a[1]/b [] None True
+66 0 */*[last()] [] None True
+66 0 . ['0'] 0 True
+66 0 a[3] [] None True
+66 0 c[last()-2] [] None True
+66 0 {}a[1] [] None True
+66 0 a[b][last()] [] None True
+66 0 .. [] None True
+66 0 .//a/../b[1] [] None True
+66 0 a[1] [] None True
+66 0 a[last()] [] None True
+66 0 b[2] [] None True
+66 0 a[last()-1] [] None True
+66 0 *[1] ['1'] 1 True
+66 0 *[last()] ['1'] 1 True
+66 0 a/b[1] [] None True
+66 0 a/b[last()] [] None True
+66 0 */a[2] [] None True
+66 0 .//a[1] [] None True
+66 0 .//b[last()] [] None True
+66 0 a[1]/.. [] None True
+66 0 b/.. [] None True
+66 0 .//c/.. ['0'] 0 True
+66 0 a[@k] [] None True
+66 0 a[@k][1] [] None True
+66 0 a[1][@k] [] None True
+66 0 b[c] [] None True
+66 0 a[1]/b [] None True
+66 0 */*[last()] [] None True
+66 0 . ['0'] 0 True
+66 0 a[3] [] None True
+66 0 c[last()-2] [] None True
+66 0 {}a[1] [] None True
+66 0 a[b][last()] [] None True
+66 0 .. [] None True
+66 0 .//a/../b[1] [] None True
+66 m [] ['0']
+66 m ['m66_1'] ['0', 'm66_1']
+66 m ['m66_1'] ['0', 'm66_1', 'm66_2']
+66 m ['m66_1'] ['0', 'm66_1', 'm66_2']
+66 m ['m66_4'] ['0', 'm66_1', 'm66_2']
+66 m ['m66_4'] ['0', 'm66_1', 'm66_2']
+67 r a[1] [] None True
+67 r a[last()] [] None True
+67 r b[2] [] None True
+67 r a[last()-1] [] None True
+67 r *[1] [] None True
+67 r *[last()] [] None True
+67 r a/b[1] [] None True
+67 r a/b[last()] [] None True
+67 r */a[2] [] None True
+67 r .//a[1] [] None True
+67 r .//b[last()] [] None True
+67 r a[1]/.. [] None True
+67 r b/.. [] None True
+67 r .//c/.. [] None True
+67 r a[@k] [] None True
+67 r a[@k][1] [] None True
+67 r a[1][@k] [] None True
+67 r b[c] [] None True
+67 r a[1]/b [] None True
+67 r */*[last()] [] None True
+67 r . ['r'] r True
+67 r a[3] [] None True
+67 r c[last()-2] [] None True
+67 r {}a[1] [] None True
+67 r a[b][last()] [] None True
+67 r .. [] None True
+67 r .//a/../b[1] [] None True
+67 1 a[1] [] None True
+67 1 a[last()] [] None True
+67 1 b[2] [] None True
+67 1 a[last()-1] [] None True
+67 1 *[1] ['2'] 2 True
+67 1 *[last()] ['2'] 2 True
+67 1 a/b[1] [] None True
+67 1 a/b[last()] [] None True
+67 1 */a[2] [] None True
+67 1 .//a[1] [] None True
+67 1 .//b[last()] [] None True
+67 1 a[1]/.. [] None True
+67 1 b/.. [] None True
+67 1 .//c/.. ['1'] 1 True
+67 1 a[@k] [] None True
+67 1 a[@k][1] [] None True
+67 1 a[1][@k] [] None True
+67 1 b[c] [] None True
+67 1 a[1]/b [] None True
+67 1 */*[last()] [] None True
+67 1 . ['1'] 1 True
+67 1 a[3] [] None True
+67 1 c[last()-2] [] None True
+67 1 {}a[1] [] None True
+67 1 a[b][last()] [] None True
+67 1 .. [] None True
+67 1 .//a/../b[1] [] None True
+67 1 a[1] [] None True
+67 1 a[last()] [] None True
+67 1 b[2] [] None True
+67 1 a[last()-1] [] None True
+67 1 *[1] ['2'] 2 True
+67 1 *[last()] ['2'] 2 True
+67 1 a/b[1] [] None True
+67 1 a/b[last()] [] None True
+67 1 */a[2] [] None True
+67 1 .//a[1] [] None True
+67 1 .//b[last()] [] None True
+67 1 a[1]/.. [] None True
+67 1 b/.. [] None True
+67 1 .//c/.. ['1'] 1 True
+67 1 a[@k] [] None True
+67 1 a[@k][1] [] None True
+67 1 a[1][@k] [] None True
+67 1 b[c] [] None True
+67 1 a[1]/b [] None True
+67 1 */*[last()] [] None True
+67 1 . ['1'] 1 True
+67 1 a[3] [] None True
+67 1 c[last()-2] [] None True
+67 1 {}a[1] [] None True
+67 1 a[b][last()] [] None True
+67 1 .. [] None True
+67 1 .//a/../b[1] [] None True
+67 m [] ['m67_0']
+67 m [] ['m67_0', 'm67_1']
+67 m [] ['m67_0', 'm67_1']
+67 m ['m67_3'] ['m67_0', 'm67_1', 'm67_3']
+67 m ['m67_4'] ['m67_0', 'm67_1', 'm67_3']
+67 m ['m67_4'] ['m67_0', 'm67_1', 'm67_3']
+68 r a[1] ['0'] 0 True
+68 r a[last()] ['0'] 0 True
+68 r b[2] [] None True
+68 r a[last()-1] [] None True
+68 r *[1] ['0', '1'] 0 True
+68 r *[last()] ['0', '1'] 0 True
+68 r a/b[1] ['3'] 3 True
+68 r a/b[last()] ['s0'] s0 True
+68 r */a[2] [] None True
+68 r .//a[1] ['0', '10', '13', '15', '18', '22', '17'] 0 True
+68 r .//b[last()] ['12', '20', 's0', '1', '8', '23'] 12 True
+68 r a[1]/.. ['r'] r True
+68 r b/.. ['r'] r True
+68 r .//c/.. ['0', '1', '4'] 0 True
+68 r a[@k] [] None True
+68 r a[@k][1] [] None True
+68 r a[1][@k] [] None True
+68 r b[c] ['1'] 1 True
+68 r a[1]/b ['3', '5', 's0'] 3 True
+68 r */*[last()] ['s0', '16', '4', '17'] s0 True
+68 r . ['r'] r True
+68 r a[3] [] None True
+68 r c[last()-2] [] None True
+68 r {}a[1] ['0'] 0 True
+68 r a[b][last()] ['0'] 0 True
+68 r .. [] None True
+68 r .//a/../b[1] ['1'] 1 True
+68 r a[1] ['0'] 0 True
+68 r a[last()] ['0'] 0 True
+68 r b[2] [] None True
+68 r a[last()-1] [] None True
+68 r *[1] ['0', '1'] 0 True
+68 r *[last()] ['0', '1'] 0 True
+68 r a/b[1] ['3'] 3 True
+68 r a/b[last()] ['s0'] s0 True
+68 r */a[2] [] None True
+68 r .//a[1] ['0', '10', '13', '15', '18', '22', '17'] 0 True
+68 r .//b[last()] ['12', '20', 's0', '1', '8', '23'] 12 True
+68 r a[1]/.. ['r'] r True
+68 r b/.. ['r'] r True
+68 r .//c/.. ['0', '1', '4'] 0 True
+68 r a[@k] [] None True
+68 r a[@k][1] [] None True
+68 r a[1][@k] [] None True
+68 r b[c] ['1'] 1 True
+68 r a[1]/b ['3', '5', 's0'] 3 True
+68 r */*[last()] ['s0', '16', '4', '17'] s0 True
+68 r . ['r'] r True
+68 r a[3] [] None True
+68 r c[last()-2] [] None True
+68 r {}a[1] ['0'] 0 True
+68 r a[b][last()] ['0'] 0 True
+68 r .. [] None True
+68 r .//a/../b[1] ['1'] 1 True
+68 19 a[1] ['22'] 22 True
+68 19 a[last()] ['24'] 24 True
+68 19 b[2] [] None True
+68 19 a[last()-1] ['22'] 22 True
+68 19 *[1] ['22'] 22 True
+68 19 *[last()] ['24'] 24 True
+68 19 a/b[1] [] None True
+68 19 a/b[last()] [] None True
+68 19 */a[2] [] None True
+68 19 .//a[1] ['22'] 22 True
+68 19 .//b[last()] [] None True
+68 19 a[1]/.. ['19'] 19 True
+68 19 b/.. [] None True
+68 19 .//c/.. [] None True
+68 19 a[@k] ['22'] 22 True
+68 19 a[@k][1] ['22'] 22 True
+68 19 a[1][@k] ['22'] 22 True
+68 19 b[c] [] None True
+68 19 a[1]/b [] None True
+68 19 */*[last()] [] None True
+68 19 . ['19'] 19 True
+68 19 a[3] [] None True
+68 19 c[last()-2] [] None True
+68 19 {}a[1] ['22'] 22 True
+68 19 a[b][last()] [] None True
+68 19 .. [] None True
+68 19 .//a/../b[1] [] None True
+68 m ['0'] ['0', '1']
+68 m ['0'] ['0', '1']
+68 m ['0'] ['0', '1']
+68 m ['0'] ['0', '1', 'm68_3']
+68 m ['m68_4'] ['0', '1', 'm68_3']
+68 m ['m68_4'] ['0', '1', 'm68_3']
+69 r a[1] ['0'] 0 True
+69 r a[last()] ['1'] 1 True
+69 r b[2] [] None True
+69 r a[last()-1] ['0'] 0 True
+69 r *[1] ['0'] 0 True
+69 r *[last()] ['1'] 1 True
+69 r a/b[1] ['2'] 2 True
+69 r a/b[last()] ['2'] 2 True
+69 r */a[2] [] None True
+69 r .//a[1] ['0'] 0 True
+69 r .//b[last()] ['2'] 2 True
+69 r a[1]/.. ['r'] r True
+69 r b/.. [] None True
+69 r .//c/.. [] None True
+69 r a[@k] ['1'] 1 True
+69 r a[@k][1] [] None True
+69 r a[1][@k] [] None True
+69 r b[c] [] None True
+69 r a[1]/b ['2'] 2 True
+69 r */*[last()] ['2'] 2 True
+69 r . ['r'] r True
+69 r a[3] [] None True
+69 r c[last()-2] [] None True
+69 r {}a[1] ['0'] 0 True
+69 r a[b][last()] [] None True
+69 r .. [] None True
+69 r .//a/../b[1] [] None True
+69 0 a[1] [] None True
+69 0 a[last()] [] None True
+69 0 b[2] [] None True
+69 0 a[last()-1] [] None True
+69 0 *[1] ['2'] 2 True
+69 0 *[last()] ['2'] 2 True
+69 0 a/b[1] [] None True
+69 0 a/b[last()] [] None True
+69 0 */a[2] [] None True
+69 0 .//a[1] [] None True
+69 0 .//b[last()] ['2'] 2 True
+69 0 a[1]/.. [] None True
+69 0 b/.. ['0'] 0 True
+69 0 .//c/.. [] None True
+69 0 a[@k] [] None True
+69 0 a[@k][1] [] None True
+69 0 a[1][@k] [] None True
+69 0 b[c] [] None True
+69 0 a[1]/b [] None True
+69 0 */*[last()] [] None True
+69 0 . ['0'] 0 True
+69 0 a[3] [] None True
+69 0 c[last()-2] [] None True
+69 0 {}a[1] [] None True
+69 0 a[b][last()] [] None True
+69 0 .. [] None True
+69 0 .//a/../b[1] [] None True
+69 r a[1] ['0'] 0 True
+69 r a[last()] ['1'] 1 True
+69 r b[2] [] None True
+69 r a[last()-1] ['0'] 0 True
+69 r *[1] ['0'] 0 True
+69 r *[last()] ['1'] 1 True
+69 r a/b[1] ['2'] 2 True
+69 r a/b[last()] ['2'] 2 True
+69 r */a[2] [] None True
+69 r .//a[1] ['0'] 0 True
+69 r .//b[last()] ['2'] 2 True
+69 r a[1]/.. ['r'] r True
+69 r b/.. [] None True
+69 r .//c/.. [] None True
+69 r a[@k] ['1'] 1 True
+69 r a[@k][1] [] None True
+69 r a[1][@k] [] None True
+69 r b[c] [] None True
+69 r a[1]/b ['2'] 2 True
+69 r */*[last()] ['2'] 2 True
+69 r . ['r'] r True
+69 r a[3] [] None True
+69 r c[last()-2] [] None True
+69 r {}a[1] ['0'] 0 True
+69 r a[b][last()] [] None True
+69 r .. [] None True
+69 r .//a/../b[1] [] None True
+69 m ['1'] ['0', 'm69_0']
+69 m ['1'] ['0', 'm69_0']
+69 m ['1'] ['0', 'm69_0', 'm69_2']
+69 m ['1'] ['0', 'm69_0', 'm69_2']
+69 m ['1'] ['0', 'm69_0', 'm69_2']
+69 m ['m69_5'] ['0', 'm69_0', 'm69_2']
+70 r a[1] ['4'] 4 True
+70 r a[last()] ['4'] 4 True
+70 r b[2] [] None True
+70 r a[last()-1] [] None True
+70 r *[1] ['0', '1', '4'] 0 True
+70 r *[last()] ['0', '1', '4'] 0 True
+70 r a/b[1] [] None True
+70 r a/b[last()] [] None True
+70 r */a[2] ['2'] 2 True
+70 r .//a[1] ['6', '5', '4'] 6 True
+70 r .//b[last()] ['1'] 1 True
+70 r a[1]/.. ['r'] r True
+70 r b/.. ['r'] r True
+70 r .//c/.. ['r', '1'] r True
+70 r a[@k] ['4'] 4 True
+70 r a[@k][1] ['4'] 4 True
+70 r a[1][@k] ['4'] 4 True
+70 r b[c] ['1'] 1 True
+70 r a[1]/b [] None True
+70 r */*[last()] ['6', '2', '3'] 6 True
+70 r . ['r'] r True
+70 r a[3] [] None True
+70 r c[last()-2] [] None True
+70 r {}a[1] ['4'] 4 True
+70 r a[b][last()] [] None True
+70 r .. [] None True
+70 r .//a/../b[1] ['1'] 1 True
+70 2 a[1] [] None True
+70 2 a[last()] [] None True
+70 2 b[2] [] None True
+70 2 a[last()-1] [] None True
+70 2 *[1] [] None True
+70 2 *[last()] [] None True
+70 2 a/b[1] [] None True
+70 2 a/b[last()] [] None True
+70 2 */a[2] [] None True
+70 2 .//a[1] [] None True
+70 2 .//b[last()] [] None True
+70 2 a[1]/.. [] None True
+70 2 b/.. [] None True
+70 2 .//c/.. [] None True
+70 2 a[@k] [] None True
+70 2 a[@k][1] [] None True
+70 2 a[1][@k] [] None True
+70 2 b[c] [] None True
+70 2 a[1]/b [] None True
+70 2 */*[last()] [] None True
+70 2 . ['2'] 2 True
+70 2 a[3] [] None True
+70 2 c[last()-2] [] None True
+70 2 {}a[1] [] None True
+70 2 a[b][last()] [] None True
+70 2 .. [] None True
+70 2 .//a/../b[1] [] None True
+70 2 a[1] [] None True
+70 2 a[last()] [] None True
+70 2 b[2] [] None True
+70 2 a[last()-1] [] None True
+70 2 *[1] [] None True
+70 2 *[last()] [] None True
+70 2 a/b[1] [] None True
+70 2 a/b[last()] [] None True
+70 2 */a[2] [] None True
+70 2 .//a[1] [] None True
+70 2 .//b[last()] [] None True
+70 2 a[1]/.. [] None True
+70 2 b/.. [] None True
+70 2 .//c/.. [] None True
+70 2 a[@k] [] None True
+70 2 a[@k][1] [] None True
+70 2 a[1][@k] [] None True
+70 2 b[c] [] None True
+70 2 a[1]/b [] None True
+70 2 */*[last()] [] None True
+70 2 . ['2'] 2 True
+70 2 a[3] [] None True
+70 2 c[last()-2] [] None True
+70 2 {}a[1] [] None True
+70 2 a[b][last()] [] None True
+70 2 .. [] None True
+70 2 .//a/../b[1] [] None True
+70 m ['4'] ['0', '1', '4']
+70 m ['4'] ['0', '1', '4']
+70 m ['4'] ['0', '1', '4']
+70 m ['4'] ['0', '1', '4']
+70 m ['4'] ['0', '1', '4']
+70 m ['4'] ['0', '1', '4']
+71 w a[1] [] None True
+71 w a[last()] [] None True
+71 w b[2] [] None True
+71 w a[last()-1] [] None True
+71 w *[1] ['r'] r True
+71 w *[last()] ['r'] r True
+71 w a/b[1] [] None True
+71 w a/b[last()] [] None True
+71 w */a[2] [] None True
+71 w .//a[1] ['2', '2'] 2 True
+71 w .//b[last()] ['0', '3', '0', '3'] 0 True
+71 w a[1]/.. [] None True
+71 w b/.. [] None True
+71 w .//c/.. ['r', '4'] r True
+71 w a[@k] [] None True
+71 w a[@k][1] [] None True
+71 w a[1][@k] [] None True
+71 w b[c] [] None True
+71 w a[1]/b [] None True
+71 w */*[last()] ['0', '1', '0', '1'] 0 True
+71 w . ['w'] w True
+71 w a[3] [] None True
+71 w c[last()-2] [] None True
+71 w {}a[1] [] None True
+71 w a[b][last()] [] None True
+71 w .. [] None True
+71 w .//a/../b[1] [] None True
+71 3 a[1] [] None True
+71 3 a[last()] [] None True
+71 3 b[2] [] None True
+71 3 a[last()-1] [] None True
+71 3 *[1] [] None True
+71 3 *[last()] [] None True
+71 3 a/b[1] [] None True
+71 3 a/b[last()] [] None True
+71 3 */a[2] [] None True
+71 3 .//a[1] [] None True
+71 3 .//b[last()] [] None True
+71 3 a[1]/.. [] None True
+71 3 b/.. [] None True
+71 3 .//c/.. [] None True
+71 3 a[@k] [] None True
+71 3 a[@k][1] [] None True
+71 3 a[1][@k] [] None True
+71 3 b[c] [] None True
+71 3 a[1]/b [] None True
+71 3 */*[last()] [] None True
+71 3 . ['3'] 3 True
+71 3 a[3] [] None True
+71 3 c[last()-2] [] None True
+71 3 {}a[1] [] None True
+71 3 a[b][last()] [] None True
+71 3 .. [] None True
+71 3 .//a/../b[1] [] None True
+71 1 a[1] ['2'] 2 True
+71 1 a[last()] ['4'] 4 True
+71 1 b[2] [] None True
+71 1 a[last()-1] ['2'] 2 True
+71 1 *[1] ['2', '5'] 2 True
+71 1 *[last()] ['4', '5'] 4 True
+71 1 a/b[1] ['3'] 3 True
+71 1 a/b[last()] ['3'] 3 True
+71 1 */a[2] [] None True
+71 1 .//a[1] ['2'] 2 True
+71 1 .//b[last()] ['3'] 3 True
+71 1 a[1]/.. ['1'] 1 True
+71 1 b/.. [] None True
+71 1 .//c/.. ['4'] 4 True
+71 1 a[@k] ['4'] 4 True
+71 1 a[@k][1] [] None True
+71 1 a[1][@k] [] None True
+71 1 b[c] [] None True
+71 1 a[1]/b ['3'] 3 True
+71 1 */*[last()] ['3', '5'] 3 True
+71 1 . ['1'] 1 True
+71 1 a[3] [] None True
+71 1 c[last()-2] [] None True
+71 1 {}a[1] ['2'] 2 True
+71 1 a[b][last()] [] None True
+71 1 .. [] None True
+71 1 .//a/../b[1] [] None True
+71 m [] ['r', 'm71_0']
+71 m [] ['r', 'm71_0', 'm71_1']
+71 m ['m71_2'] ['r', 'm71_0', 'm71_1', 'm71_2']
+71 m ['m71_3'] ['r', 'm71_0', 'm71_1', 'm71_2']
+71 m ['m71_3'] ['r', 'm71_0', 'm71_1', 'm71_2']
+71 m ['m71_3'] ['r', 'm71_0', 'm71_1', 'm71_2']
+72 r a[1] ['0'] 0 True
+72 r a[last()] ['0'] 0 True
+72 r b[2] [] None True
+72 r a[last()-1] [] None True
+72 r *[1] ['0', '1', '2'] 0 True
+72 r *[last()] ['0', '1', '2'] 0 True
+72 r a/b[1] [] None True
+72 r a/b[last()] [] None True
+72 r */a[2] [] None True
+72 r .//a[1] ['0', '3'] 0 True
+72 r .//b[last()] ['2', '4', '6'] 2 True
+72 r a[1]/.. ['r'] r True
+72 r b/.. ['r'] r True
+72 r .//c/.. ['r', '3'] r True
+72 r a[@k] [] None True
+72 r a[@k][1] [] None True
+72 r a[1][@k] [] None True
+72 r b[c] [] None True
+72 r a[1]/b [] None True
+72 r */*[last()] ['3'] 3 True
+72 r . ['r'] r True
+72 r a[3] [] None True
+72 r c[last()-2] [] None True
+72 r {}a[1] ['0'] 0 True
+72 r a[b][last()] [] None True
+72 r .. [] None True
+72 r .//a/../b[1] ['2'] 2 True
+72 2 a[1] ['3'] 3 True
+72 2 a[last()] ['3'] 3 True
+72 2 b[2] [] None True
+72 2 a[last()-1] [] None True
+72 2 *[1] ['3'] 3 True
+72 2 *[last()] ['3'] 3 True
+72 2 a/b[1] ['4'] 4 True
+72 2 a/b[last()] ['4'] 4 True
+72 2 */a[2] [] None True
+72 2 .//a[1] ['3'] 3 True
+72 2 .//b[last()] ['4', '6'] 4 True
+72 2 a[1]/.. ['2'] 2 True
+72 2 b/.. [] None True
+72 2 .//c/.. ['3'] 3 True
+72 2 a[@k] [] None True
+72 2 a[@k][1] [] None True
+72 2 a[1][@k] [] None True
+72 2 b[c] [] None True
+72 2 a[1]/b ['4'] 4 True
+72 2 */*[last()] ['4', '5'] 4 True
+72 2 . ['2'] 2 True
+72 2 a[3] [] None True
+72 2 c[last()-2] [] None True
+72 2 {}a[1] ['3'] 3 True
+72 2 a[b][last()] ['3'] 3 True
+72 2 .. [] None True
+72 2 .//a/../b[1] [] None True
+72 2 a[1] ['3'] 3 True
+72 2 a[last()] ['3'] 3 True
+72 2 b[2] [] None True
+72 2 a[last()-1] [] None True
+72 2 *[1] ['3'] 3 True
+72 2 *[last()] ['3'] 3 True
+72 2 a/b[1] ['4'] 4 True
+72 2 a/b[last()] ['4'] 4 True
+72 2 */a[2] [] None True
+72 2 .//a[1] ['3'] 3 True
+72 2 .//b[last()] ['4', '6'] 4 True
+72 2 a[1]/.. ['2'] 2 True
+72 2 b/.. [] None True
+72 2 .//c/.. ['3'] 3 True
+72 2 a[@k] [] None True
+72 2 a[@k][1] [] None True
+72 2 a[1][@k] [] None True
+72 2 b[c] [] None True
+72 2 a[1]/b ['4'] 4 True
+72 2 */*[last()] ['4', '5'] 4 True
+72 2 . ['2'] 2 True
+72 2 a[3] [] None True
+72 2 c[last()-2] [] None True
+72 2 {}a[1] ['3'] 3 True
+72 2 a[b][last()] ['3'] 3 True
+72 2 .. [] None True
+72 2 .//a/../b[1] [] None True
+72 m ['0'] ['0', '1', '2']
+72 m ['0'] ['0', '1', '2']
+72 m ['0'] ['0', '1', '2']
+72 m ['0'] ['0', '1', '2']
+72 m ['m72_4'] ['0', '1', '2']
+72 m ['m72_4'] ['0', '1', '2']
+73 r a[1] ['0'] 0 True
+73 r a[last()] ['1'] 1 True
+73 r b[2] [] None True
+73 r a[last()-1] ['0'] 0 True
+73 r *[1] ['0', '4', '19'] 0 True
+73 r *[last()] ['1', '4', '19'] 1 True
+73 r a/b[1] ['17'] 17 True
+73 r a/b[last()] ['17'] 17 True
+73 r */a[2] [] None True
+73 r .//a[1] ['0', '3', '2', '9', '10', '16'] 0 True
+73 r .//b[last()] ['14', '17', '12', '11', '15', '19'] 14 True
+73 r a[1]/.. ['r'] r True
+73 r b/.. ['r'] r True
+73 r .//c/.. ['3', '5', '0', 'r', '4', '6'] 3 True
+73 r a[@k] [] None True
+73 r a[@k][1] [] None True
+73 r a[1][@k] [] None True
+73 r b[c] [] None True
+73 r a[1]/b [] None True
+73 r */*[last()] ['3', '8', '2', '17', '6'] 3 True
+73 r . ['r'] r True
+73 r a[3] [] None True
+73 r c[last()-2] [] None True
+73 r {}a[1] ['0'] 0 True
+73 r a[b][last()] ['1'] 1 True
+73 r .. [] None True
+73 r .//a/../b[1] ['19', '17', '7'] 19 True
+73 2 a[1] ['9'] 9 True
+73 2 a[last()] ['9'] 9 True
+73 2 b[2] [] None True
+73 2 a[last()-1] [] None True
+73 2 *[1] ['9'] 9 True
+73 2 *[last()] ['9'] 9 True
+73 2 a/b[1] [] None True
+73 2 a/b[last()] [] None True
+73 2 */a[2] [] None True
+73 2 .//a[1] ['9'] 9 True
+73 2 .//b[last()] [] None True
+73 2 a[1]/.. ['2'] 2 True
+73 2 b/.. [] None True
+73 2 .//c/.. [] None True
+73 2 a[@k] [] None True
+73 2 a[@k][1] [] None True
+73 2 a[1][@k] [] None True
+73 2 b[c] [] None True
+73 2 a[1]/b [] None True
+73 2 */*[last()] [] None True
+73 2 . ['2'] 2 True
+73 2 a[3] [] None True
+73 2 c[last()-2] [] None True
+73 2 {}a[1] ['9'] 9 True
+73 2 a[b][last()] [] None True
+73 2 .. [] None True
+73 2 .//a/../b[1] [] None True
+73 2 a[1] ['9'] 9 True
+73 2 a[last()] ['9'] 9 True
+73 2 b[2] [] None True
+73 2 a[last()-1] [] None True
+73 2 *[1] ['9'] 9 True
+73 2 *[last()] ['9'] 9 True
+73 2 a/b[1] [] None True
+73 2 a/b[last()] [] None True
+73 2 */a[2] [] None True
+73 2 .//a[1] ['9'] 9 True
+73 2 .//b[last()] [] None True
+73 2 a[1]/.. ['2'] 2 True
+73 2 b/.. [] None True
+73 2 .//c/.. [] None True
+73 2 a[@k] [] None True
+73 2 a[@k][1] [] None True
+73 2 a[1][@k] [] None True
+73 2 b[c] [] None True
+73 2 a[1]/b [] None True
+73 2 */*[last()] [] None True
+73 2 . ['2'] 2 True
+73 2 a[3] [] None True
+73 2 c[last()-2] [] None True
+73 2 {}a[1] ['9'] 9 True
+73 2 a[b][last()] [] None True
+73 2 .. [] None True
+73 2 .//a/../b[1] [] None True
+73 m ['m73_0'] ['0', '4', '19']
+73 m ['m73_1'] ['0', '4', '19']
+73 m ['m73_1'] ['0', '4', '19']
+73 m ['m73_3'] ['0', '4', '19']
+73 m ['m73_3'] ['0', '4', '19']
+73 m ['m73_3'] ['0', '4', '19']
+74 r a[1] ['18'] 18 True
+74 r a[last()] ['18'] 18 True
+74 r b[2] [] None True
+74 r a[last()-1] [] None True
+74 r *[1] ['0', '18'] 0 True
+74 r *[last()] ['0', '18'] 0 True
+74 r a/b[1] [] None True
+74 r a/b[last()] [] None True
+74 r */a[2] ['4'] 4 True
+74 r .//a[1] ['1', '2', '20', '12', '14', '11', '18'] 1 True
+74 r .//b[last()] ['0', '6', '13', '8'] 0 True
+74 r a[1]/.. ['r'] r True
+74 r b/.. ['r'] r True
+74 r .//c/.. ['2', '9', '20', '3', '8'] 2 True
+74 r a[@k] ['18'] 18 True
+74 r a[@k][1] ['18'] 18 True
+74 r a[1][@k] ['18'] 18 True
+74 r b[c] [] None True
+74 r a[1]/b [] None True
+74 r */*[last()] ['9'] 9 True
+74 r . ['r'] r True
+74 r a[3] [] None True
+74 r c[last()-2] [] None True
+74 r {}a[1] ['18'] 18 True
+74 r a[b][last()] [] None True
+74 r .. [] None True
+74 r .//a/../b[1] ['13', '5', '0'] 13 True
+74 7 a[1] ['12'] 12 True
+74 7 a[last()] ['17'] 17 True
+74 7 b[2] [] None True
+74 7 a[last()-1] ['16'] 16 True
+74 7 *[1] ['12'] 12 True
+74 7 *[last()] ['17'] 17 True
+74 7 a/b[1] ['13'] 13 True
+74 7 a/b[last()] ['13'] 13 True
+74 7 */a[2] [] None True
+74 7 .//a[1] ['12', '14'] 12 True
+74 7 .//b[last()] ['13'] 13 True
+74 7 a[1]/.. ['7'] 7 True
+74 7 b/.. [] None True
+74 7 .//c/.. [] None True
+74 7 a[@k] ['16'] 16 True
+74 7 a[@k][1] [] None True
+74 7 a[1][@k] [] None True
+74 7 b[c] [] None True
+74 7 a[1]/b ['13'] 13 True
+74 7 */*[last()] ['13', '14'] 13 True
+74 7 . ['7'] 7 True
+74 7 a[3] ['17'] 17 True
+74 7 c[last()-2] [] None True
+74 7 {}a[1] ['12'] 12 True
+74 7 a[b][last()] [] None True
+74 7 .. [] None True
+74 7 .//a/../b[1] ['13'] 13 True
+74 10 a[1] [] None True
+74 10 a[last()] [] None True
+74 10 b[2] [] None True
+74 10 a[last()-1] [] None True
+74 10 *[1] [] None True
+74 10 *[last()] [] None True
+74 10 a/b[1] [] None True
+74 10 a/b[last()] [] None True
+74 10 */a[2] [] None True
+74 10 .//a[1] [] None True
+74 10 .//b[last()] [] None True
+74 10 a[1]/.. [] None True
+74 10 b/.. [] None True
+74 10 .//c/.. [] None True
+74 10 a[@k] [] None True
+74 10 a[@k][1] [] None True
+74 10 a[1][@k] [] None True
+74 10 b[c] [] None True
+74 10 a[1]/b [] None True
+74 10 */*[last()] [] None True
+74 10 . ['10'] 10 True
+74 10 a[3] [] None True
+74 10 c[last()-2] [] None True
+74 10 {}a[1] [] None True
+74 10 a[b][last()] [] None True
+74 10 .. [] None True
+74 10 .//a/../b[1] [] None True
+74 m ['18'] ['0', '18']
+74 m ['18'] ['0', '18']
+74 m ['18'] ['0', '18']
+74 m ['18'] ['0', '18', 'm74_3']
+74 m ['m74_4'] ['0', '18', 'm74_3']
+74 m ['m74_4'] ['0', '18', 'm74_3']
+75 r a[1] [] None True
+75 r a[last()] [] None True
+75 r b[2] [] None True
+75 r a[last()-1] [] None True
+75 r *[1] ['0'] 0 True
+75 r *[last()] ['16'] 16 True
+75 r a/b[1] [] None True
+75 r a/b[last()] [] None True
+75 r */a[2] [] None True
+75 r .//a[1] ['6', '12', '7', '5'] 6 True
+75 r .//b[last()] ['14', '8', '2', '13', '9'] 14 True
+75 r a[1]/.. [] None True
+75 r b/.. [] None True
+75 r .//c/.. ['r', '0', '1', '2', '7'] r True
+75 r a[@k] [] None True
+75 r a[@k][1] [] None True
+75 r a[1][@k] [] None True
+75 r b[c] [] None True
+75 r a[1]/b [] None True
+75 r */*[last()] ['1', '2', '5'] 1 True
+75 r . ['r'] r True
+75 r a[3] [] None True
+75 r c[last()-2] [] None True
+75 r {}a[1] [] None True
+75 r a[b][last()] [] None True
+75 r .. [] None True
+75 r .//a/../b[1] ['8', '2'] 8 True
+75 17 a[1] [] None True
+75 17 a[last()] [] None True
+75 17 b[2] [] None True
+75 17 a[last()-1] [] None True
+75 17 *[1] [] None True
+75 17 *[last()] [] None True
+75 17 a/b[1] [] None True
+75 17 a/b[last()] [] None True
+75 17 */a[2] [] None True
+75 17 .//a[1] [] None True
+75 17 .//b[last()] [] None True
+75 17 a[1]/.. [] None True
+75 17 b/.. [] None True
+75 17 .//c/.. [] None True
+75 17 a[@k] [] None True
+75 17 a[@k][1] [] None True
+75 17 a[1][@k] [] None True
+75 17 b[c] [] None True
+75 17 a[1]/b [] None True
+75 17 */*[last()] [] None True
+75 17 . ['17'] 17 True
+75 17 a[3] [] None True
+75 17 c[last()-2] [] None True
+75 17 {}a[1] [] None True
+75 17 a[b][last()] [] None True
+75 17 .. [] None True
+75 17 .//a/../b[1] [] None True
+75 15 a[1] [] None True
+75 15 a[last()] [] None True
+75 15 b[2] [] None True
+75 15 a[last()-1] [] None True
+75 15 *[1] [] None True
+75 15 *[last()] [] None True
+75 15 a/b[1] [] None True
+75 15 a/b[last()] [] None True
+75 15 */a[2] [] None True
+75 15 .//a[1] [] None True
+75 15 .//b[last()] [] None True
+75 15 a[1]/.. [] None True
+75 15 b/.. [] None True
+75 15 .//c/.. [] None True
+75 15 a[@k] [] None True
+75 15 a[@k][1] [] None True
+75 15 a[1][@k] [] None True
+75 15 b[c] [] None True
+75 15 a[1]/b [] None True
+75 15 */*[last()] [] None True
+75 15 . ['15'] 15 True
+75 15 a[3] [] None True
+75 15 c[last()-2] [] None True
+75 15 {}a[1] [] None True
+75 15 a[b][last()] [] None True
+75 15 .. [] None True
+75 15 .//a/../b[1] [] None True
+75 m [] ['0', 'm75_0']
+75 m ['m75_1'] ['0', 'm75_0', 'm75_1']
+75 m ['m75_1'] ['0', 'm75_0', 'm75_1']
+75 m ['m75_1'] ['0', 'm75_0', 'm75_1']
+75 m ['m75_1'] ['0', 'm75_0', 'm75_1']
+75 m ['m75_1'] ['0', 'm75_0', 'm75_1']
+76 r a[1] [] None True
+76 r a[last()] [] None True
+76 r b[2] [] None True
+76 r a[last()-1] [] None True
+76 r *[1] ['0'] 0 True
+76 r *[last()] ['2'] 2 True
+76 r a/b[1] [] None True
+76 r a/b[last()] [] None True
+76 r */a[2] [] None True
+76 r .//a[1] ['6', '7'] 6 True
+76 r .//b[last()] ['8', '3'] 8 True
+76 r a[1]/.. [] None True
+76 r b/.. [] None True
+76 r .//c/.. ['r', '3', '7'] r True
+76 r a[@k] [] None True
+76 r a[@k][1] [] None True
+76 r a[1][@k] [] None True
+76 r b[c] [] None True
+76 r a[1]/b [] None True
+76 r */*[last()] ['8', '3', '7'] 8 True
+76 r . ['r'] r True
+76 r a[3] [] None True
+76 r c[last()-2] [] None True
+76 r {}a[1] [] None True
+76 r a[b][last()] [] None True
+76 r .. [] None True
+76 r .//a/../b[1] ['3'] 3 True
+76 5 a[1] [] None True
+76 5 a[last()] [] None True
+76 5 b[2] [] None True
+76 5 a[last()-1] [] None True
+76 5 *[1] [] None True
+76 5 *[last()] [] None True
+76 5 a/b[1] [] None True
+76 5 a/b[last()] [] None True
+76 5 */a[2] [] None True
+76 5 .//a[1] [] None True
+76 5 .//b[last()] [] None True
+76 5 a[1]/.. [] None True
+76 5 b/.. [] None True
+76 5 .//c/.. [] None True
+76 5 a[@k] [] None True
+76 5 a[@k][1] [] None True
+76 5 a[1][@k] [] None True
+76 5 b[c] [] None True
+76 5 a[1]/b [] None True
+76 5 */*[last()] [] None True
+76 5 . ['5'] 5 True
+76 5 a[3] [] None True
+76 5 c[last()-2] [] None True
+76 5 {}a[1] [] None True
+76 5 a[b][last()] [] None True
+76 5 .. [] None True
+76 5 .//a/../b[1] [] None True
+76 0 a[1] [] None True
+76 0 a[last()] [] None True
+76 0 b[2] ['4'] 4 True
+76 0 a[last()-1] [] None True
+76 0 *[1] ['1'] 1 True
+76 0 *[last()] ['8'] 8 True
+76 0 a/b[1] [] None True
+76 0 a/b[last()] [] None True
+76 0 */a[2] [] None True
+76 0 .//a[1] ['6'] 6 True
+76 0 .//b[last()] ['8'] 8 True
+76 0 a[1]/.. [] None True
+76 0 b/.. ['0'] 0 True
+76 0 .//c/.. [] None True
+76 0 a[@k] [] None True
+76 0 a[@k][1] [] None True
+76 0 a[1][@k] [] None True
+76 0 b[c] [] None True
+76 0 a[1]/b [] None True
+76 0 */*[last()] ['6'] 6 True
+76 0 . ['0'] 0 True
+76 0 a[3] [] None True
+76 0 c[last()-2] [] None True
+76 0 {}a[1] [] None True
+76 0 a[b][last()] [] None True
+76 0 .. [] None True
+76 0 .//a/../b[1] [] None True
+76 m ['m76_0'] ['0', 'm76_0']
+76 m ['m76_0'] ['0', 'm76_0', 'm76_1']
+76 m ['m76_0'] ['0', 'm76_0', 'm76_1']
+76 m ['m76_0'] ['0', 'm76_0', 'm76_1']
+76 m ['m76_0'] ['0', 'm76_0', 'm76_1']
+76 m ['m76_5'] ['0', 'm76_0', 'm76_1']
+78 w a[1] [] None True
+78 w a[last()] [] None True
+78 w b[2] [] None True
+78 w a[last()-1] [] None True
+78 w *[1] ['r'] r True
+78 w *[last()] ['r'] r True
+78 w a/b[1] [] None True
+78 w a/b[last()] [] None True
+78 w */a[2] [] None True
+78 w .//a[1] ['2', '4', '6', '11', '2', '4', '6', '11'] 2 True
+78 w .//b[last()] ['0', '9', '10', '0', '9', '10'] 0 True
+78 w a[1]/.. [] None True
+78 w b/.. [] None True
+78 w .//c/.. ['4', '6', '0', 'r'] 4 True
+78 w a[@k] [] None True
+78 w a[@k][1] [] None True
+78 w a[1][@k] [] None True
+78 w b[c] [] None True
+78 w a[1]/b [] None True
+78 w */*[last()] ['0', '12', '0', '12'] 0 True
+78 w . ['w'] w True
+78 w a[3] [] None True
+78 w c[last()-2] [] None True
+78 w {}a[1] [] None True
+78 w a[b][last()] [] None True
+78 w .. [] None True
+78 w .//a/../b[1] [] None True
+78 1 a[1] ['2'] 2 True
+78 1 a[last()] ['2'] 2 True
+78 1 b[2] [] None True
+78 1 a[last()-1] [] None True
+78 1 *[1] ['2'] 2 True
+78 1 *[last()] ['2'] 2 True
+78 1 a/b[1] [] None True
+78 1 a/b[last()] [] None True
+78 1 */a[2] [] None True
+78 1 .//a[1] ['2', '4', '6'] 2 True
+78 1 .//b[last()] [] None True
+78 1 a[1]/.. ['1'] 1 True
+78 1 b/.. [] None True
+78 1 .//c/.. ['4', '6'] 4 True
+78 1 a[@k] ['2'] 2 True
+78 1 a[@k][1] ['2'] 2 True
+78 1 a[1][@k] ['2'] 2 True
+78 1 b[c] [] None True
+78 1 a[1]/b [] None True
+78 1 */*[last()] ['4'] 4 True
+78 1 . ['1'] 1 True
+78 1 a[3] [] None True
+78 1 c[last()-2] [] None True
+78 1 {}a[1] ['2'] 2 True
+78 1 a[b][last()] [] None True
+78 1 .. [] None True
+78 1 .//a/../b[1] [] None True
+78 12 a[1] [] None True
+78 12 a[last()] [] None True
+78 12 b[2] [] None True
+78 12 a[last()-1] [] None True
+78 12 *[1] [] None True
+78 12 *[last()] [] None True
+78 12 a/b[1] [] None True
+78 12 a/b[last()] [] None True
+78 12 */a[2] [] None True
+78 12 .//a[1] [] None True
+78 12 .//b[last()] [] None True
+78 12 a[1]/.. [] None True
+78 12 b/.. [] None True
+78 12 .//c/.. [] None True
+78 12 a[@k] [] None True
+78 12 a[@k][1] [] None True
+78 12 a[1][@k] [] None True
+78 12 b[c] [] None True
+78 12 a[1]/b [] None True
+78 12 */*[last()] [] None True
+78 12 . ['12'] 12 True
+78 12 a[3] [] None True
+78 12 c[last()-2] [] None True
+78 12 {}a[1] [] None True
+78 12 a[b][last()] [] None True
+78 12 .. [] None True
+78 12 .//a/../b[1] [] None True
+78 m [] ['r', 'm78_0']
+78 m [] ['r', 'm78_0', 'm78_1']
+78 m [] ['r', 'm78_0', 'm78_1']
+78 m [] ['r', 'm78_0', 'm78_1']
+78 m [] ['r', 'm78_0', 'm78_1']
+78 m ['m78_5'] ['r', 'm78_0', 'm78_1', 'm78_5']
+79 r a[1] ['4'] 4 True
+79 r a[last()] ['23'] 23 True
+79 r b[2] [] None True
+79 r a[last()-1] ['12'] 12 True
+79 r *[1] ['0', '4'] 0 True
+79 r *[last()] ['0', '23'] 0 True
+79 r a/b[1] ['5'] 5 True
+79 r a/b[last()] ['5'] 5 True
+79 r */a[2] [] None True
+79 r .//a[1] ['7', '10', '20', '17', '4', '14', '18'] 7 True
+79 r .//b[last()] ['0', '19', '16', '22', '21', '5'] 0 True
+79 r a[1]/.. ['r'] r True
+79 r b/.. ['r'] r True
+79 r .//c/.. ['0', '1', '3'] 0 True
+79 r a[@k] [] None True
+79 r a[@k][1] [] None True
+79 r a[1][@k] [] None True
+79 r b[c] ['0'] 0 True
+79 r a[1]/b ['5'] 5 True
+79 r */*[last()] ['15', '21', '5', '14', '18'] 15 True
+79 r . ['r'] r True
+79 r a[3] ['23'] 23 True
+79 r c[last()-2] [] None True
+79 r {}a[1] ['4'] 4 True
+79 r a[b][last()] [] None True
+79 r .. [] None True
+79 r .//a/../b[1] ['0', '5'] 0 True
+79 21 a[1] [] None True
+79 21 a[last()] [] None True
+79 21 b[2] [] None True
+79 21 a[last()-1] [] None True
+79 21 *[1] [] None True
+79 21 *[last()] [] None True
+79 21 a/b[1] [] None True
+79 21 a/b[last()] [] None True
+79 21 */a[2] [] None True
+79 21 .//a[1] [] None True
+79 21 .//b[last()] [] None True
+79 21 a[1]/.. [] None True
+79 21 b/.. [] None True
+79 21 .//c/.. [] None True
+79 21 a[@k] [] None True
+79 21 a[@k][1] [] None True
+79 21 a[1][@k] [] None True
+79 21 b[c] [] None True
+79 21 a[1]/b [] None True
+79 21 */*[last()] [] None True
+79 21 . ['21'] 21 True
+79 21 a[3] [] None True
+79 21 c[last()-2] [] None True
+79 21 {}a[1] [] None True
+79 21 a[b][last()] [] None True
+79 21 .. [] None True
+79 21 .//a/../b[1] [] None True
+79 0 a[1] [] None True
+79 0 a[last()] [] None True
+79 0 b[2] ['21'] 21 True
+79 0 a[last()-1] [] None True
+79 0 *[1] ['1', '11'] 1 True
+79 0 *[last()] ['15', '21'] 15 True
+79 0 a/b[1] [] None True
+79 0 a/b[last()] [] None True
+79 0 */a[2] [] None True
+79 0 .//a[1] ['7', '10', '20', '17'] 7 True
+79 0 .//b[last()] ['19', '16', '22', '21'] 19 True
+79 0 a[1]/.. [] None True
+79 0 b/.. ['0'] 0 True
+79 0 .//c/.. ['0', '1', '3'] 0 True
+79 0 a[@k] [] None True
+79 0 a[@k][1] [] None True
+79 0 a[1][@k] [] None True
+79 0 b[c] [] None True
+79 0 a[1]/b [] None True
+79 0 */*[last()] ['2', '16', '17'] 2 True
+79 0 . ['0'] 0 True
+79 0 a[3] [] None True
+79 0 c[last()-2] [] None True
+79 0 {}a[1] [] None True
+79 0 a[b][last()] [] None True
+79 0 .. [] None True
+79 0 .//a/../b[1] [] None True
+79 m ['23'] ['0', '4']
+79 m ['m79_1'] ['0', '4']
+79 m ['m79_1'] ['0', '4']
+79 m ['m79_3'] ['0', '4']
+79 m ['m79_3'] ['0', '4']
+79 m ['m79_3'] ['0', '4', 'm79_5']
+copy-empty None 1
+copy-shared [('a', '1'), ('b', '2')]
+attrib-live 9 True ['z']
+after-clear False {} {'z': '9'}
+empty-ctor [] [] dflt
+makeelement [('p', '1')] []
+deepcopy b'<a x="1"><b /><c y="2" /></a>'
+parsed [{'{u}t': '1'}, {}] {} b'<r xmlns:ns0="u"><s ns0:t="1" /><s /></r>'
+xpath-attr ['s']
+set-attrib m b'<t n="m" />'
+xmlid ['1']
+iterparse-clear ['0:0', '1:1', '2:2', '3:3', '4:4', '5:5', '6:6', '7:7', '8:8', '9:9', '10:10', '11:11'] 0
+iterparse-mutate srootsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewerecsrecsvevswewereceroot
+iterparse-start ['a2', 'b0', 'c1', 'd0']
+iterparse-default [('end', 'b'), ('end', 'a')]
+cases 6291 lines 0

@@ -22,7 +22,11 @@ namespace Outbridge.PyLite.Runtime.Values
             s.Linear("count", 1, 3, (self, a, kw, c) => c.Values.Int(Count(c, B(self), a)));
             s.Linear("startswith", 1, 3, (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, false)));
             s.Linear("endswith", 1, 3, (self, a, kw, c) => c.Values.Bool(EndsMatch(c, B(self), a, true)));
-            s.Linear("replace", (self, a, kw, c) => Replace(c, B(self), StrMethods.WithKw(c, a, kw, "replace", "old", "new", "count")));
+            s.Linear("replace", (self, a, kw, c) =>
+            {
+                StrMethods.RefusePositionalOnly(c, a, kw, "replace", 2, "old", "new");
+                return Replace(c, B(self), StrMethods.WithKw(c, a, kw, "replace", "old", "new", "count"));
+            });
             s.Linear("split", (self, a, kw, c) => Split(c, B(self), StrMethods.WithKw(c, a, kw, "split", "sep", "maxsplit"), false));
             s.Linear("rsplit", (self, a, kw, c) => Split(c, B(self), StrMethods.WithKw(c, a, kw, "rsplit", "sep", "maxsplit"), true));
             s.Linear("join", 1, 1, (self, a, kw, c) => Join(c, B(self), a));
@@ -79,8 +83,11 @@ namespace Outbridge.PyLite.Runtime.Values
                     per = Coerce.ToCInt(c, a[1], "bytes_per_sep");
                 }
             }
-            var sb = new System.Text.StringBuilder(data.Length * 3);
             int group = per == 0 ? 0 : Math.Abs(per);
+            // The exact length first: 16 MB with a separator built 48M chars before the cap refused them.
+            long len = 2L * data.Length + (sep != null && group > 0 && data.Length > 0 ? (data.Length - 1L) / group : 0);
+            c.Values.CheckStrLen(len);   // the cap only: Str() below charges the result
+            var sb = new System.Text.StringBuilder((int)len);
             for (int i = 0; i < data.Length; i++)
             {
                 if (sep != null && group > 0 && i > 0)
@@ -171,6 +178,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 BytesValue bv = options.Items[i] as BytesValue;
                 if (bv == null)
                     throw Raise.TypeError(c, "a bytes-like object is required, not '" + options.Items[i].PyTypeName + "'");
+                c.Budget.ChargeLinear(bv.Data.Length);   // a compare per item
                 if (MatchesAt(data, bv.Data, lo, hi, end))
                     return true;
             }
@@ -208,6 +216,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 while ((max < 0 || positions.Count < max) && (at = PySearch.IndexOf(c, data, oldB, scan, data.Length)) >= 0)
                 {
                     c.Budget.Step();
+                    c.Values.PreCharge(8);   // 4 bytes in a list that doubles
                     positions.Add(at);
                     scan = at + oldB.Length;
                 }
@@ -253,13 +262,13 @@ namespace Outbridge.PyLite.Runtime.Values
                             break;
                         if (max >= 0 && parts.Count == max)
                         {
-                            parts.Add(Slice(data, i, data.Length));
+                            AddPart(c, parts, Slice(data, i, data.Length));
                             break;
                         }
                         int start = i;
                         while (i < data.Length && !IsSpace(data[i]))
                             i++;
-                        parts.Add(Slice(data, start, i));
+                        AddPart(c, parts, Slice(data, start, i));
                     }
                 }
                 else
@@ -273,13 +282,13 @@ namespace Outbridge.PyLite.Runtime.Values
                             break;
                         if (max >= 0 && parts.Count == max)
                         {
-                            parts.Add(Slice(data, 0, i));
+                            AddPart(c, parts, Slice(data, 0, i));
                             break;
                         }
                         int stop = i;
                         while (i > 0 && !IsSpace(data[i - 1]))
                             i--;
-                        parts.Add(Slice(data, i, stop));
+                        AddPart(c, parts, Slice(data, i, stop));
                     }
                     parts.Reverse();
                 }
@@ -294,28 +303,41 @@ namespace Outbridge.PyLite.Runtime.Values
                     int p = 0, idx;
                     while ((max < 0 || parts.Count < max) && (idx = IndexOf(c, data, sep, p, data.Length)) >= 0)
                     {
-                        c.Budget.Step();
-                        parts.Add(Slice(data, p, idx));
+                        AddPart(c, parts, Slice(data, p, idx));
                         p = idx + sep.Length;
                     }
-                    parts.Add(Slice(data, p, data.Length));
+                    AddPart(c, parts, Slice(data, p, data.Length));
                 }
                 else
                 {
                     int p = data.Length, idx;
                     while ((max < 0 || parts.Count < max) && (idx = LastIndexOf(c, data, sep, 0, p)) >= 0)
                     {
-                        c.Budget.Step();
-                        parts.Add(Slice(data, idx + sep.Length, p));
+                        AddPart(c, parts, Slice(data, idx + sep.Length, p));
                         p = idx;
                     }
-                    parts.Add(Slice(data, 0, p));
+                    AddPart(c, parts, Slice(data, 0, p));
                     parts.Reverse();
                 }
             }
+            c.Budget.ChargeLinear(parts.Count);   // a bytes object per piece: 4M of them are most of the work
             for (int k = 0; k < parts.Count; k++)
-                result.Add(c.Values.Bytes(parts[k]), c);
+            {
+                if ((k & 4095) == 4095)
+                    c.Budget.CheckDeadlineAfterCall();
+                result.Items.Add(new BytesValue(parts[k]));   // charged by AddPart
+            }
             return result;
+        }
+
+        // A step per piece, the item cap, and the piece's memory - its array, its bytes object and its slot -
+        // as it is found: whitespace runs split 8 MB into 4M pieces, 299 MB built before any was charged.
+        private static void AddPart(EvalContext c, List<byte[]> parts, byte[] piece)
+        {
+            c.Budget.Step();
+            c.Values.EnsureCollectionSize(parts.Count + 1);
+            c.Budget.ChargeAllocation(64L + piece.Length);
+            parts.Add(piece);
         }
 
         private static ScriptValue Join(EvalContext c, byte[] sep, ScriptValue[] a)
@@ -332,6 +354,11 @@ namespace Outbridge.PyLite.Runtime.Values
                     throw Raise.TypeError(c, "sequence item " + parts.Count + ": expected a bytes-like object, " + e.PyTypeName + " found");
                 total += (parts.Count > 0 ? sep.Length : 0) + bv.Data.Length;
                 c.Values.CheckStrLen(total);
+                if (parts.Count == parts.Capacity)   // b''.join(repeat(b'')) kept every part uncharged
+                {
+                    c.Values.EnsureCollectionSize(parts.Count + 1L);
+                    c.Values.PreCharge(8L * Math.Max(4, parts.Count));
+                }
                 parts.Add(bv.Data);
             }
             c.Budget.ChargeLinear(parts.Count);
@@ -339,6 +366,8 @@ namespace Outbridge.PyLite.Runtime.Values
             int w = 0;
             for (int k = 0; k < parts.Count; k++)
             {
+                if ((k & 4095) == 4095)
+                    c.Budget.CheckDeadlineAfterCall();
                 if (k > 0)
                 {
                     Buffer.BlockCopy(sep, 0, outB, w, sep.Length);

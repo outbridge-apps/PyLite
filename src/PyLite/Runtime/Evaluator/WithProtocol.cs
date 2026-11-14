@@ -61,21 +61,16 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 ctx.CallHook(exit, new[] { none, none, none }, KwArgs.Empty);
                 return ctx.Values.Bool(false);
             }
-            ScriptValue type = (ScriptValue)e.ExcType.ClassValue ?? Modules.Builtins.TypeObjectFor(e.PyTypeName);
+            e.ChargeIfKept(ctx);   // __exit__ can keep it
+            ScriptValue type = (ScriptValue)e.ExcType.ClassValue ?? Modules.Builtins.TypeObjectFor(e.TypeInfo, ctx);
             ScriptValue r = ctx.CallHook(exit, new[] { type, e, none }, KwArgs.Empty);
             return ctx.Values.Bool(r.IsTruthy(ctx));
         }
 
         private static ScriptValue Special(ScriptValue obj, string name, EvalContext ctx)
         {
-            try
-            {
-                return PyOps.GetAttr(obj, name, ctx);
-            }
-            catch (ScriptException se) when (se.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
-            {
-                return null;
-            }
+            ScriptValue v;
+            return PyOps.TryGetAttr(obj, name, ctx, out v) ? v : null;
         }
     }
 }

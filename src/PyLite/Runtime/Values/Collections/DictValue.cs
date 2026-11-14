@@ -34,6 +34,11 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
+        private static bool IsDictSubclass(DictValue d)
+        {
+            return d is OrderedDictValue || d is DefaultDictValue;
+        }
+
         // PEP 584: d1 | d2 -> merged copy, right wins, insertion order preserved. Both
         // operands must be dict; anything else falls through to the generic TypeError.
         protected internal override ScriptValue BinaryOpCore(PyBinOp op, ScriptValue other, bool reflected, EvalContext ctx)
@@ -42,10 +47,25 @@ namespace Outbridge.PyLite.Runtime.Values
                 return null;
             DictValue left = reflected ? (DictValue)other : this;
             DictValue right = reflected ? this : (DictValue)other;
-            DictValue result = ctx.Values.Dict(left.Count + right.Count);
-            DictMethods.Merge(ctx, result, left);
+            DictValue result;
+            if (IsDictSubclass(left))
+            {
+                result = ctx.Values.CopyDict(left);   // OrderedDict.__or__, defaultdict.__or__: the left one's type and factory
+            }
+            else if (IsDictSubclass(right))
+            {
+                result = ctx.Values.CopyDict(right);   // their __ror__: the right one's, the plain dict's keys first
+                result.Table.Clear(ctx);
+                DictMethods.Merge(ctx, result, left);
+            }
+            else
+            {
+                result = ctx.Values.Dict(left.Count + right.Count);
+                DictMethods.Merge(ctx, result, left);
+            }
             DictMethods.Merge(ctx, result, right);
             return result;
+
         }
 
         public bool TryGet(ScriptValue key, EvalContext ctx, out ScriptValue value)
@@ -78,7 +98,7 @@ namespace Outbridge.PyLite.Runtime.Values
         public void DelItemOrThrow(ScriptValue key, EvalContext ctx)
         {
             long h = PyOps.Hash(key, ctx, 0);
-            if (!Table.Delete(key, h, ctx, 0))
+            if (!Table.Delete(key, h, ctx, 0) && !(this is CounterValue))   // del c[missing] is a no-op on a Counter
                 throw Raise.KeyError(ctx, key);
         }
 
@@ -125,10 +145,41 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (!IsSetLike || PyOps.TryGetIterator(other, ctx) == null)
                 return null;
+            if (op == PyBinOp.BitAnd)
+                return Intersect(other, ctx);
             if (!reflected)
                 return SetOps.Apply(op, FromIterable(this, ctx), other, ctx, false);
             SetValue left = other as SetValue ?? FromIterable(other, ctx);
             return SetOps.Apply(op, left, this, ctx, false);
+        }
+
+        // CPython's _PyDictView_Intersect: walk the smaller side (another view, or a plain iterable) and keep
+        // the keys the other side contains, so the result holds the walked side's objects; a set at least this
+        // view's size answers through its own intersection, which walks the view.
+        private SetValue Intersect(ScriptValue other, EvalContext ctx)
+        {
+            ScriptValue walked = other, container = this;
+            SetValue set = other as SetValue;
+            DictViewValue view = other as DictViewValue;
+            if (set != null && set.Kind == ValueKind.Set && Owner.Count <= set.Count)
+            {
+                walked = this;
+                container = other;
+            }
+            else if (view != null && view.IsSetLike && view.Owner.Count > Owner.Count)
+            {
+                walked = this;
+                container = other;
+            }
+            var t = new OrderedTable(ctx, 8);
+            IScriptIterator it = PyOps.GetIterator(walked, ctx);
+            ScriptValue v;
+            while (it.MoveNext(ctx, out v))
+            {
+                if (PyOps.Contains(v, container, ctx))
+                    t.InsertOrUpdate(v, PyOps.Hash(v, ctx, 0), null, ctx, 0);
+            }
+            return ctx.Values.Set(t);
         }
 
         private static SetValue FromIterable(ScriptValue src, EvalContext ctx)
@@ -217,8 +268,10 @@ namespace Outbridge.PyLite.Runtime.Values
     }
 
     // Iterates live entries in insertion order; a structural change (version bump) aborts.
-    internal abstract class TableViewIterator : ScriptIteratorBase
+    internal abstract class TableViewIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         protected readonly OrderedTable Table;
         private readonly ulong _version;
         private readonly int _count;
@@ -227,6 +280,7 @@ namespace Outbridge.PyLite.Runtime.Values
         protected TableViewIterator(OrderedTable table)
         {
             Table = table;
+            _pos = -1;
             _version = table.Version;
             _count = table.Count;
         }
@@ -247,6 +301,8 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (Invalidated())
                 throw Raise.RuntimeError(ctx, MutationText(_count, Table.Count));
+            if (_pos < 0)
+                _pos = Table.WalkStart(ctx);   // the first pull: past leading tombstones, the rest charged
             while (_pos < Table.EntriesUsed)
             {
                 long h;
@@ -309,6 +365,8 @@ namespace Outbridge.PyLite.Runtime.Values
         private readonly int _count;
         private int _pos;
 
+        private bool _charged;
+
         internal ReverseDictIterator(OrderedTable table, DictViewValue.ViewKind view)
         {
             _table = table;
@@ -322,6 +380,11 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (_table.Version != _version)
                 throw Raise.RuntimeError(ctx, DictMutation.Text(_count, _table.Count));
+            if (!_charged)
+            {
+                _table.ChargeWalk(ctx);
+                _charged = true;
+            }
             while (_pos >= 0)
             {
                 long h;

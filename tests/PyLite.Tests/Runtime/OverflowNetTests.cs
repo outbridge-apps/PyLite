@@ -24,7 +24,7 @@ namespace Outbridge.PyLite.Tests.Runtime
             var ctx = Rt.Ctx();
             CompiledScript script = Compiler.Compile(src, "<test>", SyntaxLimits.Default);
             DictValue globals = ctx.Values.Dict(8);
-            globals.SetItem(ctx.Values.Str("boom"), ctx.Values.BuiltinFunction("boom", Boom), ctx);
+            globals.SetItem(ctx.Values.Str("boom"), BuiltinFunctionValue.Make("boom", Boom), ctx);   // an engine builtin
             var env = Outbridge.PyLite.Runtime.Environment.CreateModule(ctx, globals, HostFunctionTable.CreateDefault(), script.Program.ModuleInfo);
             new Outbridge.PyLite.Runtime.Evaluator.Evaluator(script.Program).RunModule(env, ctx);
             return globals;

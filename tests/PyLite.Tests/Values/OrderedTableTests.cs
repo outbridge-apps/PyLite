@@ -210,8 +210,11 @@ namespace Outbridge.PyLite.Tests.Values
                 Ins(ctx, t, ctx.Values.Int(i), ctx.Values.Int(i));   // forces resize
             var keys = IntKeys(t);
             Assert.Equal(t.Count, keys.Count);
-            for (int i = 1; i < keys.Count; i++)
-                Assert.True(true);   // no tombstones present (TryGetEntryAt skips them)
+            var expected = new List<BigInteger>();   // the live keys in insertion order: the resize dropped the tombstones
+            for (int i = 0; i < 300; i++)
+                if (i >= 150 || i % 3 != 0)
+                    expected.Add(i);
+            Assert.Equal(expected, keys);
             Assert.True(Has(ctx, t, ctx.Values.Int(1)));
             Assert.False(Has(ctx, t, ctx.Values.Int(0)));
         }

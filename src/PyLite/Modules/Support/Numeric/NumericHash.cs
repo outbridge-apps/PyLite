@@ -15,7 +15,7 @@ namespace Outbridge.PyLite.Modules.Support
 
         public static long HashBool(bool b) { return b ? 1L : 0L; }
 
-        // Exact long twin of HashBigInteger (P1 fast path): |n| % P with the sign put back, -1 -> -2.
+        // Exact long twin of HashBigInteger (the machine-int fast path): |n| % P with the sign put back, -1 -> -2.
         public static long HashLong(long n)
         {
             if (n == 0)
@@ -118,7 +118,7 @@ namespace Outbridge.PyLite.Modules.Support
                 if (r == -1L)
                     r = -2L;
                 if (r == long.MinValue)
-                    r = long.MinValue + 1L;   // reserve the StrValue cache sentinel (R8)
+                    r = long.MinValue + 1L;   // reserve the StrValue cache sentinel
                 return r;
             }
         }

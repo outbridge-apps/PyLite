@@ -33,7 +33,7 @@ namespace Outbridge.PyLite.Modules
             {
                 throw Runtime.Errors.Raise.TypeError(c, "cannot instantiate 'datetime.tzinfo'");
             };
-            return ctx.Values.Type("datetime.tzinfo", ctor, null, null);
+            return ctx.Values.EngineType("datetime.tzinfo", ctor, null, null);
         }
 
         private static TypeValue DatetimeType(EvalContext ctx)
@@ -41,18 +41,28 @@ namespace Outbridge.PyLite.Modules
             var slots = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
                 ["today"] = BuiltinFunctionValue.Make("today", Args.Positional("today", 0, 0, (self, args, kw, c) => DateTimeValue.Now(c, null))),
-                ["now"] = BuiltinFunctionValue.Make("now", (self, args, kw, c) => DateTimeValue.Now(c, NowTz(c, args, kw))),
+                ["now"] = BuiltinFunctionValue.Make("now", Args.KnownKeywords("now", 1, (self, args, kw, c) => DateTimeValue.Now(c, NowTz(c, args, kw)), "tz")),
                 ["utcnow"] = BuiltinFunctionValue.Make("utcnow", Args.Positional("utcnow", 0, 0, (self, args, kw, c) => DateTimeValue.UtcNow(c))),
-                ["fromtimestamp"] = BuiltinFunctionValue.Make("fromtimestamp",
-                    (self, args, kw, c) => DateTimeValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "fromtimestamp")), TsTz(c, args, kw))),
+                ["fromtimestamp"] = BuiltinFunctionValue.Make("fromtimestamp", Args.Signature("fromtimestamp", 2,
+                    (self, args, kw, c) =>
+                    {
+                        ScriptValue named;
+                        ScriptValue when = args.Length == 0 && kw.TryGet("timestamp", out named) ? named : Arg1(c, args, "fromtimestamp");
+                        return DateTimeValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, when), TsTz(c, args, kw));
+                    }, "timestamp", "tz")),
                 ["utcfromtimestamp"] = BuiltinFunctionValue.Make("utcfromtimestamp",
-                    (self, args, kw, c) => DateTimeValue.UtcFromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "utcfromtimestamp")))),
+                    Args.Positional("utcfromtimestamp", 1, 1, (self, args, kw, c) => DateTimeValue.UtcFromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "utcfromtimestamp"))))),
                 ["fromordinal"] = BuiltinFunctionValue.Make("fromordinal",
-                    (self, args, kw, c) => DateTimeValue.FromOrdinal(c, OrdinalArg(c, args))),
+                    Args.Positional("fromordinal", 1, 1, (self, args, kw, c) => DateTimeValue.FromOrdinal(c, OrdinalArg(c, args)))),
                 ["combine"] = BuiltinFunctionValue.Make("combine",
-                    (self, args, kw, c) => DateTimeValue.Combine(c, Arg1(c, args, "combine"), Arg2(c, args, "combine"))),
+                    Args.KnownKeywords("combine", 3, (self, args, kw, c) => DateTimeValue.CombineFromArgs(c, args, kw), "date", "time", "tzinfo")),
                 ["strptime"] = BuiltinFunctionValue.Make("strptime",
-                    (self, args, kw, c) => DateTimeValue.Strptime(c, StrArg(c, args, 0, "strptime"), StrArg(c, args, 1, "strptime"))),
+                    (self, args, kw, c) =>
+                    {
+                        Args.NoKw(c, kw, "strptime");
+                        Args.CheckPositional(c, args, "strptime", 2, 2);   // a third positional was dropped
+                        return DateTimeValue.Strptime(c, StrArg(c, args, 0, "strptime"), StrArg(c, args, 1, "strptime"));
+                    }),
                 ["fromisoformat"] = BuiltinFunctionValue.Make("fromisoformat",
                     (self, args, kw, c) => Support.IsoFormatParser.DateTime(c, IsoArg(c, args, kw))),
                 ["min"] = DateTimeValue.Construct(ctx, 1, 1, 1, 0, 0, 0, 0, null),
@@ -60,7 +70,7 @@ namespace Outbridge.PyLite.Modules
                 ["resolution"] = TimeDeltaValue.FromNormalized(ctx, 0, 0, 1),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => DateTimeValue.ConstructFromArgs(c, args, kw);
-            return ctx.Values.Type("datetime.datetime", ctor, null, slots);
+            return ctx.Values.EngineType("datetime.datetime", ctor, null, slots);
         }
 
         // The optional tz argument for now()/fromtimestamp() (positional arg index 1 for fromtimestamp, 0 for now).
@@ -120,7 +130,7 @@ namespace Outbridge.PyLite.Modules
                 ["resolution"] = TimeDeltaValue.FromNormalized(ctx, 0, 0, 1),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => TimeValue.ConstructFromArgs(c, args, kw);
-            return ctx.Values.Type("datetime.time", ctor, null, slots);
+            return ctx.Values.EngineType("datetime.time", ctor, null, slots);
         }
 
         private static TypeValue DateType(EvalContext ctx)
@@ -129,9 +139,9 @@ namespace Outbridge.PyLite.Modules
             {
                 ["today"] = BuiltinFunctionValue.Make("today", Args.Positional("today", 0, 0, (self, args, kw, c) => DateValue.Today(c))),
                 ["fromtimestamp"] = BuiltinFunctionValue.Make("fromtimestamp",
-                    (self, args, kw, c) => DateValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "fromtimestamp")))),
+                    Args.Positional("fromtimestamp", 1, 1, (self, args, kw, c) => DateValue.FromTimestamp(c, Support.DtArgs.Timestamp(c, Arg1(c, args, "fromtimestamp"))))),
                 ["fromordinal"] = BuiltinFunctionValue.Make("fromordinal",
-                    (self, args, kw, c) => DateValue.FromOrdinal(c, OrdinalArg(c, args))),
+                    Args.Positional("fromordinal", 1, 1, (self, args, kw, c) => DateValue.FromOrdinal(c, OrdinalArg(c, args)))),
                 ["fromisoformat"] = BuiltinFunctionValue.Make("fromisoformat",
                     (self, args, kw, c) => Support.IsoFormatParser.Date(c, IsoArg(c, args, kw))),
                 ["min"] = DateValue.Construct(ctx, 1, 1, 1),
@@ -139,7 +149,7 @@ namespace Outbridge.PyLite.Modules
                 ["resolution"] = TimeDeltaValue.FromNormalized(ctx, 1, 0, 0),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => DateValue.ConstructFromArgs(c, args, kw);
-            return ctx.Values.Type("datetime.date", ctor, null, slots);
+            return ctx.Values.EngineType("datetime.date", ctor, null, slots);
         }
 
         private static ScriptValue Arg1(EvalContext c, ScriptValue[] args, string fn)
@@ -163,7 +173,7 @@ namespace Outbridge.PyLite.Modules
                 ["max"] = TimezoneValue.FromOffsetUs(ctx, 86340000000L, null),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => TimezoneValue.Construct(c, args, kw);
-            return ctx.Values.Type("datetime.timezone", ctor, null, slots);
+            return ctx.Values.EngineType("datetime.timezone", ctor, null, slots);
         }
 
         private static TypeValue TimedeltaType(EvalContext ctx)
@@ -175,7 +185,7 @@ namespace Outbridge.PyLite.Modules
                 ["resolution"] = TimeDeltaValue.FromNormalized(ctx, 0, 0, 1),
             };
             BuiltinDelegate ctor = (self, args, kw, c) => TimeDeltaValue.Construct(c, args, kw);
-            return ctx.Values.Type("datetime.timedelta", ctor, null, slots);
+            return ctx.Values.EngineType("datetime.timedelta", ctor, null, slots);
         }
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Text;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
@@ -48,12 +47,14 @@ namespace Outbridge.PyLite.Modules
     }
 
     // A hashlib hash object.
-    internal sealed class HashObjectValue : BufferedDigestValue
+    internal sealed class HashObjectValue : BufferedDigestValue, IScriptUncopyable
     {
+        public string PickleName { get { return "_hashlib.HASH"; } }
+
         private static readonly ScriptTypeInfo Type = BuildType();
 
-        internal HashObjectValue(string algo) : base(algo, new List<byte>()) { }
-        private HashObjectValue(string algo, List<byte> buffer) : base(algo, buffer) { }
+        internal HashObjectValue(string algo) : base(algo, new List<byte[]>()) { }
+        private HashObjectValue(string algo, List<byte[]> chunks) : base(algo, chunks) { }
 
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
 
@@ -62,13 +63,9 @@ namespace Outbridge.PyLite.Modules
             return "object supporting the buffer API required, not '" + data.PyTypeName + "'";
         }
 
-        protected override byte[] Hash(byte[] message)
-        {
-            using (HashAlgorithm h = HashAlgos.Create(Algo))
-                return h.ComputeHash(message);
-        }
+        protected override HashAlgorithm NewHash() { return HashAlgos.Create(Algo); }
 
-        protected override BufferedDigestValue CloneWith(List<byte> buffer) { return new HashObjectValue(Algo, buffer); }
+        protected override BufferedDigestValue CloneWith(List<byte[]> chunks) { return new HashObjectValue(Algo, chunks); }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {

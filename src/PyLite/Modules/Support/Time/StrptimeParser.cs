@@ -1,7 +1,6 @@
 using System;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules.Support
 {
@@ -26,12 +25,15 @@ namespace Outbridge.PyLite.Modules.Support
         public int TmIsdst = -1;
         public int? Meridiem;        // 0 = AM, 1 = PM
         public bool SawHour12;
+        public bool SawYear;
+        public int? IsoYear;         // %G
+        public int? IsoWeek;         // %V
     }
 
     internal static class StrptimeParser
     {
         // Valid strptime directive letters; %c/%x/%X expand to constant sub-formats.
-        private const string ValidCodes = "YymdHIMSfjUWwaAbBpZzcxX%";
+        private const string ValidCodes = "YymdHIMSfjUWwaAbBpZzcxXGVu%";
 
         public static StrptimeResult Parse(EvalContext ctx, string data, string fmt)
         {
@@ -42,10 +44,11 @@ namespace Outbridge.PyLite.Modules.Support
             Scan(ctx, data, ref di, fmt, r, data, fmt);
             if (di != data.Length)
                 throw Raise.ValueError(ctx, "unconverted data remains: " + data.Substring(di));
+            IsoDate(ctx, r);
             // CPython's _strptime builds datetime_date(year, month, day), which rejects Feb 29 in a common year.
             if (r.DayOfYear == null && (r.Day < 1 || r.Day > CalendarMath.DaysInMonth(r.Year, r.Month)))
                 throw Raise.ValueError(ctx, "day is out of range for month");
-            ResolveDate(r);
+            ResolveDate(ctx, r);
             return r;
         }
 
@@ -81,14 +84,16 @@ namespace Outbridge.PyLite.Modules.Support
                 }
                 char fc = fmt[fi];
 
-                if (char.IsWhiteSpace(fc))
+                if (PyUnicode.IsPythonSpace(fc))
                 {
-                    while (fi < fmt.Length && char.IsWhiteSpace(fmt[fi]))
+                    int f0 = fi, d0 = di;
+                    while (fi < fmt.Length && PyUnicode.IsPythonSpace(fmt[fi]))
                         fi++;
-                    if (di >= data.Length || !char.IsWhiteSpace(data[di]))
+                    if (di >= data.Length || !PyUnicode.IsPythonSpace(data[di]))
                         throw NoMatch(ctx, topData, topFmt);
-                    while (di < data.Length && char.IsWhiteSpace(data[di]))
+                    while (di < data.Length && PyUnicode.IsPythonSpace(data[di]))
                         di++;
+                    ctx.Budget.ChargeLinear((fi - f0) + (di - d0));   // a 15M-char run was 3 s on ~150 steps
                     continue;
                 }
 
@@ -114,15 +119,30 @@ namespace Outbridge.PyLite.Modules.Support
             ctx.Budget.Step();
             switch (code)
             {
-                case 'Y': r.Year = Num(ctx, data, ref di, 4, 4, 0, 9999, topData, topFmt); break;
+                case 'Y': r.Year = Num(ctx, data, ref di, 4, 4, 0, 9999, topData, topFmt); r.SawYear = true; break;
+                case 'G': r.IsoYear = Num(ctx, data, ref di, 4, 4, 0, 9999, topData, topFmt); break;
+                case 'V':
+                {
+                    int at = di;
+                    r.IsoWeek = Num(ctx, data, ref di, 1, 2, 0, 53, topData, topFmt);
+                    if (r.IsoWeek == 0 && di - at == 2)
+                        di--;   // CPython's V regex has no '00': it takes one '0', and the rest no longer matches
+                    break;
+                }
+                case 'u': r.WeekdayMon0 = Num(ctx, data, ref di, 1, 1, 1, 7, topData, topFmt) - 1; break;
                 case 'y':
                 {
                     int yy = Num(ctx, data, ref di, 2, 2, 0, 99, topData, topFmt);
                     r.Year = yy <= 68 ? 2000 + yy : 1900 + yy;
+                    r.SawYear = true;
                     break;
                 }
                 case 'm': r.Month = Num(ctx, data, ref di, 1, 2, 1, 12, topData, topFmt); break;
-                case 'd': r.Day = Num(ctx, data, ref di, 1, 2, 1, 31, topData, topFmt); break;
+                case 'd':
+                    if (di + 1 < data.Length && data[di] == ' ' && data[di + 1] >= '1' && data[di + 1] <= '9')
+                        di++;   // TimeRE's " [1-9]"
+                    r.Day = Num(ctx, data, ref di, 1, 2, 1, 31, topData, topFmt);
+                    break;
                 case 'H': r.Hour = Num(ctx, data, ref di, 1, 2, 0, 23, topData, topFmt); break;
                 case 'I': r.Hour = Num(ctx, data, ref di, 1, 2, 1, 12, topData, topFmt); r.SawHour12 = true; break;
                 case 'M': r.Minute = Num(ctx, data, ref di, 1, 2, 0, 59, topData, topFmt); break;
@@ -281,7 +301,35 @@ namespace Outbridge.PyLite.Modules.Support
 
         // ---- post-processing: %U/%W reconstruction, weekday, %p ----
 
-        public static void ResolveDate(StrptimeResult r)
+        // _strptime's ISO week date: %G with %V and a weekday, and its texts for the other mixes
+        private static void IsoDate(EvalContext ctx, StrptimeResult r)
+        {
+            const string Weekday = " and a weekday directive ('%A', '%a', '%w', or '%u').";
+            if (r.IsoYear != null)
+            {
+                if (r.DayOfYear != null)
+                    throw Raise.ValueError(ctx, "Day of the year directive '%j' is not compatible with ISO year directive '%G'. Use '%Y' instead.");
+                if (r.IsoWeek == null || r.WeekdayMon0 == null)
+                    throw Raise.ValueError(ctx, "ISO year directive '%G' must be used with the ISO week directive '%V'" + Weekday);
+                if (r.IsoYear.Value < 1)
+                    throw Raise.ValueError(ctx, "Year is out of range: " + r.IsoYear.Value);   // fromisocalendar's text; year 0 has no ordinal
+                int week = r.IsoWeek.Value;
+                if (week < 1 || week > 53 || (week == 53 && !CalendarMath.HasIsoWeek53(r.IsoYear.Value)))
+                    throw Raise.ValueError(ctx, "Invalid week: " + week);   // fromisocalendar: 2024 has no week 53
+                int jan4 = CalendarMath.Ymd2Ord(r.IsoYear.Value, 1, 4);
+                int ordinal = jan4 - CalendarMath.Weekday(jan4) + (r.IsoWeek.Value - 1) * 7 + r.WeekdayMon0.Value;
+                CalendarMath.Ord2Ymd(ordinal, out r.Year, out r.Month, out r.Day);
+                PastYear9999(ctx, r.Year);
+            }
+            else if (r.IsoWeek != null)
+            {
+                if (!r.SawYear || r.WeekdayMon0 == null)
+                    throw Raise.ValueError(ctx, "ISO week directive '%V' must be used with the ISO year directive '%G'" + Weekday);
+                throw Raise.ValueError(ctx, "ISO week directive '%V' is incompatible with the year directive '%Y'. Use the ISO year '%G' instead.");
+            }
+        }
+
+        public static void ResolveDate(EvalContext ctx, StrptimeResult r)
         {
             if (r.DayOfYear == null && r.WeekOfYear != null && r.WeekdayMon0 != null)
                 r.DayOfYear = CalcJulianFromUW(r.Year, r.WeekOfYear.Value, r.WeekdayMon0.Value, r.WeekStartsMonday);
@@ -294,7 +342,10 @@ namespace Outbridge.PyLite.Modules.Support
             else
             {
                 ordinal = CalendarMath.Ymd2Ord(r.Year, 1, 1) + r.DayOfYear.Value - 1;
+                if (r.Year < 1 || ordinal < 1)
+                    throw Raise.ValueError(ctx, "year 0 is out of range");   // %Y 0000, or %W week 0 of year 1
                 CalendarMath.Ord2Ymd(ordinal, out r.Year, out r.Month, out r.Day);
+                PastYear9999(ctx, r.Year);
             }
             if (r.WeekdayMon0 == null)
                 r.WeekdayMon0 = CalendarMath.Weekday(ordinal);
@@ -306,6 +357,13 @@ namespace Outbridge.PyLite.Modules.Support
                 else if (r.Meridiem.Value == 0 && r.Hour == 12)
                     r.Hour = 0;
             }
+        }
+
+        // A week or day-of-year date past 9999-12-31: CPython's date() refuses it.
+        private static void PastYear9999(EvalContext ctx, int year)
+        {
+            if (year > 9999)
+                throw Raise.ValueError(ctx, "year must be in 1..9999, not " + year.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         private static int CalcJulianFromUW(int year, int week, int dowMon0, bool startsMon)

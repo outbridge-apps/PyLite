@@ -88,7 +88,7 @@ namespace Outbridge.PyLite.Runtime.Values
         }
 
         // ASCII names are written as they are; anything else as UTF-8 with general-purpose bit 11.
-        internal byte[] EncodeFilename(out int flagBits)
+        internal byte[] EncodeFilename(EvalContext ctx, out int flagBits)
         {
             flagBits = FlagBits;
             for (int i = 0; i < Filename.Length; i++)
@@ -96,7 +96,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (Filename[i] > 0x7F)
                 {
                     flagBits |= 0x800;
-                    return Encoding.UTF8.GetBytes(Filename);
+                    return BytesCodec.Encode(ctx, Filename, "utf-8");   // strict: a lone surrogate raises, as in CPython
                 }
             }
             return Encoding.ASCII.GetBytes(Filename);

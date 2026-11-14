@@ -24,6 +24,17 @@ namespace Outbridge.PyLite.Tests.Modules
             return Assert.Throws<ScriptException>(() => Ev.Run(P + body + "\n"));
         }
 
+        // .NET's reader is quadratic in one tag's attributes: past 10,000 the tag is refused before it reads
+        // them (the machine-sensitive probe times 400,000; this pins the limit itself, on every run).
+        [Fact]
+        public void ATagWithTooManyAttributesIsRefused()
+        {
+            Assert.Equal("10000", R("len(ET.fromstring('<r ' + ' '.join(['a%d=\"v\"' % i for i in range(10000)]) + '/>').attrib)"));
+            ScriptException ex = Raises("ET.fromstring('<r ' + ' '.join(['xmlns:p%d=\"u\"' % i for i in range(10001)]) + '/>')");
+            Assert.Equal("ParseError", ex.Value.ExcType.Name);
+            Assert.Contains("too many attributes in one element (limit 10000)", ex.Value.Args[0].Repr(Rt.Ctx()));
+        }
+
         // ---- XPath ----
 
         [Theory]
@@ -32,10 +43,10 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("[e.get('k') for e in r.findall('.//n/..')]", "['a', 'b', None]")]
         [InlineData("r.find('..')", "None")]                            // above the start: not there
         [InlineData("r.find('i/..').tag", "'r'")]
-        // [@a!='v'] is elem.get(a) != v, so an element WITHOUT the attribute is selected
-        [InlineData("[e.get('k') for e in r.findall(\"i[@k!='a']\")]", "['b', None]")]
-        [InlineData("[e.get('k') for e in r.findall(\"i[@k!='zz']\")]", "['a', 'b', None]")]
-        // [tag!='text'] needs such a child to exist, which is CPython's asymmetry with the form above
+        // [@a!='v'] needs the attribute: elem.get(a) is not None and != v
+        [InlineData("[e.get('k') for e in r.findall(\"i[@k!='a']\")]", "['b']")]
+        [InlineData("[e.get('k') for e in r.findall(\"i[@k!='zz']\")]", "['a', 'b']")]
+        // [tag!='text'] likewise needs such a child to exist
         [InlineData("[e.get('k') for e in r.findall(\"i[n!='x']\")]", "['b', None]")]
         [InlineData("[e.get('k') for e in r.findall(\"i[n!='zz']\")]", "['a', 'b', None]")]
         [InlineData("r.findall(\"i[q!='x']\")", "[]")]                   // no such child: nothing selected
@@ -120,7 +131,7 @@ namespace Outbridge.PyLite.Tests.Modules
             var res = Ev.Run(P
                 + "def err(s):\n    try:\n        ET.fromstring(s)\n    except ET.ParseError as e:\n        return e\n"
                 + "res = (err('<a>').position, err('<!DOCTYPE a [<!ENTITY e \"x\">]><a>&e;</a>').position)\n");
-            Assert.Equal("((1, 0), (1, 0))", res.Repr("res"));
+            Assert.Equal("((1, 3), (1, 0))", res.Repr("res"));   // expat: the end of the input
         }
 
         // The reader's own sentence advises setting an XmlReaderSettings property, which is addressed to

@@ -56,8 +56,13 @@ namespace Outbridge.PyLite.Modules.Support
             BytesValue b = src as BytesValue;
             if (b != null)
                 return b.Data;
+            return ToByteArray(c, PyOps.GetIterator(src, c));
+        }
+
+        // From an iterator the caller already has: __iter__ runs once.
+        internal static byte[] ToByteArray(EvalContext c, IScriptIterator it)
+        {
             var buf = new List<byte>();
-            IScriptIterator it = PyOps.GetIterator(src, c);
             ScriptValue e;
             while (it.MoveNext(c, out e))
             {

@@ -390,7 +390,7 @@ namespace Outbridge.PyLite.Tests.Modules
         public void WritingIsChargedAndCapped()
         {
             EngineAbort a = Abort("buf = io.BytesIO()\nwith zipfile.ZipFile(buf, 'w') as z:\n    for i in range(100):\n        z.writestr('m%d' % i, b'x' * 1000000)\n",
-                ResourceLimits.Default.With(maxStrChars: 20_000_000, maxAllocBytes: 64 * 1024 * 1024));
+                ResourceLimits.Default.With(maxStrChars: 20_000_000, maxAllocBytes: 64 * 1024 * 1024, deadlineMs: 120_000));   // the memory limit, not the clock
             Assert.Equal(EngineAbortKind.Memory, a.Kind);
         }
 

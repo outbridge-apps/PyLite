@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Text;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -23,9 +22,9 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["token_bytes"] = BuiltinFunctionValue.Make("token_bytes", (s, a, kw, c) => c.Values.Bytes(Bytes(c, a, kw, "token_bytes"))),
-                ["token_hex"] = BuiltinFunctionValue.Make("token_hex", (s, a, kw, c) => c.Values.Str(Support.Hex.Encode(Bytes(c, a, kw, "token_hex")))),
-                ["token_urlsafe"] = BuiltinFunctionValue.Make("token_urlsafe", (s, a, kw, c) => c.Values.Str(UrlSafe(Bytes(c, a, kw, "token_urlsafe")))),
+                ["token_bytes"] = BuiltinFunctionValue.Make("token_bytes", Args.KnownKeywords("token_bytes", 1, (s, a, kw, c) => c.Values.Bytes(Bytes(c, a, kw, "token_bytes")), "nbytes")),
+                ["token_hex"] = BuiltinFunctionValue.Make("token_hex", Args.KnownKeywords("token_hex", 1, (s, a, kw, c) => c.Values.Str(Support.Hex.Encode(Bytes(c, a, kw, "token_hex"))), "nbytes")),
+                ["token_urlsafe"] = BuiltinFunctionValue.Make("token_urlsafe", Args.KnownKeywords("token_urlsafe", 1, (s, a, kw, c) => c.Values.Str(UrlSafe(Bytes(c, a, kw, "token_urlsafe"))), "nbytes")),
                 ["randbelow"] = BuiltinFunctionValue.Make("randbelow", RandBelow),
                 ["randbits"] = BuiltinFunctionValue.Make("randbits", RandBits),
                 ["choice"] = BuiltinFunctionValue.Make("choice", Choice),

@@ -63,7 +63,7 @@ namespace Outbridge.PyLite.Tests.Runtime
         public void UnboundLocalText()
         {
             var ctx = Rt.Ctx();
-            Assert.Equal("local variable 'x' referenced before assignment", Raise.UnboundLocal(ctx, "x").Value.GetMessageText(ctx));
+            Assert.Equal("cannot access local variable 'x' where it is not associated with a value", Raise.UnboundLocal(ctx, "x").Value.GetMessageText(ctx));
         }
 
         [Fact]

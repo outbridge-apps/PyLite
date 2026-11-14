@@ -9,8 +9,8 @@ namespace Outbridge.PyLite.Syntax
 
         private void ValidateDelTarget(ExprNode root) => ValidateTargets(root, true);
 
-        // Iterative validation of an assignment or del target (no C# recursion over user data, R-PAR-07).
-        // A del target takes no starred element; an assignment allows one per sequence (PushTargetSeq).
+        // CPython's parser first (_PyPegen_get_invalid_target: the first invalid target in source order), then its
+        // compiler (starred elements, __debug__); no C# recursion over user data (R-PAR-07).
         private void ValidateTargets(ExprNode root, bool delete)
         {
             var stack = new Stack<ExprNode>();
@@ -20,68 +20,113 @@ namespace Outbridge.PyLite.Syntax
                 ExprNode t = stack.Pop();
                 if (t is NameNode || t is AttributeNode || t is IndexNode)
                     continue;
-                TupleNode tn = t as TupleNode;
-                ListNode ln = t as ListNode;
-                IReadOnlyList<ExprNode> elts = tn != null ? tn.Elts : ln != null ? ln.Elts : null;
+                IReadOnlyList<ExprNode> elts = Elements(t);
                 if (elts != null)
                 {
-                    if (delete)
-                    {
-                        foreach (var e in elts)
-                            stack.Push(e);
-                    }
-                    else
-                    {
-                        PushTargetSeq(stack, elts, t);
-                    }
+                    for (int i = elts.Count - 1; i >= 0; i--)
+                        stack.Push(elts[i]);
                     continue;
                 }
+                StarredNode s = t as StarredNode;
+                if (s != null && !delete)
+                {
+                    stack.Push(s.Value);
+                    continue;
+                }
+                throw ErrorAtSrc(t.Src, (delete ? "cannot delete " : "cannot assign to ") + ExprName(t));
+            }
 
-                if (t is StarredNode)
-                    throw ErrorAtSrc(t.Src, delete ? "can't use starred expression in del" : "starred assignment target must be in a list or tuple");
-                throw ErrorAtSrc(t.Src, (delete ? "can't delete " : "can't assign to ") + Describe(t));
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                ExprNode t = stack.Pop();
+                NameNode name = t as NameNode;
+                if (name != null)
+                    ForbidDebug(name.Id, t.Src, delete);
+                AttributeNode attr = t as AttributeNode;
+                if (attr != null)
+                    ForbidDebug(attr.Attr, t.Src, delete);
+                IReadOnlyList<ExprNode> elts = Elements(t);
+                if (elts != null)
+                {
+                    int starred = 0;
+                    foreach (ExprNode elt in elts)
+                    {
+                        if (elt is StarredNode)
+                            starred++;
+                    }
+                    if (starred > 1)
+                        throw ErrorAtSrc(t.Src, "multiple starred expressions in assignment");
+                    for (int i = elts.Count - 1; i >= 0; i--)
+                        stack.Push(elts[i]);
+                    continue;
+                }
+                StarredNode s = t as StarredNode;
+                if (s != null)
+                {
+                    if (t == root)
+                        throw ErrorAtSrc(t.Src, "starred assignment target must be in a list or tuple");
+                    stack.Push(s.Value);
+                }
             }
         }
 
-        private void PushTargetSeq(Stack<ExprNode> stack, IReadOnlyList<ExprNode> elts, ExprNode container)
+        private static IReadOnlyList<ExprNode> Elements(ExprNode t)
         {
-            int starred = 0;
-            foreach (ExprNode elt in elts)
-            {
-                StarredNode s = elt as StarredNode;
-                if (s != null)
-                {
-                    starred++;
-                    stack.Push(s.Value);
-                }
-                else
-                    stack.Push(elt);
-            }
-            if (starred > 1)
-                throw ErrorAtSrc(container.Src, "two starred expressions in assignment");
+            TupleNode tn = t as TupleNode;
+            if (tn != null)
+                return tn.Elts;
+            ListNode ln = t as ListNode;
+            return ln != null ? ln.Elts : null;
+        }
+
+        // CPython's forbidden_name: __debug__ is bound nowhere (a target, parameter, alias, def or class name, keyword
+        // argument, capture), reported where CPython reports it.
+        private void ForbidDebug(string name, SourceInfo src, bool delete = false)
+        {
+            if (name == "__debug__")
+                throw ErrorAtSrc(src, (delete ? "cannot delete " : "cannot assign to ") + "__debug__");
         }
 
         private void ValidateAugTarget(ExprNode lhs)
         {
+            NameNode name = lhs as NameNode;
+            AttributeNode attr = lhs as AttributeNode;
+            if (name != null || attr != null)
+                ForbidDebug(name != null ? name.Id : attr.Attr, lhs.Src);
             if (lhs is NameNode || lhs is AttributeNode || lhs is IndexNode)
                 return;
-            throw ErrorAtSrc(lhs.Src, "illegal expression for augmented assignment");
+            throw ErrorAtSrc(lhs.Src, "'" + ExprName(lhs) + "' is an illegal expression for augmented assignment");
         }
 
-        private static string Describe(ExprNode t)
+        // _PyPegen_get_expr_name
+        private static string ExprName(ExprNode t)
         {
             switch (t)
             {
-                case LiteralNode _: return "literal";
-                case FStringNode _: return "literal";
+                case LiteralNode lit:
+                    return lit.Kind == LiteralKind.None ? "None" : lit.Kind == LiteralKind.Ellipsis ? "ellipsis"
+                        : lit.Kind == LiteralKind.Bool ? ((bool)lit.Value ? "True" : "False") : "literal";
+                case NameNode _: return "name";
+                case AttributeNode _: return "attribute";
+                case IndexNode _: return "subscript";
+                case StarredNode _: return "starred";
+                case ListNode _: return "list";
+                case TupleNode _: return "tuple";
+                case SetNode _: return "set display";
+                case DictNode _: return "dict literal";
+                case FStringNode _: return "f-string expression";
                 case CallNode _: return "function call";
-                case BinOpNode _: return "operator";
-                case UnaryOpNode _: return "operator";
-                case BoolOpNode _: return "operator";
-                case CompareChainNode _: return "operator";
-                case ComprehensionNode _: return "comprehension";
+                case BinOpNode _: return "expression";
+                case UnaryOpNode _: return "expression";
+                case BoolOpNode _: return "expression";
+                case CompareChainNode _: return "comparison";
                 case IfExpNode _: return "conditional expression";
+                case NamedExprNode _: return "named expression";
                 case LambdaNode _: return "lambda";
+                case ComprehensionNode c:
+                    return c.Kind == CompKind.List ? "list comprehension" : c.Kind == CompKind.Set ? "set comprehension"
+                        : c.Kind == CompKind.Dict ? "dict comprehension" : "generator expression";
                 default: return "expression";
             }
         }

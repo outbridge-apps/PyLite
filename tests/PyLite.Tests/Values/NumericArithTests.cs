@@ -80,11 +80,11 @@ namespace Outbridge.PyLite.Tests.Values
         {
             var ctx = Rt.Ctx();
             Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.TrueDiv, ctx.Values.Int(1), ctx.Values.Int(0)));
-            Assert.Equal("integer division or modulo by zero", ZdeText(ctx, PyBinOp.FloorDiv, ctx.Values.Int(1), ctx.Values.Int(0)));
-            Assert.Equal("integer division or modulo by zero", ZdeText(ctx, PyBinOp.Mod, ctx.Values.Int(1), ctx.Values.Int(0)));
-            Assert.Equal("float division by zero", ZdeText(ctx, PyBinOp.TrueDiv, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
-            Assert.Equal("float modulo", ZdeText(ctx, PyBinOp.Mod, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
-            Assert.Equal("float divmod()", ZdeText(ctx, PyBinOp.FloorDiv, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
+            Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.FloorDiv, ctx.Values.Int(1), ctx.Values.Int(0)));
+            Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.Mod, ctx.Values.Int(1), ctx.Values.Int(0)));
+            Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.TrueDiv, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
+            Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.Mod, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
+            Assert.Equal("division by zero", ZdeText(ctx, PyBinOp.FloorDiv, ctx.Values.Float(1.0), ctx.Values.Float(0.0)));
         }
 
         private static string ZdeText(EvalContext ctx, PyBinOp op, ScriptValue a, ScriptValue b)
@@ -127,7 +127,7 @@ namespace Outbridge.PyLite.Tests.Values
         {
             var ctx = Rt.Ctx();
             var ex = Assert.Throws<ScriptException>(() => Bin(ctx, PyBinOp.Pow, ctx.Values.Float(0.0), ctx.Values.Int(-2)));
-            Assert.Equal("0.0 cannot be raised to a negative power", ex.Value.GetMessageText(ctx));
+            Assert.Equal("zero to a negative power", ex.Value.GetMessageText(ctx));
         }
 
         [Fact]

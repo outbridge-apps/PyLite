@@ -1,5 +1,4 @@
 using System;
-using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -84,8 +83,10 @@ namespace Outbridge.PyLite.Runtime.Values
         }
     }
 
-    internal sealed class TupleIterator : ScriptIteratorBase
+    internal sealed class TupleIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly ScriptValue[] _items;
         private int _pos;
         internal TupleIterator(ScriptValue[] items) { _items = items; }

@@ -108,14 +108,10 @@ namespace Outbridge.PyLite.Runtime.Values
         // Type._make(iterable).
         internal static NamedTupleValue Make(NamedTupleInfo info, ScriptValue iterable, EvalContext ctx)
         {
-            IScriptIterator it = PyOps.GetIterator(iterable, ctx);
-            var vals = new List<ScriptValue>();
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-                vals.Add(v);
-            if (vals.Count != info.Fields.Length)
-                throw Raise.TypeError(ctx, "Expected " + info.Fields.Length + " arguments, got " + vals.Count);
-            return new NamedTupleValue(info, vals.ToArray());
+            ScriptValue[] vals = Modules.Support.Iter.ToArray(ctx, iterable);   // charged and capped: _make(repeat(0)) ends on a limit
+            if (vals.Length != info.Fields.Length)
+                throw Raise.TypeError(ctx, "Expected " + info.Fields.Length + " arguments, got " + vals.Length);
+            return new NamedTupleValue(info, vals);
         }
 
         internal static ScriptValue FieldsTuple(NamedTupleInfo info, EvalContext ctx)
@@ -131,6 +127,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (args.Length > 0)
                 throw Raise.TypeError(ctx, "_replace() takes no positional arguments");
             NamedTupleInfo info = self.NtInfo;
+            ctx.Values.PreCharge(24 + 8L * self.Items.Length);   // p = p._replace(a=p) is a chain like any other
             var vals = (ScriptValue[])self.Items.Clone();
             var unexpected = new List<string>();
             for (int j = 0; j < kw.Count; j++)

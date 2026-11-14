@@ -1,0 +1,104 @@
+floordiv0 ZeroDivisionError division by zero
+mod0 ZeroDivisionError division by zero
+div0 ZeroDivisionError division by zero
+fdiv0 ZeroDivisionError division by zero
+fmod0 ZeroDivisionError division by zero
+divmod0 ZeroDivisionError division by zero
+fdivmod0 ZeroDivisionError division by zero
+truediv0f ZeroDivisionError division by zero
+pow0neg ZeroDivisionError zero to a negative power
+fpow0neg ZeroDivisionError zero to a negative power
+unbound UnboundLocalError cannot access local variable 'x' where it is not associated with a value
+free NameError cannot access free variable 'y' where it is not associated with a value in enclosing scope
+name NameError name 'undefined_name' is not defined
+log0 ValueError expected a positive input
+logneg ValueError expected a positive input
+logb ValueError expected a positive input
+sqrtneg ValueError expected a nonnegative input, got -1.0
+acos2 ValueError expected a number in range from -1 up to 1, got 2.0
+log10_0 ValueError expected a positive input
+log2_0 ValueError expected a positive input
+log1p ValueError expected argument value > -1, got -1.0
+exp_ovf OverflowError math range error
+pow_dom ValueError math domain error
+pow_ovf OverflowError math range error
+fact_neg ValueError factorial() not defined for negative values
+fact_f TypeError 'float' object cannot be interpreted as an integer
+gamma0 ValueError expected a noninteger or positive integer, got 0.0
+gammaneg ValueError expected a noninteger or positive integer, got -1.0
+lgamma0 ValueError expected a noninteger or positive integer, got 0.0
+atanh1 ValueError expected a number between -1 and 1, got 1.0
+asin2 ValueError expected a number in range from -1 up to 1, got 2.0
+cosinf ValueError expected a finite input, got inf
+tan_inf ValueError expected a finite input, got inf
+fmod ValueError math domain error
+isqrtneg ValueError isqrt() argument must be nonnegative
+comb ValueError n must be a non-negative integer
+acosh0 ValueError expected argument value not less than 1, got 0.0
+ldexp OverflowError math range error
+sqrt_str TypeError must be real number, not str
+dt_year ValueError year must be in 1..9999, not 0
+dt_month ValueError month must be in 1..12, not 13
+dt_day ValueError day 30 must be in range 1..29 for month 2 in year 2020
+dt_hour ValueError hour must be in 0..23, not 24
+dt_min ValueError minute must be in 0..59, not 60
+dt_sec ValueError second must be in 0..59, not 60
+dt_us ValueError microsecond must be in 0..999999, not 1000000
+dt_ovf OverflowError date value out of range
+dt_ovf2 OverflowError date value out of range
+td_ovf OverflowError days=1000000000; must have magnitude <= 999999999
+ord_ovf ValueError ordinal must be >= 1
+dt_fold ValueError fold must be either 0 or 1, not 2
+re_err PatternError missing ), unterminated subpattern at position 1
+re_err2 PatternError unbalanced parenthesis at position 1
+re_err3 PatternError unterminated character set at position 0
+re_err4 PatternError nothing to repeat at position 0
+re_err5 PatternError min repeat greater than max repeat at position 2
+re_err6 PatternError bad character in group name '1' at position 4
+re_err7 PatternError bad escape (end of pattern) at position 0
+re_err8 PatternError multiple repeat at position 2
+re_err9 PatternError look-behind requires fixed-width pattern
+re_err10 PatternError invalid group reference 1 at position 1
+stat_empty StatisticsError mean requires at least one data point
+fsum ValueError -inf + inf in fsum
+fsum2 OK inf
+fsum3 OK nan
+fsum4 OverflowError intermediate overflow in fsum
+fmean ValueError -inf + inf in fsum
+stdev ValueError inf or nan encountered in data
+hmean OK 2.0
+pow_m1inf OK 1.0
+pow_m1ninf OK 1.0
+pow_halfinf OK inf
+pow_infm OK -inf
+pow_infm2 OK inf
+pow_infm05 OK inf
+pow_0inf OK inf
+pow_nan0 OK 1.0
+pow_1nan OK 1.0
+mpow_m1inf OK 1.0
+mpow_0ninf OK inf
+mpow_negfrac ValueError math domain error
+mpow_0neg ValueError math domain error
+si_map OK []
+si_filter OK []
+si_starmap OK []
+si_takewhile OK []
+si_dropwhile OK []
+si_accumulate OK [1]
+si_sorted StopIteration 
+si_iter OK []
+si_genexp RuntimeError generator raised StopIteration
+si_listcomp StopIteration 
+si_zip OK []
+si_max StopIteration 
+si_min ValueError min() iterable argument is empty
+si_any OK False
+si_sum OK 0
+si_tuple OK ()
+si_join OK ''
+si_dict OK {}
+si_next StopIteration 
+si_for OK []
+si_groupby OK [1]
+si_grouper OK [[1, 1]]

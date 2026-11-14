@@ -10,7 +10,7 @@ walrus operator, decorators, `@dataclass`, `with`, `super()`, `enum`) inside a .
 process, with no native code, no AppDomain and no access to the file system, the network or
 reflection. Every run is bounded by resource limits the host sets: steps, wall-clock deadline,
 allocated memory, call and data depth, string, collection and integer size, output, regex time and
-total sleep; the engine also caps how many runs go at once and the memory they may hold together.
+total sleep; the host bounds how many runs go at once (see [SECURITY.md](https://github.com/outbridge-apps/PyLite/blob/main/SECURITY.md)).
 When a limit is crossed the run stops with a typed error and the host keeps its process.
 
 ```
@@ -33,7 +33,7 @@ design:
 - generators (`yield`), `async`/`await`;
 - the full class machinery: classes are record classes with single inheritance and a fixed set of
   protocol methods (`__init__`, `__eq__`, `__repr__`, `__iter__`, `__enter__`/`__exit__`, ...;
-  see [docs/deviations.md](docs/deviations.md));
+  see [docs/deviations.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/deviations.md));
 - `import` of arbitrary modules: only the modules the engine ships and the modules the host
   registers are importable;
 - file, network and process access.
@@ -47,19 +47,21 @@ design:
 `heapq`, `urllib.parse`, `email.utils`, `xml.etree.ElementTree`, `traceback`.
 
 `io` has `StringIO` and `BytesIO`, `zlib`/`gzip` are one-shot, `zipfile` reads and writes archives in
-a `BytesIO`, and `email.utils` has the date helpers only; [docs/modules.md](docs/modules.md) lists
+a `BytesIO`, and `email.utils` has the date helpers only; [docs/modules.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/modules.md) lists
 every name each module exposes.
 
 ## Documentation
 
-- [docs/modules.md](docs/modules.md) — every builtin, type method and module member that exists,
+- [docs/HOSTING-GUIDE.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/HOSTING-GUIDE.md) — embedding the engine from C#: running scripts, data in and
+  out, host functions and modules, resource limits, errors, concurrency and memory.
+- [docs/modules.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/modules.md) — every builtin, type method and module member that exists,
   read off a running engine rather than written by hand.
-- [docs/deviations.md](docs/deviations.md) — where the dialect knowingly behaves differently from
+- [docs/deviations.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/deviations.md) — where the dialect knowingly behaves differently from
   CPython: UTF-16 strings, the range of `decimal`, record classes, and what a resource limit does
   to your `except`.
-- [docs/performance.md](docs/performance.md) — measured against IronPython 3.4.2: money in
+- [docs/performance.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/performance.md) — measured against IronPython 3.4.2: money in
   `decimal` ×65–73 faster, JSON ×13–14 faster, a new engine in a warm process ×187–226 faster,
-  `sorted` with a `key` ×1.08–1.36 slower.
+  `sorted` with a `key` ×1.08–1.36 slower (measured on 1.1.0).
 
 ## Using it from C#
 
@@ -86,7 +88,7 @@ else
 Inputs arrive as strings and are typed by their text (`"12"` is an `int`, `"9.5"` a `float`,
 `"true"` a `bool`, anything else a `str`); JSON inputs and outputs are available alongside. The host
 can register its own functions and modules, replace `print`, and compile a script once to run it
-many times.
+many times; the [hosting guide](https://github.com/outbridge-apps/PyLite/blob/main/docs/HOSTING-GUIDE.md) shows each.
 
 ## Building
 
@@ -98,25 +100,26 @@ The engine targets .NET Framework 4.7.2 and depends on Newtonsoft.Json 13.0.3 on
 
 ## Tests
 
-All of them are in this repository, and [TESTING.md](TESTING.md) says what each suite proves and how
+All of them are in this repository, and [TESTING.md](https://github.com/outbridge-apps/PyLite/blob/main/TESTING.md) says what each suite proves and how
 to run it:
 
-- `tests/PyLite.Tests`: about 7,000 xUnit tests in five categories (Compatibility, Sandbox,
+- `tests/PyLite.Tests`: about 8,600 xUnit tests in five categories (Compatibility, Sandbox,
   ResourceLimits, Regression, Fuzz);
 - `conformance/`: cases adapted from CPython's `Lib/test`, one script per area;
 - `tools/PyLite.DiffHarness`: scripts run on PyLite and on IronPython 3.4.2, with the results
   compared;
 - `tools/PyLite.Stress`: adversarial probes, each of which must end on a limit or a Python
-  exception.
+  exception, and the probe bank: about 1,200 probes the pre-release reviewers wrote, each pinned to
+  its outcome, output, steps and charged memory.
 
-`tools/run-gates.ps1` runs all four and writes [docs/test-report.md](docs/test-report.md); each
-release commits the report of its own run. [SECURITY.md](SECURITY.md) maps every sandbox guarantee
-to the tests that hold it, [examples/limits](examples/limits) shows each resource limit firing, and
-[docs/fixes.md](docs/fixes.md) lists every defect fixed since 1.0.0 with the test that keeps it fixed.
-The performance figures in [docs/performance.md](docs/performance.md) come from
-`tools/PyLite.PerfBench`; [benchmarks/](benchmarks) runs it pass after pass and keeps the samples.
+`tools/run-gates.ps1` runs them all and writes [docs/test-report.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/test-report.md); each
+release commits the report of its own run. [SECURITY.md](https://github.com/outbridge-apps/PyLite/blob/main/SECURITY.md) maps every sandbox guarantee
+to the tests that hold it, [examples/limits](https://github.com/outbridge-apps/PyLite/tree/main/examples/limits) shows each resource limit firing, and
+[docs/fixes.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/fixes.md) lists every defect fixed since 1.0.0 with the test that keeps it fixed.
+The performance figures in [docs/performance.md](https://github.com/outbridge-apps/PyLite/blob/main/docs/performance.md) come from
+`tools/PyLite.PerfBench`; [benchmarks/](https://github.com/outbridge-apps/PyLite/tree/main/benchmarks) runs it pass after pass and keeps the samples.
 
 ## Status
 
-Version 1.1.0: what changed is in the
-[release notes](https://github.com/outbridge-apps/PyLite/releases/tag/v1.1.0).
+Version 1.2.0: what changed is in the
+[release notes](https://github.com/outbridge-apps/PyLite/releases/tag/v1.2.0).

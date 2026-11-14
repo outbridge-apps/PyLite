@@ -18,10 +18,10 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["loads"] = BuiltinFunctionValue.Make("loads", (s, a, kw, c) => Loads(c, a, kw)),
-                ["dumps"] = BuiltinFunctionValue.Make("dumps", (s, a, kw, c) => Dumps(c, a, kw)),
-                ["load"] = BuiltinFunctionValue.Make("load", (s, a, kw, c) => Load(c, a, kw)),
-                ["dump"] = BuiltinFunctionValue.Make("dump", (s, a, kw, c) => DumpTo(c, a, kw)),
+                ["loads"] = BuiltinFunctionValue.Make("loads", (s, a, kw, c) => Loads(c, Lead(c, a, ref kw, "loads", "s"), kw)),
+                ["dumps"] = BuiltinFunctionValue.Make("dumps", (s, a, kw, c) => Dumps(c, Lead(c, a, ref kw, "dumps", "obj"), kw)),
+                ["load"] = BuiltinFunctionValue.Make("load", (s, a, kw, c) => Load(c, Lead(c, a, ref kw, "load", "fp"), kw)),
+                ["dump"] = BuiltinFunctionValue.Make("dump", (s, a, kw, c) => DumpTo(c, Lead(c, a, ref kw, "dump", "obj", "fp"), kw)),
                 ["JSONDecodeError"] = ModuleKit.ExceptionClass(PyExceptionTypes.JSONDecodeError),
             };
             return ctx.Values.Module("json", m);
@@ -42,16 +42,116 @@ namespace Outbridge.PyLite.Modules
             return JsonScan.Error(c, doc.Value, doc, msg.Value, (int)pos.Small).Value;
         };
 
+        // The leading parameters by name (loads(s=...), dump(obj, fp=...)) moved into their positions; the
+        // other keywords stay for the function's own reader.
+        private static ScriptValue[] Lead(EvalContext c, ScriptValue[] a, ref KwArgs kw, string fn, params string[] names)
+        {
+            if (kw.Count == 0)
+                return Required(c, a, fn, names);
+            ScriptValue[] lead = null;
+            var restNames = new List<string>(kw.Count);
+            var restValues = new List<ScriptValue>(kw.Count);
+            for (int i = 0; i < kw.Count; i++)
+            {
+                int at = Array.IndexOf(names, kw.NameAt(i));
+                if (at < 0)
+                {
+                    restNames.Add(kw.NameAt(i));
+                    restValues.Add(kw.ValueAt(i));
+                    continue;
+                }
+                if (at < a.Length)
+                    throw Raise.TypeError(c, fn + "() got multiple values for argument '" + names[at] + "'");
+                if (lead == null)
+                {
+                    lead = new ScriptValue[names.Length];
+                    Array.Copy(a, lead, a.Length);
+                }
+                lead[at] = kw.ValueAt(i);
+            }
+            if (lead == null)
+                return Required(c, a, fn, names);
+            int n = 0;
+            while (n < lead.Length && lead[n] != null)
+                n++;
+            for (int i = n; i < lead.Length; i++)
+            {
+                if (lead[i] != null)
+                    throw Raise.TypeError(c, fn + "() missing 1 required positional argument: '" + names[n] + "'");
+            }
+            kw = KwArgs.FromArrays(restNames.ToArray(), restValues.ToArray());
+            var result = new ScriptValue[n];
+            Array.Copy(lead, result, n);
+            return Required(c, result, fn, names);
+        }
+
+        // Every lead parameter is required: CPython's "missing N required positional argument(s): 'a' and 'b'".
+        private static ScriptValue[] Required(EvalContext c, ScriptValue[] a, string fn, string[] names)
+        {
+            if (a.Length >= names.Length)
+                return a;
+            int missing = names.Length - a.Length;
+            var quoted = new List<string>(missing);
+            for (int i = a.Length; i < names.Length; i++)
+                quoted.Add("'" + names[i] + "'");
+            string list = missing == 1 ? quoted[0] : string.Join(", ", quoted.GetRange(0, missing - 1)) + " and " + quoted[missing - 1];
+            throw Raise.TypeError(c, fn + "() missing " + missing + " required positional argument" + (missing == 1 ? "" : "s") + ": " + list);
+        }
+
         private static ScriptValue Loads(EvalContext c, ScriptValue[] a, KwArgs kw)
         {
             if (a.Length < 1)
                 throw Raise.TypeError(c, "loads() missing 1 required positional argument: 's'");
-            StrValue s = a[0] as StrValue;
-            if (s == null)
-                throw Raise.TypeError(c, "the JSON object must be str, not '" + a[0].PyTypeName + "'");
+            if (a.Length > 1)
+                throw Raise.TypeError(c, "loads() takes 1 positional argument but " + a.Length + " were given");   // the rest are keyword-only
+            StrValue s = Document(c, a[0]);
             PyJson.JsonLoadHooks hooks;
             bool strict = ReadLoadKw(c, kw, out hooks);
             return PyJson.Parse(c, s.Value, strict, hooks, s);
+        }
+
+        // What loads() reads: a str (a leading BOM refused, as CPython's), or bytes in the encoding
+        // json.detect_encoding picks from the BOM or the zero bytes of the first four.
+        private static StrValue Document(EvalContext c, ScriptValue v)
+        {
+            StrValue s = v as StrValue;
+            if (s != null)
+            {
+                if (s.Value.Length > 0 && s.Value[0] == '\uFEFF')
+                    throw JsonScan.Error(c, s.Value, s, "Unexpected UTF-8 BOM (decode using utf-8-sig)", 0);
+                return s;
+            }
+            BytesValue b = v as BytesValue;
+            if (b == null)
+                throw Raise.TypeError(c, "the JSON object must be str, bytes or bytearray, not " + v.PyTypeName);
+            string enc = BytesCodec.Normalize(c, c.Values.Str(DetectEncoding(b.Data)));
+            return c.Values.Str(BytesCodec.Decode(c, b.Data, enc, "strict"));
+        }
+
+        private static string DetectEncoding(byte[] b)
+        {
+            if (b.Length >= 4 && ((b[0] == 0 && b[1] == 0 && b[2] == 0xFE && b[3] == 0xFF)
+                || (b[0] == 0xFF && b[1] == 0xFE && b[2] == 0 && b[3] == 0)))
+                return "utf-32";
+            if (b.Length >= 2 && ((b[0] == 0xFE && b[1] == 0xFF) || (b[0] == 0xFF && b[1] == 0xFE)))
+                return "utf-16";
+            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
+                return "utf-8-sig";
+            if (b.Length >= 4)
+            {
+                if (b[0] == 0)
+                    return b[1] != 0 ? "utf-16-be" : "utf-32-be";
+                if (b[1] == 0)
+                    return b[2] != 0 || b[3] != 0 ? "utf-16-le" : "utf-32-le";
+            }
+            else if (b.Length == 2)
+            {
+                if (b[0] == 0)
+                    return "utf-16-be";
+                if (b[1] == 0)
+                    return "utf-16-le";
+            }
+            return "utf-8";
         }
 
         // The decode keywords shared by loads() and load(). parse_float / parse_int take any callable,
@@ -75,8 +175,8 @@ namespace Outbridge.PyLite.Modules
                 TypeValue tv = val as TypeValue;
                 switch (name)
                 {
-                    case "parse_float": hooks.ParseFloat = tv != null && tv.Name == "float" ? null : val; continue;
-                    case "parse_int": hooks.ParseInt = tv != null && tv.Name == "int" ? null : val; continue;
+                    case "parse_float": hooks.ParseFloat = tv != null && !tv.IsNamedByScript && tv.Name == "float" ? null : val; continue;
+                    case "parse_int": hooks.ParseInt = tv != null && !tv.IsNamedByScript && tv.Name == "int" ? null : val; continue;
                     case "parse_constant": hooks.ParseConstant = val; continue;
                     case "object_hook": hooks.ObjectHook = val; continue;
                 }
@@ -93,15 +193,7 @@ namespace Outbridge.PyLite.Modules
         {
             Args.Exactly(c, a, "load", 1);
             ScriptValue read = PyOps.GetAttr(a[0], "read", c);
-            ScriptValue text = c.CallHook(read, System.Array.Empty<ScriptValue>(), KwArgs.Empty);
-            StrValue s = text as StrValue;
-            if (s == null)
-            {
-                BytesValue b = text as BytesValue;   // a UTF-8 document, the only encoding the sandbox decodes
-                if (b == null)
-                    throw Raise.TypeError(c, "load(): read() must return str or bytes, not " + text.PyTypeName);
-                s = c.Values.Str(BytesCodec.Decode(c, b.Data, "utf-8", "strict"));
-            }
+            StrValue s = Document(c, c.CallHook(read, System.Array.Empty<ScriptValue>(), KwArgs.Empty));
             PyJson.JsonLoadHooks hooks;
             bool strict = ReadLoadKw(c, kw, out hooks);
             return PyJson.Parse(c, s.Value, strict, hooks, s);
@@ -120,6 +212,8 @@ namespace Outbridge.PyLite.Modules
         {
             if (a.Length < 1)
                 throw Raise.TypeError(c, "dumps() missing 1 required positional argument: 'obj'");
+            if (a.Length > 1)
+                throw Raise.TypeError(c, "dumps() takes 1 positional argument but " + a.Length + " were given");
 
             bool sortKeys = false, ensureAscii = true, allowNan = true, skipKeys = false;
             ScriptValue indent = null, separators = null, defaultHook = null;

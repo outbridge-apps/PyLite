@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Modules
         {
             AddType(d, "enumerate", (self, args, kw, c) => EnumerateBuiltin(c, args, kw));
             AddType(d, "zip", (self, args, kw, c) => ZipBuiltin(c, args, kw));
-            AddType(d, "map", 0, int.MaxValue, (self, args, kw, c) => MapBuiltin(c, args));   // MapBuiltin words the arity error
+            AddType(d, "map", (self, args, kw, c) => MapBuiltin(c, args, kw));   // MapBuiltin words the arity error
             AddType(d, "filter", 2, 2, (self, args, kw, c) => FilterBuiltin(c, args));
             Add(d, "reversed", 1, 1, (self, args, kw, c) => ReversedBuiltin(c, args));
         }
@@ -26,7 +26,7 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(c, "enumerate expected 1 to 2 arguments, got " + args.Length);
             BigInteger start = args.Length == 2 ? Coerce.ToIndex(c, args[1], "enumerate") : BigInteger.Zero;
             IScriptIterator src = PyOps.GetIterator(args[0], c);
-            return c.Values.Iterator(new EnumerateIterator(src, start), "enumerate");
+            return c.Values.EngineIterator(new EnumerateIterator(src, start), "enumerate");
         }
 
         private static ScriptValue ZipBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
@@ -38,56 +38,68 @@ namespace Outbridge.PyLite.Modules
             var srcs = new IScriptIterator[args.Length];
             for (int i = 0; i < args.Length; i++)
                 srcs[i] = IterOrThrow(c, args[i], "zip argument #" + (i + 1) + " must support iteration");
-            return c.Values.Iterator(new ZipIterator(srcs, strict), "zip");
+            return c.Values.EngineIterator(new ZipIterator(srcs, strict), "zip");
         }
 
-        private static ScriptValue MapBuiltin(EvalContext c, ScriptValue[] args)
+        private static ScriptValue MapBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
+            bool strict = false;
+            for (int k = 0; k < kw.Count; k++)
+            {
+                if (kw.NameAt(k) != "strict")
+                    throw KwReader.UnexpectedError(c, "map", kw.NameAt(k));
+                strict = PyOps.Truth(kw.ValueAt(k), c);
+            }
             if (args.Length < 2)
                 throw Raise.TypeError(c, "map() must have at least two arguments.");
             var srcs = new IScriptIterator[args.Length - 1];
             for (int i = 1; i < args.Length; i++)
                 srcs[i - 1] = PyOps.GetIterator(args[i], c);
-            return c.Values.Iterator(new MapIterator(args[0], srcs), "map");
+            IScriptIterator map = srcs.Length == 1
+                ? (IScriptIterator)new MapIterator(args[0], srcs[0])
+                : new MapManyIterator(args[0], srcs, strict);
+            return c.Values.EngineIterator(map, "map");
         }
 
         private static ScriptValue FilterBuiltin(EvalContext c, ScriptValue[] args)
         {
             ScriptValue fn = args[0].Kind == ValueKind.None ? null : args[0];
             IScriptIterator src = PyOps.GetIterator(args[1], c);
-            return c.Values.Iterator(new FilterIterator(fn, src), "filter");
+            return c.Values.EngineIterator(FilterIterator.Of(fn, src, true), "filter");
         }
 
         private static ScriptValue ReversedBuiltin(EvalContext c, ScriptValue[] args)
         {
             ScriptValue x = Args.One(c, args, "reversed");
             if (x.Kind == ValueKind.List)
-                return c.Values.Iterator(new ReversedListIterator((ListValue)x), "list_reverseiterator");
+                return c.Values.EngineIterator(new ReversedListIterator((ListValue)x), "list_reverseiterator");
             if (x.Kind == ValueKind.Tuple)
-                return c.Values.Iterator(new ReversedArrayIterator(((TupleValue)x).Items), "tuple_reverseiterator");
+                return c.Values.EngineIterator(new ReversedArrayIterator(((TupleValue)x).Items), "tuple_reverseiterator");
             if (x.Kind == ValueKind.Str)
-                return c.Values.Iterator(new StrIterator((StrValue)x, reverse: true), "reversed");
+                return c.Values.EngineIterator(new StrIterator((StrValue)x, reverse: true), "reversed");
             BytesValue bytes = x as BytesValue;
             if (bytes != null)
-                return c.Values.Iterator(new BytesIterator(bytes, reverse: true), "reversed");
+                return c.Values.EngineIterator(new BytesIterator(bytes, reverse: true), "reversed");
             if (x.Kind == ValueKind.Range)
             {
                 RangeValue r = (RangeValue)x;
                 BigInteger len = r.Length;
                 if (len.IsZero)
-                    return c.Values.Iterator(new ReversedArrayIterator(System.Array.Empty<ScriptValue>()), "range_iterator");
-                RangeValue nr = c.Values.Range(r.Start + (len - 1) * r.Step, r.Start - r.Step, -r.Step);
-                return c.Values.Iterator(PyOps.GetIterator(nr, c), "range_iterator");
+                    return c.Values.EngineIterator(new ReversedArrayIterator(System.Array.Empty<ScriptValue>()), "range_iterator");
+                RangeValue nr = c.Values.Range(r.Start + r.TimesStep(c, len - 1), r.Start - r.Step, -r.Step);
+                return c.Values.EngineIterator(PyOps.GetIterator(nr, c), "range_iterator");
             }
             IScriptIterator rev = x.GetReverseIteratorCore(c);
             if (rev != null)
-                return c.Values.Iterator(rev, ReverseIteratorName(x));
-            throw Raise.TypeError(c, "argument to reversed() must be a sequence");
+                return c.Values.EngineIterator(rev, ReverseIteratorName(x));
+            throw Raise.TypeError(c, "'" + x.PyTypeName + "' object is not reversible");
         }
 
         // CPython names: dict_reversekeyiterator / dict_reversevalueiterator / dict_reverseitemiterator.
         private static string ReverseIteratorName(ScriptValue x)
         {
+            if (x.TypeInfo.IsNamedByScript)
+                return "reversed";   // iterator type names key a table that outlives the run
             DictViewValue view = x as DictViewValue;
             if (view == null)
                 return x.PyTypeName + "_reverseiterator";

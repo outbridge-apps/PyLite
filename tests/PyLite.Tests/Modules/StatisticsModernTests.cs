@@ -31,7 +31,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = statistics.geometric_mean([4, 9])", "6.0")]
         // ---- harmonic_mean ----
         [InlineData("r = statistics.harmonic_mean([40, 60])", "48.0")]
-        [InlineData("r = statistics.harmonic_mean([2, 0, 4])", "0.0")]
+        [InlineData("r = statistics.harmonic_mean([2, 0, 4])", "0")]
         [InlineData("r = statistics.harmonic_mean([40, 60], weights=[5, 30])", "56.0")]
         // ---- multimode ----
         [InlineData("r = statistics.multimode('aabbbbccddddeeffffgg')", "['b', 'd', 'f']")]

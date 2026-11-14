@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
@@ -110,27 +109,37 @@ namespace Outbridge.PyLite.Hosting
 
         // Each JsonIn value is parsed by PyJson under the run budget; a decode error is a HostMarshalFailure
         // (a budget EngineAbort during parsing flies through as BudgetExceeded).
-        internal static void PopulateJsonInputs(Outbridge.PyLite.Runtime.Environment moduleEnv, RunRequest request, EvalContext ctx)
+        internal static IReadOnlyList<KeyValuePair<string, ScriptValue>> ParseJsonInputs(RunRequest request, EvalContext ctx)
         {
+            var parsed = new List<KeyValuePair<string, ScriptValue>>();
             if (request.JsonIn == null)
-                return;
+                return parsed;
             foreach (KeyValuePair<string, string> kv in request.JsonIn)
             {
-                ScriptValue v;
                 try
                 {
-                    v = PyJson.Parse(ctx, kv.Value);
+                    parsed.Add(new KeyValuePair<string, ScriptValue>(kv.Key, PyJson.Parse(ctx, kv.Value)));
                 }
                 catch (ScriptException se)
                 {
                     throw new HostMarshalFailure("invalid JSON in input variable '" + kv.Key + "': "
                         + se.Value.GetMessageText(ctx));
                 }
-                moduleEnv.SetGlobal(kv.Key, v);
             }
+            return parsed;
         }
 
         // null -> None; "" -> str; BigInteger; double (not inf/nan); true/false; else str.
+        private static bool AllAsciiDigits(string s, int from)
+        {
+            for (int i = from; i < s.Length; i++)
+            {
+                if (s[i] < '0' || s[i] > '9')
+                    return false;
+            }
+            return true;
+        }
+
         internal static ScriptValue CoerceScalar(string raw, EvalContext ctx)
         {
             if (raw == null)
@@ -140,14 +149,17 @@ namespace Outbridge.PyLite.Hosting
 
             if (raw.Length <= MaxNumericLiteralDigits + 1)
             {
-                BigInteger bi;
-                if (BigInteger.TryParse(raw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out bi))
-                    return ctx.Values.Int(bi);
+                // a sign and 1..4,300 ASCII digits, nothing else: BigInteger.TryParse took "1\0" as 1 and 4,301
+                // unsigned digits
+                int sign = raw[0] == '-' || raw[0] == '+' ? 1 : 0;
+                int digits = raw.Length - sign;
+                if (digits > 0 && digits <= MaxNumericLiteralDigits && AllAsciiDigits(raw, sign))
+                {
+                    BigInteger bi = Outbridge.PyLite.Syntax.Lexer.ParseDecimal(raw, sign, raw.Length);
+                    return ctx.Values.Int(raw[0] == '-' ? -bi : bi);
+                }
                 double d;
-                if (double.TryParse(raw,
-                        NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
-                        CultureInfo.InvariantCulture, out d)
-                    && !double.IsNaN(d) && !double.IsInfinity(d))
+                if (NearestDouble.TryParse(raw, out d) && !double.IsInfinity(d))
                     return ctx.Values.Float(d);
             }
             if (string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase))
@@ -167,7 +179,14 @@ namespace Outbridge.PyLite.Hosting
             {
                 if (!IsScalarSerializable(value))
                     throw new HostMarshalFailure("output variable '" + name + "' is not serializable");
-                return value.Str(c);
+                try
+                {
+                    return value.Str(c);
+                }
+                catch (ScriptException se)   // the script is over: its output failed, not a line of it
+                {
+                    throw new HostMarshalFailure("output variable '" + name + "' is not serializable: " + TextOf(se, c));
+                }
             });
         }
 
@@ -184,10 +203,22 @@ namespace Outbridge.PyLite.Hosting
                 }
                 catch (ScriptException se)
                 {
-                    throw new HostMarshalFailure("output variable '" + name + "' is not serializable: "
-                        + se.Value.GetMessageText(c));
+                    throw new HostMarshalFailure("output variable '" + name + "' is not serializable: " + TextOf(se, c));
                 }
             });
+        }
+
+        // The failure's own text; one whose __str__ raises as well is named by its class.
+        private static string TextOf(ScriptException se, EvalContext ctx)
+        {
+            try
+            {
+                return se.Value.GetMessageText(ctx);
+            }
+            catch (ScriptException)
+            {
+                return se.Value.ExcType.Name;
+            }
         }
 
         private static IReadOnlyDictionary<string, string> CollectOutputs(DictValue globals,

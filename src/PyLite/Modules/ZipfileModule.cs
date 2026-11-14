@@ -16,9 +16,9 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["ZipFile"] = ctx.Values.Type("zipfile.ZipFile", ZipFileCtor, ZipFileValue.ZipFileType, null);
-            m["ZipInfo"] = ctx.Values.Type("zipfile.ZipInfo", ZipInfoCtor, ZipInfoValue.ZipInfoType, null);
-            m["ZipExtFile"] = ctx.Values.Type("zipfile.ZipExtFile", (self, a, kw, c) =>
+            m["ZipFile"] = ctx.Values.EngineType("zipfile.ZipFile", ZipFileCtor, ZipFileValue.ZipFileType, null);
+            m["ZipInfo"] = ctx.Values.EngineType("zipfile.ZipInfo", ZipInfoCtor, ZipInfoValue.ZipInfoType, null);
+            m["ZipExtFile"] = ctx.Values.EngineType("zipfile.ZipExtFile", (self, a, kw, c) =>
             {
                 throw Raise.TypeError(c, "ZipExtFile objects come from ZipFile.open()");
             }, BytesIOValue.ZipExtFileType, null);

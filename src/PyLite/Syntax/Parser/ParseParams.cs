@@ -9,9 +9,12 @@ namespace Outbridge.PyLite.Syntax
         {
             Token lam = Take();   // 'lambda'
             ParamList prms = ParseParamList(TokenKind.Colon);
-            Expect(TokenKind.Colon, "':'");
+            Expect(TokenKind.Colon);
+            if (_cur.Kind == TokenKind.FStringMiddle)
+                throw ErrorAt(lam, "f-string: lambda expressions are not allowed without parentheses");
             string savedSelf = _superSelf;
             _superSelf = null;   // a lambda in a method is a function of its own: super() there has no arguments
+            _funcDepth++;
             ExprNode body;
             try
             {
@@ -20,16 +23,18 @@ namespace Outbridge.PyLite.Syntax
             finally
             {
                 _superSelf = savedSelf;
+                _funcDepth--;
             }
             return new LambdaNode(Src(lam), prms, body);
         }
 
-        // Explicit FSM (R-PAR-05). Terminator: ')' for def, ':' for lambda. Annotations rejected in v1.
+        // Explicit FSM (R-PAR-05). Terminator: ')' for def, ':' for lambda. Errors are CPython's invalid_parameters.
         private ParamList ParseParamList(TokenKind terminator)
         {
             var positional = new List<Param>();
             var kwonly = new List<Param>();
             Param starArg = null, kwArg = null;
+            Token bareStar = default(Token);
             bool hasBareStar = false;
             var seen = new HashSet<string>(System.StringComparer.Ordinal);
             SourceInfo listSrc = CurSrc();
@@ -40,19 +45,28 @@ namespace Outbridge.PyLite.Syntax
 
             while (_cur.Kind != terminator)
             {
+                if (phase == 2 && (_cur.Kind == TokenKind.Name || _cur.Kind == TokenKind.Star || _cur.Kind == TokenKind.DoubleStar
+                    || _cur.Kind == TokenKind.Slash))
+                    throw Error("arguments cannot follow var-keyword argument");
                 if (_cur.Kind == TokenKind.Slash)
                 {
-                    if (phase != 0 || posOnlyCount != 0)
-                        throw Error("invalid syntax");
+                    if (phase != 0)
+                        throw Error("/ must be ahead of *");
+                    if (posOnlyCount != 0)
+                        throw Error("/ may appear only once");
                     if (positional.Count == 0)
-                        throw Error("at least one argument must precede /");
+                        throw Peek2().Kind == TokenKind.Comma ? Error("at least one argument must precede /") : Error("invalid syntax");
                     posOnlyCount = positional.Count;
                     Take();
+                    if (_cur.Kind == TokenKind.Star)
+                        throw Error("expected comma between / and *");
                 }
                 else if (_cur.Kind == TokenKind.DoubleStar)
                 {
                     Take();
                     Token n = ExpectParamName(terminator);
+                    if (_cur.Kind == TokenKind.Assign)
+                        throw Error("var-keyword argument cannot have default value");
                     CheckDup(seen, n);
                     kwArg = new Param(Src(n), n.Text, null);
                     phase = 2;
@@ -60,25 +74,35 @@ namespace Outbridge.PyLite.Syntax
                 else if (_cur.Kind == TokenKind.Star)
                 {
                     if (phase != 0)
-                        throw Error("invalid syntax");
+                        throw Error("* argument may appear only once");
                     Token star = Take();
                     if (_cur.Kind == TokenKind.Name)
                     {
                         Token n = ExpectParamName(terminator);
+                        if (_cur.Kind == TokenKind.Assign)
+                            throw Error("var-positional argument cannot have default value");
                         CheckDup(seen, n);
                         starArg = new Param(Src(n), n.Text, null);
                     }
                     else
+                    {
                         hasBareStar = true;
+                        bareStar = star;
+                    }
                     phase = 1;
                 }
                 else if (_cur.Kind == TokenKind.Name)
                 {
-                    if (phase == 2)
-                        throw Error("arguments cannot follow **kwargs");
                     Token n = Take();
                     string ann = SkipAnnotation(terminator);
-                    ExprNode def = Match(TokenKind.Assign) ? ParseTest() : null;
+                    ExprNode def = null;
+                    if (_cur.Kind == TokenKind.Assign)
+                    {
+                        Take();
+                        if (_cur.Kind == TokenKind.Comma || _cur.Kind == TokenKind.RightParen)   // CPython's invalid_default
+                            throw PySyntaxErrorException.Syntax("expected default value expression", _cur.Line, _prevEndCol - 1);
+                        def = ParseTest();
+                    }
                     CheckDup(seen, n);
                     var p = new Param(Src(n), n.Text, def, ann);
                     if (phase == 0)
@@ -86,20 +110,35 @@ namespace Outbridge.PyLite.Syntax
                         if (def != null)
                             sawDefault = true;
                         else if (sawDefault)
-                            throw Error("non-default argument follows default argument");
+                            throw ErrorAt(n, "parameter without a default follows parameter with a default");
                         positional.Add(p);
                     }
                     else
                         kwonly.Add(p); // keyword-only: defaults optional, no non-default rule
                 }
+                else if (_cur.Kind == TokenKind.LeftParen)
+                {
+                    // CPython's invalid_parameters: names only in the parentheses, or it is just bad syntax at them
+                    Token open = Take();
+                    bool names = _cur.Kind == TokenKind.Name;
+                    while (_cur.Kind == TokenKind.Name)
+                    {
+                        Take();
+                        if (!Match(TokenKind.Comma))
+                            break;
+                    }
+                    throw ErrorAt(open, !names || _cur.Kind != TokenKind.RightParen ? "invalid syntax"
+                        : terminator == TokenKind.Colon ? "Lambda expression parameters cannot be parenthesized"
+                        : "Function parameters cannot be parenthesized");
+                }
                 else
-                    throw Error("invalid syntax");
+                    throw Unexpected(false);
                 if (!Match(TokenKind.Comma))
                     break;
             }
 
             if (hasBareStar && kwonly.Count == 0)
-                throw Error("named arguments must follow bare *");
+                throw terminator == TokenKind.Colon ? Error("named arguments must follow bare *") : ErrorAt(bareStar, "named arguments must follow bare *");
 
             return new ParamList(listSrc, AstList.Freeze(positional), starArg,
                 AstList.Freeze(kwonly), kwArg, hasBareStar, posOnlyCount);
@@ -107,7 +146,7 @@ namespace Outbridge.PyLite.Syntax
 
         private Token ExpectParamName(TokenKind terminator)
         {
-            Token n = Expect(TokenKind.Name, "parameter name");
+            Token n = Expect(TokenKind.Name);
             SkipAnnotation(terminator);
             return n;
         }
@@ -138,6 +177,7 @@ namespace Outbridge.PyLite.Syntax
 
         private void CheckDup(HashSet<string> seen, Token n)
         {
+            ForbidDebug(n.Text, Src(n));
             if (!seen.Add(n.Text))
                 throw ErrorAt(n, "duplicate argument '" + n.Text + "' in function definition");
         }

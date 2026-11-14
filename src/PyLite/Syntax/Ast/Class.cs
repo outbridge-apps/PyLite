@@ -35,6 +35,9 @@ namespace Outbridge.PyLite.Syntax.Ast
         public readonly IReadOnlyList<ClassConstant> Constants;   // class-body assignments, in order
         public readonly string CellName;   // hidden variable bound to the class when a method calls super(); else null
         public readonly string Mixin;      // "str" or "int" in class X(str, Enum); else null
+        // Runtime cache (the benign-race pattern of CallNode.CachedCallSlot): the slots this class adds, fields
+        // then the self.<name> targets of __init__, found once rather than at every execution of the statement.
+        internal string[] CachedOwnSlots;
         public ClassDefNode(SourceInfo src, string name, ExprNode baseCls, IReadOnlyList<FuncDefNode> methods,
             IReadOnlyList<ClassField> fields, IReadOnlyList<ExprNode> decorators, IReadOnlyList<ClassConstant> constants = null,
             string cellName = null, string mixin = null)

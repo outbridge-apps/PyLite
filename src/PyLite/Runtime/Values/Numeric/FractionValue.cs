@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
@@ -11,7 +10,7 @@ namespace Outbridge.PyLite.Runtime.Values
     // fractions.Fraction. Immutable, always-reduced rational: sign in Num, Den > 0
     // gcd(|Num|,Den)==1. Exact cross-type comparison vs int/float. (Decimal integration lands with
     // DecimalValue.)
-    internal sealed class FractionValue : ScriptValue
+    internal sealed partial class FractionValue : ScriptValue
     {
         private static readonly ScriptTypeInfo Type = BuildType();
 
@@ -31,7 +30,7 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static FractionValue Create(EvalContext ctx, BigInteger num, BigInteger den)
         {
             if (den.IsZero)
-                throw Raise.ZeroDivision(ctx, "Fraction(" + num.ToString(CultureInfo.InvariantCulture) + ", 0)");
+                throw Raise.ZeroDivision(ctx, "Fraction(" + NumericOps.ToDecimalString(num, ctx) + ", 0)");
             if (den.Sign < 0)
             {
                 num = -num;
@@ -205,7 +204,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     return Create(ctx, Mul(an, bn, ctx), Mul(ad, bd, ctx));
                 case PyBinOp.TrueDiv:
                     if (bn.IsZero)
-                        throw Raise.ZeroDivision(ctx, "Fraction(" + Mul(an, bd, ctx).ToString(CultureInfo.InvariantCulture) + ", 0)");
+                        throw Raise.ZeroDivision(ctx, "Fraction(" + NumericOps.ToDecimalString(Mul(an, bd, ctx), ctx) + ", 0)");
                     return Create(ctx, Mul(an, bd, ctx), Mul(ad, bn, ctx));
                 case PyBinOp.FloorDiv:
                     if (bn.IsZero)
@@ -233,8 +232,14 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (reflected)
             {
-                double baseD = ((FloatValue)PyOps.BinaryOp(PyBinOp.Add, other, ctx.Values.Float(0.0), ctx)).Value;
-                return ctx.Values.Float(Math.Pow(baseD, AsDouble(ctx)));
+                if (Den.IsOne && Num.Sign >= 0)
+                    return PyOps.BinaryOp(PyBinOp.Pow, other, ctx.Values.Int(Num), ctx);
+                BigInteger bn;
+                if (TryInt(other, out bn))
+                    return ((FractionValue)Create(ctx, bn, BigInteger.One)).PowOp(ctx, this, false);
+                if (Den.IsOne)
+                    return PyOps.BinaryOp(PyBinOp.Pow, other, ctx.Values.Int(Num), ctx);
+                return PyOps.BinaryOp(PyBinOp.Pow, other, ctx.Values.Float(AsDouble(ctx)), ctx);
             }
             BigInteger n;
             if (TryInt(other, out n))
@@ -244,11 +249,11 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 if (pf.Den == BigInteger.One)
                     return PowInt(ctx, pf.Num);
-                return ctx.Values.Float(Math.Pow(AsDouble(ctx), pf.AsDouble(ctx)));
+                return PyOps.BinaryOp(PyBinOp.Pow, ctx.Values.Float(AsDouble(ctx)), ctx.Values.Float(pf.AsDouble(ctx)), ctx);
             }
             FloatValue fv = other as FloatValue;
             if (fv != null)
-                return ctx.Values.Float(Math.Pow(AsDouble(ctx), fv.Value));
+                return PyOps.BinaryOp(PyBinOp.Pow, ctx.Values.Float(AsDouble(ctx)), fv, ctx);
             return null;
         }
 
@@ -271,7 +276,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (n.Sign > 0)
                 return Create(ctx, pn, pd);
             if (Num.IsZero)
-                throw Raise.ZeroDivision(ctx, "Fraction(" + pd.ToString(CultureInfo.InvariantCulture) + ", 0)");
+                throw Raise.ZeroDivision(ctx, "Fraction(" + NumericOps.ToDecimalString(pd, ctx) + ", 0)");
             return Create(ctx, pd, pn);
         }
 
@@ -348,14 +353,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private static BigInteger RoundHalfEven(EvalContext ctx, BigInteger num, BigInteger den)
         {
-            BigInteger q = BigOps.FloorDiv(ctx, num, den);
-            BigInteger r = num - BigOps.Multiply(ctx, q, den);   // 0 <= r < den
-            BigInteger twice = r * 2;
-            if (twice < den)
-                return q;
-            if (twice > den)
-                return q + 1;
-            return q.IsEven ? q : q + 1;
+            return Modules.Support.BigIntMath.DivNearHalfEven(num, den, ctx);
         }
 
         // ---- comparisons / hash ----
@@ -381,6 +379,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override long HashLeafCore(EvalContext ctx, int depth)
         {
+            ctx.Budget.ChargeLinear((NumericOps.BitLength(Num) + NumericOps.BitLength(Den)) >> 5);   // two remainders mod 2**61 - 1
             return NumericHash.HashRational(Num, Den);
         }
 
@@ -390,17 +389,17 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override void StrLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            sb.Append(Num.ToString(CultureInfo.InvariantCulture));
+            sb.Append(NumericOps.ToDecimalString(Num, ctx));
             if (Den != BigInteger.One)
             {
                 sb.Append("/");
-                sb.Append(Den.ToString(CultureInfo.InvariantCulture));
+                sb.Append(NumericOps.ToDecimalString(Den, ctx));
             }
         }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
-            sb.Append("Fraction(" + Num.ToString(CultureInfo.InvariantCulture) + ", " + Den.ToString(CultureInfo.InvariantCulture) + ")");
+            sb.Append("Fraction(" + NumericOps.ToDecimalString(Num, ctx) + ", " + NumericOps.ToDecimalString(Den, ctx) + ")");
         }
 
         // ---- limit_denominator (verbatim port) ----
@@ -418,42 +417,51 @@ namespace Outbridge.PyLite.Runtime.Values
             if (Den <= maxDen)
                 return this;
 
+            // Every value below is at most max(|Num|, Den) in size (maxDen < Den here), so an operation can be long
+            // only past LongWork's square root, and only then does the loop pay BigOps' size checks.
+            long w = Math.Max(BigOps.Words(Num), BigOps.Words(Den));
+            bool big = w * w > BigOps.LongWork;
             BigInteger p0 = 0, q0 = 1, p1 = 1, q1 = 0;
             BigInteger n = Num, d = Den;
             int iter = 0;
             while (true)
             {
-                BigInteger a = Rationals.FloorDiv(n, d);
-                BigInteger q2 = q0 + a * q1;
+                BigInteger a = (big ? BigOps.FloorDiv(ctx, n, d) : Rationals.FloorDiv(n, d));
+                BigInteger q2 = q0 + Times(ctx, big, a, q1);
                 if (q2 > maxDen)
                     break;
-                BigInteger newP1 = p0 + a * p1;
+                BigInteger newP1 = p0 + Times(ctx, big, a, p1);
                 p0 = p1;
                 q0 = q1;
                 p1 = newP1;
                 q1 = q2;
-                BigInteger newD = n - a * d;
+                BigInteger newD = n - Times(ctx, big, a, d);
                 n = d;
                 d = newD;
                 ctx.Budget.Step();
                 if (++iter % 256 == 0)
                     ctx.Budget.CheckDeadlineNow();
             }
-            BigInteger k = Rationals.FloorDiv(maxDen - q0, q1);
-            FractionValue bound1 = Create(ctx, p0 + k * p1, q0 + k * q1);
+            BigInteger k = (big ? BigOps.FloorDiv(ctx, maxDen - q0, q1) : Rationals.FloorDiv(maxDen - q0, q1));
+            FractionValue bound1 = Create(ctx, p0 + Times(ctx, big, k, p1), q0 + Times(ctx, big, k, q1));
             FractionValue bound2 = Create(ctx, p1, q1);
             // return the bound closer to self
-            return CloserBound(ctx, bound1, bound2);
+            return CloserBound(ctx, big, bound1, bound2);
         }
 
-        private ScriptValue CloserBound(EvalContext ctx, FractionValue bound1, FractionValue bound2)
+        private ScriptValue CloserBound(EvalContext ctx, bool big, FractionValue bound1, FractionValue bound2)
         {
             // |bound2 - self| <= |bound1 - self| ? bound2 : bound1
-            BigInteger d2n = BigInteger.Abs(bound2.Num * Den - Num * bound2.Den);
-            BigInteger d2d = bound2.Den * Den;
-            BigInteger d1n = BigInteger.Abs(bound1.Num * Den - Num * bound1.Den);
-            BigInteger d1d = bound1.Den * Den;
+            BigInteger d2n = BigInteger.Abs(Times(ctx, big, bound2.Num, Den) - Times(ctx, big, Num, bound2.Den));
+            BigInteger d2d = Times(ctx, big, bound2.Den, Den);
+            BigInteger d1n = BigInteger.Abs(Times(ctx, big, bound1.Num, Den) - Times(ctx, big, Num, bound1.Den));
+            BigInteger d1d = Times(ctx, big, bound1.Den, Den);
             return Rationals.Compare(d2n, d2d, d1n, d1d, ctx) <= 0 ? (ScriptValue)bound2 : bound1;
+        }
+
+        private static BigInteger Times(EvalContext ctx, bool big, BigInteger x, BigInteger y)
+        {
+            return big ? BigOps.Multiply(ctx, x, y) : x * y;
         }
 
         // ---- slots ----

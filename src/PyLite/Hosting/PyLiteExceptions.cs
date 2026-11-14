@@ -2,10 +2,13 @@ using System;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // Thrown only by ScriptEngine.Compile on a syntax error. Run(string,…) never throws this —
-    // it returns a RunResult with Kind==SyntaxError instead.
+    /// <summary>
+    /// Thrown only by <see cref="ScriptEngine.Compile(string, string)"/> on a syntax error. <c>Run(string, …)</c> never throws it:
+    /// it returns a <see cref="RunResult"/> whose error kind is <see cref="ScriptErrorKind.SyntaxError"/>.
+    /// </summary>
     public sealed class PyLiteSyntaxException : Exception
     {
+        /// <summary>The syntax error: its text, line and column.</summary>
         public ScriptError Error { get; }
 
         internal PyLiteSyntaxException(ScriptError error)
@@ -15,7 +18,9 @@ namespace Outbridge.PyLite.Hosting
         }
     }
 
-    // Incorrect engine API use by the host (not a script error): e.g. an invalid input/output variable name.
+    /// <summary>
+    /// The host used the engine API wrongly (not a script error), e.g. an invalid input or output variable name.
+    /// </summary>
     public sealed class PyLiteEngineException : Exception
     {
         internal PyLiteEngineException(string message)

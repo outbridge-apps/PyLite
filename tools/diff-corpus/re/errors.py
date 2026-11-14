@@ -6,7 +6,7 @@ def err(f):
         f()
         return 'ok'
     except Exception as e:
-        return type(e).__name__
+        return "re.error" if isinstance(e, re.error) else type(e).__name__   # PatternError since 3.13 (iron34/re_pattern_error)
 
 
 out = []

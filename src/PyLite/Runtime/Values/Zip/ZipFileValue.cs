@@ -37,6 +37,10 @@ namespace Outbridge.PyLite.Runtime.Values
         private readonly bool _allowZip64;
         private readonly string _metadataEncoding;
         private readonly List<ZipInfoValue> _files = new List<ZipInfoValue>();
+        private ListValue _fileList;
+        private int _fileListCount;
+        private DictValue _nameToInfo;
+        private int _nameToInfoCount;
         private readonly Dictionary<string, ZipInfoValue> _byName = new Dictionary<string, ZipInfoValue>(StringComparer.Ordinal);
         private byte[] _comment = Array.Empty<byte>();
         private bool _didModify;
@@ -364,12 +368,12 @@ namespace Outbridge.PyLite.Runtime.Values
             byte[] b = _fp.RawBuffer;
             long len = _fp.Length;
             long h = zi.HeaderOffset;
-            if (h < 0 || h + SizeFileHeader > len)
+            if (h < 0 || h > len - SizeFileHeader)   // subtracted: h + 30 overflowed for an offset near 2**63 (an engine fault)
                 throw Bad(ctx, "Truncated file header");
             if (U32(b, h) != SigFileHeader)
                 throw Bad(ctx, "Bad magic number for file header");
             int nameLen = (int)U16(b, h + 26), extraLen = (int)U16(b, h + 28);
-            if (h + SizeFileHeader + nameLen + extraLen > len)
+            if (nameLen + extraLen > len - h - SizeFileHeader)
                 throw Raise.Make(ctx, PyExceptionTypes.EOFError, "");
             if ((zi.FlagBits & 0x20) != 0)
                 throw Raise.NotImplemented(ctx, "compressed patched data (flag bit 5)");
@@ -393,9 +397,9 @@ namespace Outbridge.PyLite.Runtime.Values
             CheckCompression(ctx, zi.CompressType);
 
             long dataStart = h + SizeFileHeader + nameLen + extraLen;
-            if (zi.EndOffset >= 0 && dataStart + zi.CompressSize > zi.EndOffset)
+            if (zi.EndOffset >= 0 && zi.CompressSize > zi.EndOffset - dataStart)
                 throw Bad(ctx, "Overlapped entries: " + ctx.Values.Str(zi.OrigFilename).Repr(ctx) + " (possible zip bomb)");
-            if (dataStart + zi.CompressSize > len)
+            if (zi.CompressSize > len - dataStart)
                 throw Raise.Make(ctx, PyExceptionTypes.EOFError, "");
             byte[] data;
             if (zi.CompressType == Stored)
@@ -491,7 +495,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             int dostime, dosdate, flagBits;
             zi.DosDateTime(ctx, out dostime, out dosdate);
-            byte[] name = zi.EncodeFilename(out flagBits);
+            byte[] name = zi.EncodeFilename(ctx, out flagBits);
             byte[] extra = zi.Extra;
             if (name.Length > 0xFFFF || extra.Length > 0xFFFF)
                 throw Raise.ValueError(ctx, "zip member name or extra field is too long");
@@ -543,7 +547,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 ctx.Budget.Step();
                 int dostime, dosdate, flagBits;
                 zi.DosDateTime(ctx, out dostime, out dosdate);
-                byte[] name = zi.EncodeFilename(out flagBits);
+                byte[] name = zi.EncodeFilename(ctx, out flagBits);
                 var cd = new byte[SizeCentralDir];
                 PutU32(cd, 0, SigCentralDir);
                 cd[4] = (byte)zi.CreateVersion;
@@ -789,7 +793,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 Self(self)._pwd = PwdArg(c, a[0]);
                 return c.Values.None;
             });
-            s["printdir"] = SlotDescriptor.MakeMethod("printdir", PrintDir);
+            s["printdir"] = SlotDescriptor.MakeMethod("printdir", Args.Signature("printdir", 1, PrintDir, "file"));
             s["close"] = SlotDescriptor.MakeMethod("close", (self, a, kw, c) =>
             {
                 Args.None(c, a, kw, "close");
@@ -798,17 +802,27 @@ namespace Outbridge.PyLite.Runtime.Values
             });
             s["filelist"] = SlotDescriptor.MakeProperty("filelist", (self, c) =>
             {
+                // Kept until a member is added: a new object per access was 256 MB in a loop over 5,000 members.
                 ZipFileValue z = Self(self);
+                if (z._fileList != null && z._fileListCount == z._files.Count)
+                    return z._fileList;
                 ListValue r = c.Values.List(z._files.Count);
                 foreach (ZipInfoValue zi in z._files)
                     r.Add(zi, c);
+                z._fileList = r;
+                z._fileListCount = z._files.Count;
                 return r;
             });
             s["NameToInfo"] = SlotDescriptor.MakeProperty("NameToInfo", (self, c) =>
             {
-                DictValue d = c.Values.Dict(Self(self)._byName.Count);
-                foreach (ZipInfoValue zi in Self(self)._files)
-                    d.SetItem(c.Values.Str(zi.Filename), Self(self)._byName[zi.Filename], c);
+                ZipFileValue z = Self(self);
+                if (z._nameToInfo != null && z._nameToInfoCount == z._files.Count)
+                    return z._nameToInfo;
+                DictValue d = c.Values.Dict(z._byName.Count);
+                foreach (KeyValuePair<string, ZipInfoValue> kv in z._byName)   // keyed by the name at insertion: a script may rename a ZipInfo
+                    d.SetItem(c.Values.Str(kv.Key), kv.Value, c);
+                z._nameToInfo = d;
+                z._nameToInfoCount = z._files.Count;
                 return d;
             });
             s["comment"] = SlotDescriptor.MakeProperty("comment", (self, c) => c.Values.Bytes(Self(self)._comment));
@@ -932,7 +946,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 c.Values.PreCharge(3L * text.Value.Length);
                 c.Budget.ChargeLinear(text.Value.Length);
-                data = Encoding.UTF8.GetBytes(text.Value);
+                data = BytesCodec.Encode(c, text.Value, "utf-8");   // strict, as CPython's str.encode()
             }
             else
             {

@@ -1,5 +1,4 @@
 using Outbridge.PyLite.Runtime;
-using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 
@@ -35,9 +34,9 @@ namespace Outbridge.PyLite.Modules.Support
             return PyFormat.PercentFormatBytes(ctx, format, rhs);
         }
 
-        public string AsciiEscape(string repr)
+        public string AsciiEscape(EvalContext ctx, string repr)
         {
-            return PyFormat.AsciiEscape(repr);
+            return PyFormat.AsciiEscape(ctx, repr);
         }
     }
 }

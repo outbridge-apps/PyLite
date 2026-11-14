@@ -33,7 +33,7 @@ namespace Outbridge.PyLite.Modules
             BuiltinDelegate ctor = (s, a, kw, c) => ZoneInfoValue.Get(c, KeyArg(c, a, kw, "ZoneInfo"), true);
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["ZoneInfo"] = ctx.Values.Type("zoneinfo.ZoneInfo", ctor, null, slots),
+                ["ZoneInfo"] = ctx.Values.EngineType("zoneinfo.ZoneInfo", ctor, null, slots),
                 ["available_timezones"] = BuiltinFunctionValue.Make("available_timezones", AvailableTimezones),
                 ["ZoneInfoNotFoundError"] = ModuleKit.ExceptionClass(PyExceptionTypes.ZoneInfoNotFoundError),
                 ["TZPATH"] = ctx.Values.Tuple(new ScriptValue[0]),

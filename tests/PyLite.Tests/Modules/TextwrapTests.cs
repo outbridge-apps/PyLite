@@ -39,10 +39,23 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = shorten('Hello  world!', width=11)", "'Hello [...]'")]
         [InlineData("r = shorten('Hello world', width=10, placeholder='...')", "'Hello...'")]
         [InlineData("r = shorten('The quick brown fox jumps over the lazy dog', 25)", "'The quick brown fox [...]'")]
+        [InlineData("r = shorten('a\\xa0b \\u2003 c\\x1c d \\u3000e', 30)", "'a b c d e'")]   // str.split() whitespace, as CPython
         [InlineData("r = dedent('    hello\\n      world\\n    ')", "'hello\\n  world\\n'")]
         [InlineData("r = dedent('\\thello\\n\\t  world')", "'hello\\n  world'")]
         [InlineData("r = dedent('  a\\n\\n  b\\n   \\n')", "'a\\n\\nb\\n\\n'")]
         [InlineData("r = dedent('a\\n  b')", "'a\\n  b'")]
+        // dedent is two line scans now (no regex): mixed tabs and spaces keep only a common prefix, a line of
+        // only spaces and tabs empties, '\r' is text (Lib/test/test_textwrap.py DedentTestCase)
+        [InlineData("r = dedent('  hello there\\n\\thow are you?')", "'  hello there\\n\\thow are you?'")]
+        [InlineData("r = dedent('  \\thello there\\n  \\thow are you?')", "'hello there\\nhow are you?'")]
+        [InlineData("r = dedent('  \\thello there\\n  \\t  how are you?')", "'hello there\\n  how are you?'")]
+        [InlineData("r = dedent('  \\thello there\\n  how are you?')", "'\\thello there\\nhow are you?'")]
+        [InlineData("r = dedent('  a\\n  \\r\\n \\t \\n  b')", "'a\\n\\r\\n\\nb'")]
+        [InlineData("r = dedent(' \\t\\n  \\n')", "'\\n\\n'")]
+        [InlineData("r = dedent('\\n\\n')", "'\\n\\n'")]
+        [InlineData("r = len(dedent('  x\\n' * 200000))", "400000")]
+        [InlineData("r = len(wrap(' a' * 400000, break_on_hyphens=False))", "11429")]
+        [InlineData("r = wrap('a\\x0bb\\x0cc d', 3, break_on_hyphens=False, replace_whitespace=False)", "['a\\x0bb', 'c d']")]
         [InlineData("r = indent('a\\n\\nb\\n', '  ')", "'  a\\n\\n  b\\n'")]
         [InlineData("r = indent('a\\n \\nb', '> ', lambda line: True)", "'> a\\n>  \\n> b'")]
         [InlineData("r = indent('a\\nb\\n', prefix='# ', predicate=lambda l: l.startswith('b'))", "'a\\n# b\\n'")]

@@ -13,7 +13,6 @@ namespace Outbridge.PyLite.Modules
     {
         private static readonly ScriptTypeInfo Type = BuildType();
 
-        public readonly Regex Net;
         public readonly GroupMap Groups;
         public readonly int Flags;
         public readonly string Source;
@@ -23,32 +22,127 @@ namespace Outbridge.PyLite.Modules
         // per-call template parse.
         internal string CachedReplText;
         internal System.Collections.Generic.List<object> CachedReplTemplate;
+        // The regexes of this pattern that have run (ReModule.RunMatch), each with what it keeps from then on: the
+        // runner .NET caches in it, held from its first run (3,000 kept patterns of 500 optional parts used every way
+        // held 390 MB on 60 charged, review 13, row 27), and the longest subject a repeated-group loop's stack was
+        // charged for, one stack a regex (30 kept rules used every way held 779 MB on 229 charged, row 25).
+        private Regex[] _ranRe;
+        private int[] _stackReach;
+        private int _ran;
+
+        // re's slot, its runner held when it first runs.
+        internal int RunSlot(EvalContext ctx, Regex re)
+        {
+            int i = 0;
+            while (i < _ran && !ReferenceEquals(_ranRe[i], re))
+                i++;
+            if (i == _ran)
+            {
+                if (_ranRe == null || _ran == _ranRe.Length)
+                {
+                    int size = _ranRe == null ? 2 : 2 * _ranRe.Length;
+                    System.Array.Resize(ref _ranRe, size);
+                    System.Array.Resize(ref _stackReach, size);
+                }
+                _ranRe[i] = re;
+                _ran++;
+                long bytes = RegexFootprint.Runner(re.ToString());
+                HeldBytes += bytes;
+                _cache.HoldMore(ctx, bytes);
+            }
+            return i;
+        }
+
+        internal int StackReach(int slot) { return _stackReach[slot]; }
+
+        internal void SetStackReach(int slot, int reach) { _stackReach[slot] = reach; }
+
+        // The regex a subject runs on: .NET's own \w, \b and IGNORECASE folding where they answer as the exact forms do (no
+        // WordRisk character and none of the pattern's case extras in the subject), the exact translation otherwise,
+        // compiled when first needed.
+        private readonly Twins _first;
+        private readonly string _exactPattern;   // null: _first is the exact translation
+        private readonly char[] _caseRisk;       // the IGNORECASE extras' characters (RegexTranslator.HasCaseRisk), or null
+        private Twins _exact;
+        private string _scanned;                 // the last subject scanned for WordRisk, by reference
+        private bool _scannedRisky;
+        private readonly RegexCache _cache;
+        internal long HeldBytes;                 // its regexes and its exact translation, as the cache charges them
+
+        internal Regex Plain(EvalContext ctx, string subject) { return For(ctx, subject).Plain; }
+
+        // match() is anchored at pos, as CPython's is: without the anchor a failing match scans the rest of
+        // the subject for a hit it then throws away.
+        internal Regex Anchored(EvalContext ctx, string subject) { return For(ctx, subject).Anchored(ctx, this, TwinClose); }
 
         // fullmatch needs the WHOLE span to match, which a plain match plus a length check cannot express
         // ('a|ab' against 'ab' picks 'a'); the anchored twin forces the alternation to backtrack.
-        // match() is anchored at pos, as CPython's is: without the anchor a failing match scans the rest of
-        // the subject for a hit it then throws away.
-        private Regex _anchored;
-        internal Regex AnchoredRegex
+        internal Regex Full(EvalContext ctx, string subject) { return For(ctx, subject).Full(ctx, this, TwinClose); }
+
+        private Twins For(EvalContext ctx, string subject)
         {
-            get
+            if (_exactPattern == null)
+                return _first;
+            if (!ReferenceEquals(subject, _scanned))
             {
-                if (_anchored == null)
-                    _anchored = new Regex(@"\G(?:" + Net.ToString() + ")", Net.Options, Net.MatchTimeout);
-                return _anchored;
+                ctx.Budget.ChargeLinear(subject.Length);
+                _scannedRisky = RegexTranslator.HasWordRisk(subject) || RegexTranslator.HasCaseRisk(subject, _caseRisk);
+                _scanned = subject;
             }
+            if (!_scannedRisky)
+                return _first;
+            if (_exact == null)
+            {
+                Regex exact = Build(ctx, _exactPattern, _first.Plain.Options, RegexFootprint.Text(_exactPattern));
+                Groups.CheckSameNumbers(exact);
+                _exact = new Twins(exact);
+            }
+            return _exact;
         }
 
-        private Regex _full;
-        internal Regex FullRegex
+        private sealed class Twins
         {
-            get
+            internal readonly Regex Plain;
+            private Regex _anchored, _full;
+
+            internal Twins(Regex plain)
+            {
+                Plain = plain;
+            }
+
+            // Each twin is a regex of its own, charged and held as the plain one is.
+            internal Regex Anchored(EvalContext ctx, PatternValue owner, string close)
+            {
+                if (_anchored == null)
+                    _anchored = owner.Build(ctx, @"\G(?:" + Plain.ToString() + close + ")", Plain.Options, 0);
+                return _anchored;
+            }
+
+            internal Regex Full(EvalContext ctx, PatternValue owner, string close)
             {
                 if (_full == null)
-                    _full = new Regex(@"\G(?:" + Net.ToString() + @")\z", Net.Options, Net.MatchTimeout);
+                    _full = owner.Build(ctx, @"\G(?:" + Plain.ToString() + close + @")\z", Plain.Options, 0);
                 return _full;
             }
         }
+
+        // A regex compiled after the pattern itself (a twin, the exact translation): the cache holds it with the
+        // pattern. Unheld, a kept pattern used every way was 18 KB of regexes on 1.5 KB charged (review 12, row 14).
+        // held: what of it is held already (the exact translation's text, held with the pattern).
+        private Regex Build(EvalContext ctx, string netPattern, RegexOptions options, long held)
+        {
+            long bytes;
+            Regex r = _cache.Compile(ctx, Source.Length, netPattern, options, true, out bytes);
+            bytes -= held;
+            HeldBytes += bytes;
+            _cache.HoldMore(ctx, bytes);
+            return r;
+        }
+
+        // A VERBOSE pattern may end in a # comment, which would swallow the twin's closing paren (an engine
+        // fault): a newline ends the comment first, and is itself ignored there.
+        private const int VerboseFlag = 64;
+        private string TwinClose { get { return (Flags & VerboseFlag) != 0 ? "\n" : ""; } }
 
 
         // the keyword names of the methods, built once (a params array would be built on every call)
@@ -56,9 +150,13 @@ namespace Outbridge.PyLite.Modules
         private static readonly string[] SubNames = { "repl", "string", "count" };
         private static readonly string[] SplitNames = { "string", "maxsplit" };
 
-        public PatternValue(Regex net, GroupMap groups, int flags, string source)
+        public PatternValue(RegexCache cache, Regex net, long netHeld, string exactPattern, char[] caseRisk, GroupMap groups, int flags, string source)
         {
-            Net = net;
+            _cache = cache;
+            HeldBytes = netHeld + (exactPattern == null ? 0 : RegexFootprint.Text(exactPattern));
+            _first = new Twins(net);
+            _exactPattern = exactPattern;
+            _caseRisk = caseRisk;
             Groups = groups;
             Flags = flags;
             Source = source;
@@ -186,7 +284,8 @@ namespace Outbridge.PyLite.Modules
     {
         private readonly PatternValue _pat;
         private readonly StrValue _subj;
-        private string _input;   // the subject cut at the end position, once (P13)
+        private string _input;   // the subject cut at the end position, once
+        private Regex _re;
         private readonly int _startPos;
         private readonly int _end;
         private int _pos;
@@ -204,7 +303,10 @@ namespace Outbridge.PyLite.Modules
         {
             if (_pos <= _end)
             {
-                Match m = ReModule.RunMatch(ctx, _pat.Net, _input ?? (_input = ReModule.Truncated(_subj.Value, _end)), _pos, _end - _pos);
+                string input = _input ?? (_input = ReModule.Truncated(ctx, _subj.Value, _end));
+                // chosen once: the loop body may run the same pattern on other subjects, which would rescan this one
+                Regex re = _re ?? (_re = _pat.Plain(ctx, input));
+                Match m = ReModule.RunMatch(ctx, _pat, re, input, _pos, _end - _pos);
                 if (m.Success)
                 {
                     int mEnd = m.Index + m.Length;

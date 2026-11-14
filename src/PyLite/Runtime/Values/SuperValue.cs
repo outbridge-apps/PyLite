@@ -16,6 +16,27 @@ namespace Outbridge.PyLite.Runtime.Values
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
         internal override ValueKind Kind { get { return ValueKind.Opaque; } }
 
+        // The script function super(thisClass, obj).name binds, or null when it is anything else (a generated
+        // __init__, a non-function attribute, a missing name): those take GetAttribute.
+        internal static FunctionValue PlainMethod(RecordClassValue thisClass, string name)
+        {
+            RecordClassValue start = thisClass.Base;
+            if (start == null)
+                return null;
+            if (name == "__init__")
+            {
+                FunctionValue written;
+                RecordClassValue generated;
+                start.ResolveInit(out written, out generated);
+                return written;
+            }
+            ScriptValue k;
+            FunctionValue m;
+            if (!start.TryFindClassAttr(name, out k, out m))
+                return null;
+            return m ?? k as FunctionValue;
+        }
+
         internal ScriptValue GetAttribute(string name, EvalContext ctx)
         {
             RecordClassValue start = ThisClass.Base;
@@ -25,6 +46,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 RecordClassValue generated = null;
                 if (start != null)
                     start.ResolveInit(out written, out generated);
+                ctx.Values.ChargeObject(1);   // the bound method or the init wrapper made here
                 return written != null ? (ScriptValue)new BoundUserMethodValue(Self, written) : new SuperInitValue(generated, Self);
             }
             ScriptValue k;
@@ -32,7 +54,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (start != null && start.TryFindClassAttr(name, out k, out m))
             {
                 FunctionValue kf = k as FunctionValue;
-                return m != null ? new BoundUserMethodValue(Self, m) : kf != null ? new BoundUserMethodValue(Self, kf) : k;
+                return m != null ? ctx.Values.BoundUserMethod(Self, m) : kf != null ? ctx.Values.BoundUserMethod(Self, kf) : k;
             }
             throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "'super' object has no attribute '" + name + "'");
         }

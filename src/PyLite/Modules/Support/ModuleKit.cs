@@ -1,5 +1,4 @@
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules.Support
@@ -23,7 +22,7 @@ namespace Outbridge.PyLite.Modules.Support
             lock (ClassLock)
             {
                 if (pt.ClassValue == null)
-                    pt.ClassValue = TypeValue.Make(pt.Name, (self, args, kw, c) => c.Values.Exception(pt, args), null, null, pt);
+                    pt.ClassValue = TypeValue.Make(pt.Name, (self, args, kw, c) => BuiltinsTable.ConstructException(c, pt, args, kw), null, null, pt);
                 return pt.ClassValue;
             }
         }

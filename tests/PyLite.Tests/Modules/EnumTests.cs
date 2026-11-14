@@ -77,6 +77,18 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal(type, ex.Value.ExcType.Name);
         }
 
+        // A str value converts as int(value) does: whitespace, a sign, underscores and any Unicode digits
+        // (it was BigInteger.TryParse: no underscores, ASCII only, quadratic, no MaxIntBits gate).
+        [Theory]
+        [InlineData("' 12 '", "12")]
+        [InlineData("'-3'", "-3")]
+        [InlineData("'1_000'", "1000")]
+        [InlineData("'\\u0661\\u0662'", "12")]
+        public void IntEnumStrValueConvertsAsInt(string value, string expected)
+        {
+            Assert.Equal(expected, R("class C(IntEnum):\n    A = " + value + "\nr = int(C.A)\n"));
+        }
+
         [Fact]
         public void OnlyStrOrIntMayBeMixedIn()
         {

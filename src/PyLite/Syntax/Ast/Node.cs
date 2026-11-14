@@ -14,7 +14,7 @@ namespace Outbridge.PyLite.Syntax.Ast
         private EllipsisMarker() { }
     }
 
-    // P2: dispatch tag — EvalExpr/ExecStmt switch on this int (a jump table) instead of a sequential
+    // dispatch tag — EvalExpr/ExecStmt switch on this int (a jump table) instead of a sequential
     // type-pattern chain. Every dispatched Expr/Stmt node passes its kind up; support nodes stay Other.
     public enum NodeKind
     {
@@ -43,6 +43,9 @@ namespace Outbridge.PyLite.Syntax.Ast
         // flat chain (1+1+…, a[0][0]…, a.b.b…) — whose AST depth equals its length — cannot drive the
         // downstream recursive tree-walks (resolver, const-folder, evaluator) into an uncatchable StackOverflow.
         public readonly int Depth;
+        // As a statement's whole value, it may hand its failure back to raise as a signal (Evaluator.ValueOrRaised):
+        // a subscript, or a call by the name of a builtin with a quiet twin. Set by those nodes' constructors.
+        internal bool QuietValue;
         protected ExprNode(SourceInfo s) : base(s) { Depth = 1; }
         protected ExprNode(SourceInfo s, NodeKind k) : base(s, k) { Depth = 1; }
         protected ExprNode(SourceInfo s, NodeKind k, int childMaxDepth) : base(s, k) { Depth = childMaxDepth + 1; }

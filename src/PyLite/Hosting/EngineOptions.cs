@@ -3,62 +3,86 @@ using System.Collections.Generic;
 
 namespace Outbridge.PyLite.Hosting
 {
-    // (concurrency + telemetry fields live at the bottom of the class)
-    // Engine-wide configuration, snapshotted by the ScriptEngine constructor (later mutation
-    // does not affect a built engine). PythonModules and PreludeModules extend the module set.
+    /// <summary>
+    /// An engine's configuration. The <see cref="ScriptEngine"/> constructor copies it, so a later change does not
+    /// reach a built engine.
+    /// </summary>
     public sealed class EngineOptions
     {
-        // The server ceiling used for compilation and as the default per-run limit (compile uses this
-        // only). A per-run RunRequest.Limits is clamped downward onto this.
+        /// <summary>
+        /// The limits of a run that names none, and the ceiling every run's <see cref="RunRequest.Limits"/> is
+        /// lowered to: a request cannot raise a limit past this.
+        /// </summary>
         public ResourceLimits DefaultLimits { get; set; } = ResourceLimits.Default;
 
-        // Deterministic UTC clock by default (the host overrides per company); no-cost sleep cap.
+        /// <summary>The time scripts see; by default the real clock with UTC as the local zone.</summary>
         public IScriptClock Clock { get; set; } = new SystemClock(TimeSpan.Zero, "UTC");
+
+        /// <summary>How <c>time.sleep</c> waits; by default as requested, within <see cref="ResourceLimits.SleepTotalMs"/>.</summary>
         public ISleepPolicy SleepPolicy { get; set; } = new DefaultSleepPolicy();
 
-        // Built-in CompiledScript cache size: 0 disables; overflow triggers a full clear.
+        /// <summary>
+        /// The compiled scripts <c>Run(string, …)</c> keeps, keyed by their source; 0 disables the cache, and a full
+        /// cache is cleared.
+        /// </summary>
         public int CompiledScriptCacheEntries { get; set; } = 256;
 
-        // The str/bytes hash seed. Fixed by default, so hash('a') is the same number in every run and
-        // after every host restart — the engine is deterministic everywhere else (no addresses in repr,
-        // id() is a counter, gzip mtime is 0) and a hash that moved under the host would be the odd one
-        // out. Set to null for a fresh cryptographic seed per engine: that trades the reproducibility
-        // for hash-flooding resistance, which matters when dict keys come from outside (json.loads of a
-        // partner payload) — though a flood there burns the step budget and aborts the run rather than
-        // hanging the host, because every table probe charges a step.
+        /// <summary>
+        /// The str and bytes hash seed. Fixed by default, so <c>hash('a')</c> is the same in every run and after a
+        /// restart, as everything else in the engine is deterministic. Null: a fresh random seed per engine, which
+        /// trades that for resistance to hash flooding when dict keys come from outside (a flood ends on the step
+        /// limit either way, since every table probe is charged).
+        /// </summary>
         public uint? StrHashSeed { get; set; } = 0x9E3779B9;
 
         // Tests only: runs every script on the tree walk alone (EvalContext.InterpretOnly).
         internal bool InterpretOnly { get; set; }
 
-        // C#-implemented host modules (native capabilities live here — reviewed as engine code).
+        /// <summary>Modules the host implements in C#: native capabilities belong here, reviewed as engine code.</summary>
         public IReadOnlyList<IModuleProvider> ExtraModules { get; set; }
 
-        // Python-source host libraries, module name -> dialect source. Compiled and dialect-checked
-        // at engine build (a syntax error throws ArgumentException); executed per-run under the run budget.
+        /// <summary>
+        /// Modules written in the dialect, module name to source. They are compiled when the engine is built (a
+        /// syntax error throws <see cref="ArgumentException"/>) and run inside each run's budget.
+        /// </summary>
         public IReadOnlyDictionary<string, string> PythonModules { get; set; }
 
-        // names (of PythonModules OR ExtraModules) auto-loaded before the main script; their public
-        // top-level names (not starting with '_') are injected into the script globals (implicit import *).
+        /// <summary>
+        /// Modules (of <see cref="PythonModules"/> or <see cref="ExtraModules"/>) loaded before the main script, their
+        /// public top-level names (not starting with '_') put into its globals, as an implicit <c>import *</c>.
+        /// </summary>
         public IReadOnlyList<string> PreludeModules { get; set; }
 
-        // member-level stdlib patching, module name -> (member name -> delegate
-        // a NULL delegate removes the member). Applied when a module materializes in a run; overriding
-        // delegates are HostCallGuard-fenced. An unknown module name fails the engine build (host bug).
+        /// <summary>
+        /// Replaced members of built-in modules, module name to member name to function; a null function removes
+        /// the member. Applied when a run imports the module; an unknown module name fails the engine build.
+        /// </summary>
         public IReadOnlyDictionary<string, IReadOnlyDictionary<string, Outbridge.PyLite.Runtime.Values.BuiltinDelegate>> ModuleOverrides { get; set; }
 
-        // opt-in post-run RAM-return knobs; null => both off.
+        /// <summary>Giving memory back after big runs; null: off.</summary>
         public MemoryHygieneOptions MemoryHygiene { get; set; }
 
-        // Concurrency + protection. Each run executes on a dedicated 32 MB thread (stack safety on the
-        // host's 1 MB stack); the gate admits at most MaxConcurrentRuns and Σ(MaxAllocBytes) ≤ the ceiling.
-        public int MaxConcurrentRuns { get; set; } = 8;                             // clamped to hard cap 32
-        public long GlobalMemoryCeilingBytes { get; set; } = 1L << 30;              // 1 GB
-        public int CircuitBreakerLeakedThreads { get; set; } = 4;                   // open the breaker at N leaks
+        /// <summary>Ignored. The engine does not limit how many runs execute at once.</summary>
+        [Obsolete("Ignored: the engine does not limit how many runs execute at once. A host that wants a limit keeps it around its own calls to Run.")]
+        public int MaxConcurrentRuns { get; set; } = 8;
 
-        // Telemetry sink (leaked/circuit/fault/completed), invoked in try/catch — never affects a run.
+        /// <summary>Ignored. The engine does not limit the memory of all running runs together.</summary>
+        [Obsolete("Ignored: the engine does not limit the memory of all running runs together. Size DefaultLimits.MaxAllocBytes for the runs you start at once.")]
+        public long GlobalMemoryCeilingBytes { get; set; }
+
+        // Tests only: what a run must leave free besides its own stack and memory limit.
+        internal long FreeCommitReserveBytes { get; set; } = 200L << 20;
+
+        /// <summary>The left-behind threads at which the engine stops admitting runs until they return.</summary>
+        public int CircuitBreakerLeakedThreads { get; set; } = 4;
+
+        /// <summary>
+        /// Receives the engine's telemetry, inside a try/catch so it cannot fail a run. It is called synchronously:
+        /// a slow sink delays the run's return, so hand slow work off.
+        /// </summary>
         public Action<EngineEvent> EventSink { get; set; }
 
+        /// <summary>The defaults.</summary>
         public EngineOptions() { }
     }
 }

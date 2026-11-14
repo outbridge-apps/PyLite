@@ -51,6 +51,10 @@ namespace Outbridge.PyLite.Syntax
                         Stmts(f.Body, InLoop(c));
                         Stmts(f.OrElse, c);
                         break;
+                    case MatchNode m:
+                        PatternValidator.Validate(m);
+                        base.Stmt(st, c);
+                        break;
                     default: base.Stmt(st, c); break;
                 }
             }
@@ -86,8 +90,11 @@ namespace Outbridge.PyLite.Syntax
             public readonly HashSet<string> Params;
             public readonly HashSet<string> Assigned = new HashSet<string>(System.StringComparer.Ordinal);
             public readonly HashSet<string> Used = new HashSet<string>(System.StringComparer.Ordinal);
-            public readonly HashSet<string> Globals = new HashSet<string>(System.StringComparer.Ordinal);
-            public readonly HashSet<string> Nonlocals = new HashSet<string>(System.StringComparer.Ordinal);
+            public readonly HashSet<string> Annotated = new HashSet<string>(System.StringComparer.Ordinal);   // simple `x: T` targets
+            // the first directive of each name: CPython reports a conflict there
+            public readonly Dictionary<string, SourceInfo> Globals = new Dictionary<string, SourceInfo>(System.StringComparer.Ordinal);
+            public readonly Dictionary<string, SourceInfo> Nonlocals = new Dictionary<string, SourceInfo>(System.StringComparer.Ordinal);
+            public Dictionary<Node, ScopeInfo> Comprehensions;   // this scope's, on the first one met
 
             public DeclCtx(ScopeInfo scope)
             {
@@ -107,22 +114,83 @@ namespace Outbridge.PyLite.Syntax
 
             protected override void Method(FuncDefNode meth, DeclCtx c) { }   // evaluated in the class scope
 
+            // PEP 572: a walrus in a comprehension, nested ones included, assigns in the enclosing function. At module
+            // level it is a global of the comprehension, as in CPython's symtable: no assignment in the module scope.
+            protected override void Comprehension(ComprehensionNode comp, DeclCtx c)
+            {
+                base.Comprehension(comp, c);
+                if (c.Scope.Kind == ScopeKind.Module)
+                    return;
+                if (c.Comprehensions == null)
+                {
+                    c.Comprehensions = new Dictionary<Node, ScopeInfo>();
+                    foreach (ScopeInfo child in c.Scope.Children)
+                    {
+                        if (child.Kind == ScopeKind.Comprehension)
+                            c.Comprehensions[child.Node] = child;
+                    }
+                }
+                ScopeInfo scope;
+                if (c.Comprehensions.TryGetValue(comp, out scope))
+                    AddWalrusTargets(scope, c.Assigned);
+            }
+
+            // PEP 526: a simple annotated target cannot be a global or nonlocal of a function; at module level a global
+            // annotation is legal (CPython's symtable).
+            private static void Annotate(string name, SourceInfo src, DeclCtx c)
+            {
+                if (c.Scope.Kind != ScopeKind.Module)
+                {
+                    if (c.Globals.ContainsKey(name))
+                        throw Err(src, "annotated name '" + name + "' can't be global");
+                    if (c.Nonlocals.ContainsKey(name))
+                        throw Err(src, "annotated name '" + name + "' can't be nonlocal");
+                }
+                c.Annotated.Add(name);
+            }
+
+            private static void AddWalrusTargets(ScopeInfo comp, HashSet<string> assigned)
+            {
+                if (comp.WalrusTargets != null)
+                    assigned.UnionWith(comp.WalrusTargets);
+                foreach (ScopeInfo child in comp.Children)
+                {
+                    if (child.Kind == ScopeKind.Comprehension)
+                        AddWalrusTargets(child, assigned);
+                }
+            }
+
             protected override void Stmt(StmtNode st, DeclCtx c)
             {
                 switch (st)
                 {
+                    case AssignNode a when a.InClassBody:
+                        break;   // a class body's value, hoisted: CPython reads its names in the class scope
+                    case AssignNode a when a.AnnotatedName != null:
+                        Annotate(a.AnnotatedName, a.Src, c);
+                        base.Stmt(st, c);
+                        break;
+                    case PassNode p when p.AnnotatedName != null:
+                        Annotate(p.AnnotatedName, p.Src, c);
+                        break;
+
                     case GlobalNode g:
                         foreach (var name in g.Names)
                         {
                             if (c.Params.Contains(name))
                                 throw Err(g.Src, "name '" + name + "' is parameter and global");
-                            if (c.Nonlocals.Contains(name))
-                                throw Err(g.Src, "name '" + name + "' is nonlocal and global");
-                            if (c.Assigned.Contains(name))
-                                throw Err(g.Src, "name '" + name + "' is assigned to before global declaration");
+                            SourceInfo first;
+                            if (c.Nonlocals.TryGetValue(name, out first))
+                                throw Err(first, "name '" + name + "' is nonlocal and global");
+                            // CPython's order: a use, then an annotation, then an assignment
                             if (c.Used.Contains(name))
                                 throw Err(g.Src, "name '" + name + "' is used prior to global declaration");
-                            c.Globals.Add(name);
+                            if (c.Annotated.Contains(name))
+                                throw Err(g.Src, "annotated name '" + name + "' can't be global");
+                            if (c.Assigned.Contains(name))
+                                throw Err(g.Src, "name '" + name + "' is assigned to before global declaration");
+                            if (!c.Globals.ContainsKey(name))
+                                c.Globals[name] = g.Src;
                         }
                         break;
                     case NonlocalNode nl:
@@ -132,15 +200,20 @@ namespace Outbridge.PyLite.Syntax
                         {
                             if (c.Params.Contains(name))
                                 throw Err(nl.Src, "name '" + name + "' is parameter and nonlocal");
-                            if (c.Globals.Contains(name))
-                                throw Err(nl.Src, "name '" + name + "' is nonlocal and global");
-                            if (!EnclosingFunctionBinds(c.Scope.Parent, name))
-                                throw Err(nl.Src, "no binding for nonlocal '" + name + "' found");
-                            if (c.Assigned.Contains(name))
-                                throw Err(nl.Src, "name '" + name + "' is assigned to before nonlocal declaration");
+                            SourceInfo first;
+                            if (c.Globals.TryGetValue(name, out first))
+                                throw Err(first, "name '" + name + "' is nonlocal and global");
                             if (c.Used.Contains(name))
                                 throw Err(nl.Src, "name '" + name + "' is used prior to nonlocal declaration");
-                            c.Nonlocals.Add(name);
+                            if (c.Annotated.Contains(name))
+                                throw Err(nl.Src, "annotated name '" + name + "' can't be nonlocal");
+                            if (c.Assigned.Contains(name))
+                                throw Err(nl.Src, "name '" + name + "' is assigned to before nonlocal declaration");
+                            // CPython finds a missing binding after these, in its later analysis pass
+                            if (!EnclosingFunctionBinds(c.Scope.Parent, name))
+                                throw Err(nl.Src, "no binding for nonlocal '" + name + "' found");
+                            if (!c.Nonlocals.ContainsKey(name))
+                                c.Nonlocals[name] = nl.Src;
                         }
                         break;
                     default: base.Stmt(st, c); break;

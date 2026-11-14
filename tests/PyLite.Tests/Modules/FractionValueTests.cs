@@ -108,8 +108,6 @@ namespace Outbridge.PyLite.Tests.Modules
         // A literal whose integers would pass MaxIntBits is refused before it is built (it ran a quadratic
         // BigInteger.Parse or a 10**1e9 past the deadline); a zero mantissa never builds its power.
         [Theory]
-        [InlineData("Fraction('9' * 1000000)")]
-        [InlineData("Fraction('1/' + '9' * 1000000)")]
         [InlineData("Fraction('1e999999999')")]
         [InlineData("Fraction('1e-999999')")]
         // parts built by arithmetic are ints too: gated before the product or power is built
@@ -122,9 +120,21 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal("MaxIntBits", ex.LimitName);
         }
 
+        // past 4300 digits a decimal string has no int (CPython's int_max_str_digits), long before MaxIntBits
+        [Theory]
+        [InlineData("Fraction('9' * 1000000)")]
+        [InlineData("Fraction('1/' + '9' * 1000000)")]
+        [InlineData("Fraction('-' + '0' * 100000 + '25e-2')")]
+        public void LongDecimalLiteralExceedsTheDigitLimit(string expr)
+        {
+            var ex = Assert.Throws<ScriptException>(() => Ev.Run(Prelude + "x = " + expr + "\n"));
+            Assert.Equal("ValueError", ex.Value.ExcType.Name);
+            Assert.StartsWith("Exceeds the limit (4300 digits) for integer string conversion: value has", ex.Value.GetMessageText(Rt.Ctx()));
+        }
+
         [Theory]
         [InlineData("Fraction('0e999999999')", "Fraction(0, 1)")]
-        [InlineData("Fraction('-' + '0' * 100000 + '25e-2')", "Fraction(-1, 4)")]
+        [InlineData("Fraction('-' + '0' * 4000 + '25e-2')", "Fraction(-1, 4)")]
         [InlineData("Fraction('12/' + '0' * 1000 + '8')", "Fraction(3, 2)")]
         // round to a power of ten past twice |self| is 0 without building the power (as round(int, -n))
         [InlineData("round(Fraction(1, 3), -400000)", "Fraction(0, 1)")]

@@ -63,7 +63,7 @@ namespace Outbridge.PyLite.Modules
             });
             m["field_size_limit"] = BuiltinFunctionValue.Make("field_size_limit", FieldSizeLimit);
             m["__version__"] = ctx.Values.Str("1.0");
-            m["Sniffer"] = ctx.Values.Type("Sniffer", (s, a, k, c) => new SnifferValue(), null, null);
+            m["Sniffer"] = ctx.Values.EngineType("csv.Sniffer", Args.Positional("Sniffer", 0, 0, (s, a, k, c) => new SnifferValue()), null, null);
             return ctx.Values.Module("csv", m);
         }
 
@@ -161,24 +161,8 @@ namespace Outbridge.PyLite.Modules
         // through GetAttr, where a raised AttributeError reads as absent — CPython's PyErr_Clear() too.
         private static bool TryAttr(EvalContext ctx, ScriptValue v, string name, out ScriptValue value)
         {
-            RecordInstanceValue r = v as RecordInstanceValue;
-            if (r != null)
-            {
-                if (!r.TryGetAttribute(name, ctx, out value))
-                    return false;
-            }
-            else
-            {
-                try
-                {
-                    value = PyOps.GetAttr(v, name, ctx);
-                }
-                catch (ScriptException ex) when (ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.AttributeError))
-                {
-                    value = null;
-                    return false;
-                }
-            }
+            if (!PyOps.TryGetAttr(v, name, ctx, out value))
+                return false;
             return value.Kind != ValueKind.None || name == "escapechar";
         }
 
@@ -261,7 +245,7 @@ namespace Outbridge.PyLite.Modules
             Args.Between(ctx, a, "reader", 1, 2);
             IScriptIterator lines = PyOps.GetIterator(a[0], ctx);
             Dialect rd = ReadDialect(ctx, kw, a.Length > 1 ? a[1] : null);
-            return ctx.Values.Iterator(new CsvRowIterator(lines, rd), "csv.reader", ReaderSlots);
+            return ctx.Values.EngineIterator(new CsvRowIterator(lines, rd), "csv.reader", ReaderSlots);
         }
 
         private static ScriptValue DictReader(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
@@ -279,7 +263,7 @@ namespace Outbridge.PyLite.Modules
             if (!kw.TryGet("restval", out restval))
                 restval = ctx.Values.None;
             var rows = new CsvRowIterator(lines, d);
-            return ctx.Values.Iterator(new CsvDictRowIterator(rows, fieldnames, restkey, restval),
+            return ctx.Values.EngineIterator(new CsvDictRowIterator(rows, fieldnames, restkey, restval),
                 "csv.DictReader", DictReaderSlots);
         }
 
@@ -319,7 +303,7 @@ namespace Outbridge.PyLite.Modules
             s["dialect"] = SlotDescriptor.MakeProperty("dialect", (self, ctx) => new DialectValue(Dict(self).Rows.Dialect));
             // .reader is the csv.reader underneath, which CPython hands out as an ordinary reader
             s["reader"] = SlotDescriptor.MakeProperty("reader", (self, ctx) =>
-                ctx.Values.Iterator(Dict(self).Rows, "csv.reader", ReaderSlots));
+                ctx.Values.EngineIterator(Dict(self).Rows, "csv.reader", ReaderSlots));
             return s;
         }
 
@@ -335,9 +319,11 @@ namespace Outbridge.PyLite.Modules
 
             internal Dialect Dialect { get { return _d; } }
 
-            private string NextLine(EvalContext ctx)
+            // The line without its ending, and the ending, which a quoted field keeps as it was written.
+            private string NextLine(EvalContext ctx, out string ending)
             {
                 ScriptValue v;
+                ending = "";
                 if (!_lines.MoveNext(ctx, out v))
                     return null;
                 LineNum++;
@@ -345,12 +331,16 @@ namespace Outbridge.PyLite.Modules
                 if (s == null)
                     throw Raise.Make(ctx, PyExceptionTypes.CsvError,
                         "iterator should return strings, not " + v.PyTypeName);
-                return s.Value.TrimEnd('\r', '\n');
+                string line = s.Value.TrimEnd('\r', '\n');
+                if (line.Length < s.Value.Length)
+                    ending = s.Value.Substring(line.Length);
+                return line;
             }
 
             protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
             {
-                string line = NextLine(ctx);
+                string ending;
+                string line = NextLine(ctx, out ending);
                 if (line == null)
                 {
                     value = null;
@@ -368,11 +358,25 @@ namespace Outbridge.PyLite.Modules
                     {
                         if (st != State.InQuotedField && st != State.EscapeInQuotedField)
                             break;
-                        // a quoted field spans lines: the newline belongs to the field
-                        string more = NextLine(ctx);
+                        // a quoted field spans lines: the line ending belongs to the field as written (an
+                        // escaped end of line is a '\n' when the line has none)
+                        string kept = st == State.EscapeInQuotedField && ending.Length == 0 ? "\n" : ending;
+                        string more = NextLine(ctx, out ending);
                         if (more == null)
-                            throw Raise.Make(ctx, PyExceptionTypes.CsvError, "unexpected end of data");
-                        field.Append('\n');
+                        {
+                            if (_d.Strict)
+                                throw Raise.Make(ctx, PyExceptionTypes.CsvError, "unexpected end of data");
+                            field.Append(kept);   // non-strict: the open field ends with the data
+                            break;
+                        }
+                        // checked as the field spans lines, not only when it ends: 400 lines of 1M chars
+                        // grew one field to 400M chars past the 128K limit
+                        if (field.Length + kept.Length > ctx.Csv.FieldLimit)
+                            throw Raise.Make(ctx, PyExceptionTypes.CsvError,
+                                "field larger than field limit (" + ctx.Csv.FieldLimit + ")");
+                        // field_size_limit can be raised past MaxStrChars; the cap still holds
+                        ctx.Values.CheckStrLen(field.Length + (long)kept.Length);
+                        field.Append(kept);
                         line = more;
                         i = 0;
                         st = State.InQuotedField;
@@ -526,10 +530,7 @@ namespace Outbridge.PyLite.Modules
                 var names = new List<ScriptValue>();
                 if (_fieldnamesArg != null)
                 {
-                    IScriptIterator it = PyOps.GetIterator(_fieldnamesArg, ctx);
-                    ScriptValue n;
-                    while (it.MoveNext(ctx, out n))
-                        names.Add(n);
+                    names.AddRange(Iter.ToArray(ctx, _fieldnamesArg));   // charged and capped: fieldnames=repeat('a')
                     _fieldnamesArg = null;
                 }
                 else
@@ -563,13 +564,18 @@ namespace Outbridge.PyLite.Modules
                     value = null;
                     return false;
                 }
-                ScriptValue rowVal;
-                if (!_rows.MoveNext(ctx, out rowVal))
+                ListValue row;
+                do   // a blank line reads as an empty row, which DictReader skips
                 {
-                    value = null;
-                    return false;
+                    ScriptValue rowVal;
+                    if (!_rows.MoveNext(ctx, out rowVal))
+                    {
+                        value = null;
+                        return false;
+                    }
+                    row = (ListValue)rowVal;
                 }
-                ListValue row = (ListValue)rowVal;
+                while (row.Items.Count == 0);
                 DictValue d = ctx.Values.Dict(names.Count + 1);
                 for (int i = 0; i < names.Count; i++)
                     d.SetItem(names[i], i < row.Items.Count ? row.Items[i] : _restVal, ctx);
@@ -606,11 +612,7 @@ namespace Outbridge.PyLite.Modules
             }
             else
                 throw Args.ExactlyError(ctx, "DictWriter", 2, a.Length);
-            IScriptIterator it = PyOps.GetIterator(fieldnames, ctx);
-            var names = new List<ScriptValue>();
-            ScriptValue n;
-            while (it.MoveNext(ctx, out n))
-                names.Add(n);
+            var names = new List<ScriptValue>(Iter.ToArray(ctx, fieldnames));   // charged and capped
             ScriptValue restval;
             if (!kw.TryGet("restval", out restval))
                 restval = ctx.Values.Str("");
@@ -624,15 +626,39 @@ namespace Outbridge.PyLite.Modules
         }
 
         // csv.writer / csv.DictWriter instance: writerow/writerows (+writeheader for Dict).
-        private sealed class CsvWriterValue : ScriptValue
+        private sealed class CsvWriterValue : ScriptValue, IScriptUncopyable
         {
-            private static readonly ScriptTypeInfo WType = new ScriptTypeInfo("csv.writer", BuildWriterSlots());
-            private static readonly ScriptTypeInfo DType = new ScriptTypeInfo("csv.DictWriter", BuildWriterSlots());
+            private static readonly ScriptTypeInfo WType = new ScriptTypeInfo("csv.writer", BuildWriterSlots(false));
+            private static readonly ScriptTypeInfo DType = new ScriptTypeInfo("csv.DictWriter", BuildWriterSlots(true));
+
+            // csv.writer is a C type CPython cannot pickle; a DictWriter is a Python object whose copy shares the writer.
+            public string PickleName { get { return ReferenceEquals(TypeInfo, WType) ? "_csv.writer" : null; } }
 
             private readonly ScriptValue _file;
             private ScriptValue _write;   // the sink's write, looked up on the first row
             private readonly Dialect _d;
             private readonly List<ScriptValue> _fieldnames;   // non-null => DictWriter
+            private HashSet<string> _fieldNameSet;
+            private bool _fieldNameSetBuilt;
+
+            // Null when some field is not a str: such a name compares through Python's ==.
+            private HashSet<string> FieldNameSet()
+            {
+                if (!_fieldNameSetBuilt)
+                {
+                    _fieldNameSetBuilt = true;
+                    var set = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (ScriptValue f in _fieldnames)
+                    {
+                        StrValue fs = f as StrValue;
+                        if (fs == null)
+                            return null;
+                        set.Add(fs.Value);
+                    }
+                    _fieldNameSet = set;
+                }
+                return _fieldNameSet;
+            }
             private readonly ScriptValue _restVal;            // filler for keys the row omits
             private readonly bool _raiseOnExtras;             // extrasaction='raise' (the default)
 
@@ -658,13 +684,14 @@ namespace Outbridge.PyLite.Modules
             // writeheader), which is how a caller counts what it wrote.
             private ScriptValue Emit(EvalContext ctx, string text)
             {
-                ScriptValue write = _write ?? (_write = PyOps.GetAttr(_file, "write", ctx));   // once, as CPython's writer (P17)
+                ScriptValue write = _write ?? (_write = PyOps.GetAttr(_file, "write", ctx));   // once, as CPython's writer
                 return ctx.CallHook1(write, ctx.Values.Str(text));   // per-row hot path
             }
 
             private string FormatField(EvalContext ctx, ScriptValue v)
             {
-                bool isNumber = v.Kind == ValueKind.Int || v.Kind == ValueKind.Float;
+                bool isNumber = v.Kind == ValueKind.Int || v.Kind == ValueKind.Float || v.Kind == ValueKind.Bool
+                    || v is DecimalValue || v is FractionValue;   // PyNumber_Check
                 string s = v.Kind == ValueKind.None ? "" : v.Str(ctx);
                 bool special, hasEscape;
                 Scan(s, out special, out hasEscape);
@@ -706,7 +733,7 @@ namespace Outbridge.PyLite.Modules
                     }
                     else if (c == _d.EscapeChar && c != NUL)
                         sb.Append(c);
-                    else if (c == _d.Delimiter || c == CR || c == LF || _d.LineTerminator.IndexOf(c) >= 0)
+                    else if (c == _d.Delimiter || c == CR || c == LF || IsTerminatorChar(c))
                         quoted = true;
                     sb.Append(c);
                 }
@@ -724,6 +751,15 @@ namespace Outbridge.PyLite.Modules
             private bool HasTerminatorChar(string s)
             {
                 string t = _d.LineTerminator;
+                if (t.Length > ShortTerminator)
+                {
+                    for (int i = 0; i < s.Length; i++)
+                    {
+                        if (s[i] != CR && s[i] != LF && IsTerminatorChar(s[i]))
+                            return true;
+                    }
+                    return false;
+                }
                 for (int i = 0; i < t.Length; i++)
                 {
                     if (t[i] != CR && t[i] != LF && s.IndexOf(t[i]) >= 0)
@@ -732,9 +768,22 @@ namespace Outbridge.PyLite.Modules
                 return false;
             }
 
+            // A terminator of any length is allowed: past a few chars it is looked up through a set, since a
+            // search of it per field char made a field cost field x terminator.
+            private const int ShortTerminator = 4;
+            private HashSet<char> _terminatorChars;
+
+            private bool IsTerminatorChar(char c)
+            {
+                string t = _d.LineTerminator;
+                if (t.Length <= ShortTerminator)
+                    return t.IndexOf(c) >= 0;
+                return (_terminatorChars ?? (_terminatorChars = new HashSet<char>(t))).Contains(c);
+            }
+
             private const char CR = '\r', LF = '\n', NUL = '\0';
 
-            // One pass over the field (P17): a delimiter, quote, CR or LF makes it special; the escape character
+            // One pass over the field: a delimiter, quote, CR or LF makes it special; the escape character
             // alone only needs escaping.
             private void Scan(string s, out bool special, out bool hasEscape)
             {
@@ -756,7 +805,7 @@ namespace Outbridge.PyLite.Modules
                 foreach (char c in s)
                 {
                     if (c == _d.Delimiter || c == _d.QuoteChar || c == _d.EscapeChar || c == '\r' || c == '\n'
-                        || _d.LineTerminator.IndexOf(c) >= 0)
+                        || IsTerminatorChar(c))
                         sb.Append(_d.EscapeChar);
                     sb.Append(c);
                 }
@@ -765,16 +814,23 @@ namespace Outbridge.PyLite.Modules
 
             private ScriptValue WriteRow(EvalContext ctx, ScriptValue seq)
             {
-                var sb = new StringBuilder();
+                var sb = new BudgetStringBuilder(ctx);   // writerow(repeat(None)) grew a plain builder past MaxStrChars
                 IScriptIterator it = PyOps.GetIterator(seq, ctx);
                 ScriptValue v;
-                bool first = true;
+                int fields = 0;
                 while (it.MoveNext(ctx, out v))
                 {
-                    if (!first)
+                    if (fields++ > 0)
                         sb.Append(_d.Delimiter);
-                    first = false;
                     sb.Append(FormatField(ctx, v));
+                }
+                if (fields == 1 && sb.Length == 0)
+                {
+                    // _csv.c: a record of one empty field is written quoted, or it would read back as no field
+                    if (_d.Quoting == QuoteNone)
+                        throw Raise.Make(ctx, PyExceptionTypes.CsvError, "single empty field record must be quoted");
+                    sb.Append(_d.QuoteChar);
+                    sb.Append(_d.QuoteChar);
                 }
                 sb.Append(_d.LineTerminator);
                 return Emit(ctx, sb.ToString());
@@ -789,10 +845,15 @@ namespace Outbridge.PyLite.Modules
                 if (_raiseOnExtras)
                 {
                     List<string> wrong = null;
+                    HashSet<string> names = FieldNameSet();
                     var it = new DictKeyIterator(row.Table);
                     ScriptValue k;
                     while (it.MoveNext(ctx, out k))
                     {
+                        // Columns x columns per row otherwise; only a field or key that is not a str needs the walk.
+                        StrValue ks = k as StrValue;
+                        if (names != null && ks != null && names.Contains(ks.Value))
+                            continue;
                         bool found = false;
                         foreach (ScriptValue f in _fieldnames)
                         {
@@ -818,7 +879,7 @@ namespace Outbridge.PyLite.Modules
                 return WriteRow(ctx, vals);
             }
 
-            private static IDictionary<string, SlotDescriptor> BuildWriterSlots()
+            private static IDictionary<string, SlotDescriptor> BuildWriterSlots(bool dict)
             {
                 var s = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
                 s["writerow"] = SlotDescriptor.MakeMethod("writerow", Args.Positional("writerow", 1, 1, (self, a, kw, ctx) =>
@@ -879,6 +940,12 @@ namespace Outbridge.PyLite.Modules
                         throw Raise.Attribute(ctx, "csv.writer", "extrasaction");
                     return ctx.Values.Str(w._raiseOnExtras ? "raise" : "ignore");
                 });
+                if (!dict)
+                {
+                    // a plain writer has no DictWriter names, in dir() either
+                    foreach (string n in new[] { "writeheader", "fieldnames", "restval", "extrasaction" })
+                        s.Remove(n);
+                }
                 return s;
             }
         }
@@ -890,7 +957,7 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["StringIO"] = ctx.Values.Type("io.StringIO", (self, a, kw, c) =>
+            m["StringIO"] = ctx.Values.EngineType("io.StringIO", Args.LeadKeywords("StringIO", (self, a, kw, c) =>
             {
                 string initial = "";
                 if (a.Length >= 1 && a[0].Kind != ValueKind.None)
@@ -901,8 +968,8 @@ namespace Outbridge.PyLite.Modules
                     initial = s.Value;
                 }
                 return new StringIOValue(c, initial);
-            }, StringIOValue.StringIOType, null);
-            m["BytesIO"] = ctx.Values.Type("io.BytesIO", (self, a, kw, c) =>
+            }, 1, "initial_value", "newline"), StringIOValue.StringIOType, null);
+            m["BytesIO"] = ctx.Values.EngineType("io.BytesIO", (self, a, kw, c) =>
             {
                 Args.AtMost(c, a, "BytesIO", 1);
                 ScriptValue initial = a.Length == 1 ? a[0] : null;

@@ -26,10 +26,9 @@ namespace Outbridge.PyLite.Modules.Support
                     throw new BadFormat();
                 int sep = FindSeparator(s);
                 string dstr = s.Substring(0, Math.Min(sep, s.Length));
-                string tstr = sep + 1 < s.Length ? s.Substring(sep + 1) : "";
                 ParseDate(dstr, out y, out mo, out d);
-                if (tstr.Length > 0)
-                    tz = ParseTime(ctx, tstr, t, out nextDay, out bad24);
+                if (sep < s.Length)   // a separator needs a time after it: '2024-01-02 ' is refused
+                    tz = ParseTime(ctx, s.Substring(sep + 1), t, out nextDay, out bad24);
             }
             catch (BadFormat)
             {
@@ -156,13 +155,8 @@ namespace Outbridge.PyLite.Modules.Support
                 throw new BadFormat();
             if (week < 1 || week > 53)
                 throw new BadFormat();
-            if (week == 53)
-            {
-                // 53-week ISO years start on a Thursday, or on a Wednesday when leap
-                int firstWeekday = CalendarMath.Ymd2Ord(year, 1, 1) % 7;
-                if (!(firstWeekday == 4 || (firstWeekday == 3 && CalendarMath.IsLeap(year))))
-                    throw new BadFormat();
-            }
+            if (week == 53 && !CalendarMath.HasIsoWeek53(year))
+                throw new BadFormat();
             if (weekday < 1 || weekday > 7)
                 throw new BadFormat();
             int firstDay = CalendarMath.Ymd2Ord(year, 1, 1);

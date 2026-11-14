@@ -87,8 +87,23 @@ namespace Outbridge.PyLite.Tests.Syntax
         }
 
         [Fact]
-        public void ExtraCloseParen_NoNegativeDepth()
-            => Assert.Equal("RightParen NewLine EndOfFile", L.Kinds(")"));
+        public void ExtraCloseParenIsUnmatched()
+        {
+            var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("a)"));
+            Assert.Equal("unmatched ')'", e.Message);
+            Assert.Equal(2, e.Col);
+        }
+
+        [Theory]
+        [InlineData("(]", "closing parenthesis ']' does not match opening parenthesis '('", 1, 2)]
+        [InlineData("(\n]", "closing parenthesis ']' does not match opening parenthesis '(' on line 1", 2, 1)]
+        public void MismatchedBrackets(string src, string message, int line, int col)
+        {
+            var e = Assert.Throws<PySyntaxErrorException>(() => L.Go(src));
+            Assert.Equal(message, e.Message);
+            Assert.Equal(line, e.Line);
+            Assert.Equal(col, e.Col);
+        }
 
         [Fact]
         public void RepeatedNextAfterEof()

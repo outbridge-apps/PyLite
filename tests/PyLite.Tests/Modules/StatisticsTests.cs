@@ -27,6 +27,15 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal("1.5", Ev.ReprOf(Prelude + "from decimal import Decimal\n", "statistics.median_grouped([Decimal(1), Decimal(2)])"));
         }
 
+        // A zero Decimal may carry an exponent of ±10**9: it enters the exact sum as 0/1, no power of ten.
+        [Theory]
+        [InlineData("statistics.mean([Decimal('0E-999999999'), Decimal('1.5'), Decimal('0E+999999999')])", "Decimal('0.5')")]
+        [InlineData("statistics.variance([Decimal('0E-999999999'), Decimal('1.5'), Decimal('-2.25')])", "Decimal('3.5625')")]
+        public void ZeroDecimalWithAHugeExponent(string expr, string expected)
+        {
+            Assert.Equal(expected, Ev.ReprOf(Prelude + "from decimal import Decimal\n", expr));
+        }
+
         [Theory]
         // ---- mean / variance (exact) ----
         [InlineData("statistics.mean([1,2,3])", "2")]
@@ -58,12 +67,14 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal(expected, R(expr));
         }
 
+        // Correctly rounded, so exact: a tolerance of 1e-12 hid a last digit that differed on 269 of 3,000 datasets.
         [Theory]
-        [InlineData("abs(statistics.stdev([1.5,2.5,2.5,2.75,3.25,4.75]) - 1.0810874155219827) < 1e-12")]
-        [InlineData("abs(statistics.pstdev([1,2,3]) - 0.816496580927726) < 1e-12")]
-        public void StatisticsTolerance(string boolExpr)
+        [InlineData("statistics.stdev([1.5,2.5,2.5,2.75,3.25,4.75])", "1.0810874155219827")]
+        [InlineData("statistics.pstdev([1,2,3])", "0.816496580927726")]
+        [InlineData("statistics.stdev([13, 43, 32, 48])", "15.513435037626795")]
+        public void StdevIsExact(string expr, string expected)
         {
-            Assert.Equal("True", R(boolExpr));
+            Assert.Equal(expected, R(expr));
         }
 
         [Theory]

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Text;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
@@ -11,8 +10,8 @@ using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
 {
-    // The random module. Wraps System.Random (2026-07-08 decision — MT19937 dropped)
-    // the public API + argument validation + per-seed determinism are preserved. Per-run (reads ctx.Random).
+    // The random module over System.Random rather than MT19937 (the streams are not CPython's, see deviations.md):
+    // the public API, argument validation and per-seed determinism are preserved. Per-run (reads ctx.Random).
     internal static class RandomModule
     {
         private const double TwoPi = 2.0 * Math.PI;
@@ -24,32 +23,43 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["seed"] = Fn("seed", 0, 2, Seed),
+                ["seed"] = Fn("seed", 0, 2, Seed, new[] { "a", "version" }, new object[] { NoneDefault, 2 }),
                 ["random"] = Fn("random", 0, 0, (c, a) => c.Values.Float(Rand(c).NextDouble())),
                 ["getrandbits"] = Fn("getrandbits", 1, 1, (c, a) => c.Values.Int(GetRandBits(c, a))),
-                ["randrange"] = Fn("randrange", 1, 3, (c, a) => c.Values.Int(RandRange(c, a))),
-                ["randint"] = Fn("randint", 2, 2, RandInt),
-                ["choice"] = Fn("choice", 1, 1, Choice),
-                ["shuffle"] = Fn("shuffle", 1, 2, Shuffle),
+                ["randrange"] = Fn("randrange", 1, 3, (c, a) => c.Values.Int(RandRange(c, a)), new[] { "start", "stop", "step" }, new object[] { null, NoneDefault, 1 }),
+                ["randint"] = Fn("randint", 2, 2, RandInt, new[] { "a", "b" }, new object[2]),
+                ["choice"] = Fn("choice", 1, 1, Choice, new[] { "seq" }, new object[1]),
+                ["shuffle"] = BuiltinFunctionValue.Make("shuffle", (self, a, kw, c) => Shuffle(c, a, kw)),
                 ["sample"] = BuiltinFunctionValue.Make("sample", (self, a, kw, c) => Sample(c, a, kw)),
-                ["uniform"] = Fn("uniform", 2, 2, (c, a) => c.Values.Float(D(c, a, 0) + (D(c, a, 1) - D(c, a, 0)) * Rand(c).NextDouble())),
-                ["triangular"] = Fn("triangular", 0, 3, Triangular),
-                ["expovariate"] = Fn("expovariate", 1, 1, Expovariate),
-                ["normalvariate"] = Fn("normalvariate", 0, 2, NormalVariate),
-                ["gauss"] = Fn("gauss", 0, 2, Gauss),
-                ["gammavariate"] = Fn("gammavariate", 2, 2, (c, a) => c.Values.Float(GammaVariate(c, D(c, a, 0), D(c, a, 1)))),
-                ["betavariate"] = Fn("betavariate", 2, 2, BetaVariate),
+                ["uniform"] = Fn("uniform", 2, 2, (c, a) => c.Values.Float(D(c, a, 0) + (D(c, a, 1) - D(c, a, 0)) * Rand(c).NextDouble()), new[] { "a", "b" }, new object[2]),
+                ["triangular"] = Fn("triangular", 0, 3, Triangular, new[] { "low", "high", "mode" }, new object[] { 0.0, 1.0, NoneDefault }),
+                ["expovariate"] = Fn("expovariate", 0, 1, Expovariate, new[] { "lambd" }, new object[] { 1.0 }),
+                ["normalvariate"] = Fn("normalvariate", 0, 2, NormalVariate, new[] { "mu", "sigma" }, new object[] { 0.0, 1.0 }),
+                ["gauss"] = Fn("gauss", 0, 2, Gauss, new[] { "mu", "sigma" }, new object[] { 0.0, 1.0 }),
+                ["gammavariate"] = Fn("gammavariate", 2, 2, (c, a) => c.Values.Float(GammaVariate(c, D(c, a, 0), D(c, a, 1))), new[] { "alpha", "beta" }, new object[2]),
+                ["betavariate"] = Fn("betavariate", 2, 2, BetaVariate, new[] { "alpha", "beta" }, new object[2]),
                 // 3.6/3.9 members
-                ["choices"] = BuiltinFunctionValue.Make("choices", Choices),
-                ["randbytes"] = Fn("randbytes", 1, 1, RandBytes),
+                ["choices"] = BuiltinFunctionValue.Make("choices", Args.LeadKeywords("choices", Choices, 1, "population", "weights", "cum_weights", "k")),
+                ["randbytes"] = Fn("randbytes", 1, 1, RandBytes, new[] { "n" }, new object[1]),
             };
             return ctx.Values.Module("random", m);
         }
 
-        private static BuiltinFunctionValue Fn(string name, int min, int max, Func<EvalContext, ScriptValue[], ScriptValue> f)
+        private static readonly object NoneDefault = new object();
+
+        // With names the function takes its parameters by keyword too; a keyword was dropped, silently: gauss(mu=100)
+        // drew from the standard normal. A default is a number, NoneDefault, or null for a required parameter.
+        private static BuiltinFunctionValue Fn(string name, int min, int max, Func<EvalContext, ScriptValue[], ScriptValue> f,
+            string[] names = null, object[] defaults = null)
         {
             return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
             {
+                if (kw.Count != 0)
+                {
+                    if (names == null)
+                        throw Raise.TypeError(c, "Random." + name + "() takes no keyword arguments");
+                    args = BindKw(c, args, kw, name, names, defaults);
+                }
                 Args.Between(c, args, name, min, max);
                 return f(c, args);
             });
@@ -63,6 +73,33 @@ namespace Outbridge.PyLite.Modules
         }
 
         // ---- seed ----
+
+        private static ScriptValue[] BindKw(EvalContext c, ScriptValue[] args, KwArgs kw, string name, string[] names, object[] defaults)
+        {
+            var slots = new ScriptValue[names.Length];
+            if (args.Length > names.Length)
+                throw Args.AtMostError(c, name, names.Length, args.Length);
+            Array.Copy(args, slots, args.Length);
+            for (int j = 0; j < kw.Count; j++)
+            {
+                int idx = Array.IndexOf(names, kw.NameAt(j));
+                if (idx < 0)
+                    throw KwReader.UnexpectedError(c, "Random." + name, kw.NameAt(j));
+                if (slots[idx] != null)
+                    throw Raise.TypeError(c, "Random." + name + "() got multiple values for argument '" + kw.NameAt(j) + "'");
+                slots[idx] = kw.ValueAt(j);
+            }
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] != null)
+                    continue;
+                object d = defaults[i];
+                if (d == null)
+                    throw Raise.TypeError(c, "Random." + name + "() missing 1 required positional argument: '" + names[i] + "'");
+                slots[i] = ReferenceEquals(d, NoneDefault) ? c.Values.None : d is double ? c.Values.Float((double)d) : (ScriptValue)c.Values.Int((int)d);
+            }
+            return slots;
+        }
 
         private static ScriptValue Seed(EvalContext ctx, ScriptValue[] args)
         {
@@ -84,36 +121,40 @@ namespace Outbridge.PyLite.Modules
             else if (bv != null)
                 n = bv.Value ? BigInteger.One : BigInteger.Zero;
             else if (sv != null)
-                n = StrSeed(sv.Value);
+            {
+                ctx.Budget.ChargeLinear(sv.Value.Length);
+                n = StrSeed(BytesCodec.Encode(ctx, sv.Value, "utf-8"));   // strict: a lone surrogate is CPython's UnicodeEncodeError
+            }
             else
                 n = BigInteger.Abs(PyOps.Hash(a, ctx, 0));
             st.ReseedInt(DeriveSeed(n));
             return ctx.Values.None;
         }
 
-        private static BigInteger StrSeed(string s)
+        private static BigInteger StrSeed(byte[] utf)
         {
-            byte[] utf = Encoding.UTF8.GetBytes(s);
             byte[] sha;
             using (SHA512 h = SHA512.Create())
                 sha = h.ComputeHash(utf);
             var concat = new byte[utf.Length + sha.Length];
             Array.Copy(utf, concat, utf.Length);
             Array.Copy(sha, 0, concat, utf.Length, sha.Length);
-            BigInteger n = BigInteger.Zero;
+            // int.from_bytes(concat, 'big') as little-endian bytes plus a zero sign byte: one pass, where
+            // n * 256 + byte per byte was quadratic in the string
+            var le = new byte[concat.Length + 1];
             for (int i = 0; i < concat.Length; i++)
-                n = n * 256 + concat[i];
-            return n;
+                le[i] = concat[concat.Length - 1 - i];
+            return new BigInteger(le);
         }
 
+        // The 32-bit words of n >= 0 XOR-folded, read off its little-endian bytes (shifting n down a word at
+        // a time was quadratic in its length).
         private static int DeriveSeed(BigInteger n)
         {
+            byte[] b = n.ToByteArray();
             uint acc = 0;
-            while (n > 0)
-            {
-                acc ^= (uint)(n & 0xFFFFFFFF);
-                n >>= 32;
-            }
+            for (int i = 0; i < b.Length; i++)
+                acc ^= (uint)b[i] << (8 * (i & 3));
             return unchecked((int)acc);
         }
 
@@ -126,7 +167,7 @@ namespace Outbridge.PyLite.Modules
             return RandBits(ctx, args[0] is BoolValue ? (((BoolValue)args[0]).Value ? 1 : 0) : ((IntValue)args[0]).Value);
         }
 
-        // The typed core the module's own draws call directly (P17): no argument array, no boxed k.
+        // The typed core the module's own draws call directly: no argument array, no boxed k.
         private static BigInteger RandBits(EvalContext ctx, BigInteger k)
         {
             if (k < 0)
@@ -141,17 +182,36 @@ namespace Outbridge.PyLite.Modules
             ctx.Budget.Step(1 + (int)(k > 1024 ? 1024 : k) / 64);
             ctx.Budget.CheckDeadlineNow();
             int words = (int)((k + 31) / 32);
-            BigInteger result = BigInteger.Zero;
             int rem = (int)(k % 32);
+            RandomState st = Rand(ctx);
+            if (words <= 2)
+            {
+                ulong acc = 0;
+                for (int i = 0; i < words; i++)
+                {
+                    uint r = st.NextUint32();
+                    if (i == words - 1 && rem != 0)
+                        r >>= 32 - rem;
+                    acc |= (ulong)r << (32 * i);
+                    ctx.Budget.Step();
+                }
+                return new BigInteger(acc);
+            }
+            // The words little-endian with a zero sign byte, in one pass: OR-ing in shifted words copied the
+            // growing result every time.
+            var bytes = new byte[4 * words + 1];
             for (int i = 0; i < words; i++)
             {
-                uint r = Rand(ctx).NextUint32();
+                uint r = st.NextUint32();
                 if (i == words - 1 && rem != 0)
                     r >>= 32 - rem;
-                result |= (BigInteger)r << (32 * i);
+                bytes[4 * i] = (byte)r;
+                bytes[4 * i + 1] = (byte)(r >> 8);
+                bytes[4 * i + 2] = (byte)(r >> 16);
+                bytes[4 * i + 3] = (byte)(r >> 24);
                 ctx.Budget.Step();
             }
-            return result;
+            return new BigInteger(bytes);
         }
 
         private static BigInteger RandBelow(EvalContext ctx, BigInteger n)
@@ -201,11 +261,11 @@ namespace Outbridge.PyLite.Modules
             if (istep == 0)
                 throw Raise.ValueError(ctx, "zero step for randrange()");
             BigInteger nn = istep > 0
-                ? Rationals.FloorDiv(width + istep - 1, istep)
-                : Rationals.FloorDiv(width + istep + 1, istep);
+                ? BigOps.FloorDiv(ctx, width + istep - 1, istep)
+                : BigOps.FloorDiv(ctx, width + istep + 1, istep);
             if (nn <= 0)
                 throw Raise.ValueError(ctx, "empty range for randrange()");
-            return istart + istep * RandBelow(ctx, nn);
+            return istart + BigOps.Multiply(ctx, istep, RandBelow(ctx, nn));
         }
 
         private static ScriptValue RandInt(EvalContext ctx, ScriptValue[] args)
@@ -227,27 +287,25 @@ namespace Outbridge.PyLite.Modules
 
         // ---- shuffle / sample ----
 
-        private static ScriptValue Shuffle(EvalContext ctx, ScriptValue[] args)
+        // shuffle(x): the random= callback went in 3.11.
+        private static ScriptValue Shuffle(EvalContext ctx, ScriptValue[] args, KwArgs kw)
         {
+            if (args.Length > 1)
+                throw Raise.TypeError(ctx, "Random.shuffle() takes 2 positional arguments but " + (args.Length + 1) + " were given");
+            args = StrMethods.WithKw(ctx, args, kw, "shuffle", "x");
+            if (args.Length != 1)
+                throw Raise.TypeError(ctx, "Random.shuffle() missing 1 required positional argument: 'x'");
             ListValue lst = args[0] as ListValue;
             if (lst == null)
                 throw Raise.TypeError(ctx, "'" + args[0].PyTypeName + "' object does not support item assignment");
-            ScriptValue randomCb = args.Length >= 2 && args[1].Kind != ValueKind.None ? args[1] : null;
-            long n = PyOps.Length(lst, ctx);
-            for (long i = n - 1; i >= 1; i--)
+            // In place: four ints per element were charged as kept, and a list of 1M ended at MaxAllocBytes.
+            var items = lst.Items;
+            for (int i = items.Count - 1; i >= 1; i--)
             {
-                BigInteger j;
-                if (randomCb == null)
-                    j = RandBelow(ctx, i + 1);
-                else
-                {
-                    double u = CallFloat(ctx, randomCb);
-                    j = new BigInteger(u * (i + 1));
-                }
-                ScriptValue vi = lst.GetItem(ctx.Values.Int(i), ctx);
-                ScriptValue vj = lst.GetItem(ctx.Values.Int(j), ctx);
-                lst.SetItem(ctx.Values.Int(i), vj, ctx);
-                lst.SetItem(ctx.Values.Int(j), vi, ctx);
+                int j = (int)RandBelow(ctx, i + 1);
+                ScriptValue vi = items[i];
+                items[i] = items[j];
+                items[j] = vi;
                 ctx.Budget.Step();
             }
             return ctx.Values.None;
@@ -304,11 +362,9 @@ namespace Outbridge.PyLite.Modules
 
             if (n <= setsize)
             {
-                var pool = new List<ScriptValue>();
-                IScriptIterator it = PyOps.GetIterator(population, ctx);
-                ScriptValue v;
-                while (it.MoveNext(ctx, out v))
-                    pool.Add(v);
+                ScriptValue[] pool = Iter.ToArray(ctx, population);   // charged and capped
+                if (pool.Length != n)   // a __len__ that disagrees with the iteration: indexes below would leave the pool
+                    throw Raise.TypeError(ctx, "Population must be a sequence.  For dicts or sets, use sorted(d).");
                 for (int i = 0; i < kk; i++)
                 {
                     BigInteger j = RandBelow(ctx, n - i);
@@ -360,9 +416,9 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Expovariate(EvalContext ctx, ScriptValue[] args)
         {
-            double lambd = D(ctx, args, 0);
+            double lambd = args.Length >= 1 ? D(ctx, args, 0) : 1.0;
             if (lambd == 0.0)
-                throw Raise.ZeroDivision(ctx, "float division by zero");
+                throw Raise.ZeroDivision(ctx, "division by zero");
             return ctx.Values.Float(-Math.Log(1.0 - Rand(ctx).NextDouble()) / lambd);
         }
 
@@ -486,17 +542,6 @@ namespace Outbridge.PyLite.Modules
             return MathModule.AsDouble(ctx, args[i]);
         }
 
-        private static double CallFloat(EvalContext ctx, ScriptValue callable)
-        {
-            ScriptValue r = ctx.CallHook(callable, Array.Empty<ScriptValue>(), KwArgs.Empty);
-            FloatValue fv = r as FloatValue;
-            if (fv != null)
-                return fv.Value;
-            IntValue iv = r as IntValue;
-            if (iv != null)
-                return (double)iv.Value;
-            throw Raise.TypeError(ctx, "random() callback must return a float");
-        }
 
         private static ScriptValue IndexInto(EvalContext ctx, ScriptValue seq, BigInteger i)
         {
@@ -594,12 +639,11 @@ namespace Outbridge.PyLite.Modules
 
         private static double[] ReadWeights(EvalContext ctx, ScriptValue seq)
         {
-            IScriptIterator it = PyOps.GetIterator(seq, ctx);
-            var list = new List<double>();
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-                list.Add(D2(ctx, v));
-            return list.ToArray();
+            ScriptValue[] items = Iter.ToArray(ctx, seq);   // charged and capped: weights=itertools.repeat(1.0) ends on a limit
+            var ws = new double[items.Length];
+            for (int i = 0; i < ws.Length; i++)
+                ws[i] = D2(ctx, items[i]);
+            return ws;
         }
 
         private static double D2(EvalContext ctx, ScriptValue v)
@@ -607,7 +651,7 @@ namespace Outbridge.PyLite.Modules
             if (v.Kind == ValueKind.Float)
                 return ((FloatValue)v).Value;
             if (v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool)
-                return (double)NumericOps.AsBigInteger(v);
+                return NumericOps.ToDoubleChecked(NumericOps.AsBigInteger(v), ctx);   // CPython's total + 0.0: OverflowError
             throw Raise.TypeError(ctx, "weights must be numbers, not " + v.PyTypeName);
         }
 
@@ -645,9 +689,21 @@ namespace Outbridge.PyLite.Modules
             if (n.Sign < 0)
                 throw Raise.ValueError(ctx, "number of bytes must be non-negative");
             int count = Coerce.ToSsize(ctx, n);
+            ctx.Values.CheckStrLen(count);   // the cap first: 250M bytes were drawn before Bytes refused them
             ctx.Values.PreCharge(24 + (long)count);
             var buf = new byte[count];
-            Rand(ctx).NextBytes(buf);
+            RandomState r = Rand(ctx);
+            // Drawn a block at a time with a charge each: one native call was seconds on one step. The blocks
+            // draw the same byte stream as one call (the last one is exactly what is left).
+            var block = new byte[Math.Min(count, 1 << 16)];
+            for (int at = 0; at < count; at += block.Length)
+            {
+                if (count - at < block.Length)
+                    block = new byte[count - at];
+                ctx.Budget.ChargeLinear(block.Length);
+                r.NextBytes(block);
+                Buffer.BlockCopy(block, 0, buf, at, block.Length);
+            }
             return ctx.Values.Bytes(buf);
         }
     }

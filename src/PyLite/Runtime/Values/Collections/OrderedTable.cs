@@ -65,6 +65,9 @@ namespace Outbridge.PyLite.Runtime.Values
         // Exact port of the dictobject.c lookdict probe (perturb >>= 5; i = i*5 + perturb + 1).
         private int FindSlot(ScriptValue key, long hash, EvalContext ctx, int depth)
         {
+        restart:
+            int[] index = _index;   // the arrays the probe reads: CPython restarts only when they are replaced
+            TableEntry[] entries = _entries;
             ulong mask = (ulong)(_index.Length - 1);
             ulong i = (ulong)hash & mask;
             ulong perturb = (ulong)hash;
@@ -77,8 +80,14 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (slot != DUMMY)
                 {
                     TableEntry e = _entries[slot];
-                    if (e.Hash == hash && (ReferenceEquals(e.Key, key) || PyOps.Equals(e.Key, key, ctx, depth + 1)))
-                        return slot;
+                    if (e.Hash == hash)
+                    {
+                        int m = Matches(e.Key, key, ctx, depth, slot, index, entries);
+                        if (m < 0)
+                            goto restart;
+                        if (m > 0)
+                            return slot;
+                    }
                 }
 
                 perturb >>= 5;
@@ -87,6 +96,21 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (probes > 8)
                     ctx.Budget.Step();
             }
+        }
+
+        // 1 the stored key matches, 0 it does not, -1 the comparison changed the table: a key's __eq__ (or
+        // the __bool__ of what it returned) may clear or rebuild it, and CPython's lookdict then starts the
+        // probe over (DKIX_KEY_CHANGED) rather than go on with an index into the old arrays. Only then: the
+        // arrays replaced, or this entry's key changed (`dk == mp->ma_keys && ep->me_key == startkey`); an
+        // __eq__ that adds and deletes another key restarted every probe, for ever (1.1.0 answered).
+        private int Matches(ScriptValue stored, ScriptValue key, EvalContext ctx, int depth, int slot, int[] index, TableEntry[] entries)
+        {
+            if (ReferenceEquals(stored, key))
+                return 1;
+            bool eq = PyOps.Equals(stored, key, ctx, depth + 1);
+            if (!ReferenceEquals(_index, index) || !ReferenceEquals(_entries, entries) || !ReferenceEquals(_entries[slot].Key, stored))
+                return -1;
+            return eq ? 1 : 0;
         }
 
         public bool TryGetValue(ScriptValue key, long hash, EvalContext ctx, int depth, out ScriptValue value)
@@ -120,7 +144,13 @@ namespace Outbridge.PyLite.Runtime.Values
             return FindSlot(key, hash, ctx, depth) >= 0;
         }
 
-        // True = a NEW key was inserted (version bumped); false = in-place update (R6: version and
+        // The key's entry position, -1 when absent.
+        public int IndexOf(ScriptValue key, long hash, EvalContext ctx, int depth)
+        {
+            return FindSlot(key, hash, ctx, depth);
+        }
+
+        // True = a NEW key was inserted (version bumped); false = in-place update (version and
         // positions unchanged).
         public bool InsertOrUpdate(ScriptValue key, long hash, ScriptValue value, EvalContext ctx, int depth)
         {
@@ -142,7 +172,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 _entries[slot].Value = value;
                 pos = slot;
                 return false;
-            }   // update: version unchanged (R6)
+            }   // update: version unchanged
             if (_version == before && _liveCount < ctx.Limits.MaxCollectionItems
                 && (_usedSlots + 1) * 3 < _index.Length * 2 && _entriesUsed < _entries.Length)
             {
@@ -161,6 +191,9 @@ namespace Outbridge.PyLite.Runtime.Values
         // DUMMY on the probe path, else the EMPTY that ended it.
         private int FindSlotOrFree(ScriptValue key, long hash, EvalContext ctx, int depth, out int free)
         {
+        restart:
+            int[] index = _index;   // the arrays the probe reads: CPython restarts only when they are replaced
+            TableEntry[] entries = _entries;
             ulong mask = (ulong)(_index.Length - 1);
             ulong i = (ulong)hash & mask;
             ulong perturb = (ulong)hash;
@@ -177,10 +210,16 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (slot != DUMMY)
                 {
                     TableEntry e = _entries[slot];
-                    if (e.Hash == hash && (ReferenceEquals(e.Key, key) || PyOps.Equals(e.Key, key, ctx, depth + 1)))
+                    if (e.Hash == hash)
                     {
-                        free = -1;
-                        return slot;
+                        int m = Matches(e.Key, key, ctx, depth, slot, index, entries);
+                        if (m < 0)
+                            goto restart;
+                        if (m > 0)
+                        {
+                            free = -1;
+                            return slot;
+                        }
                     }
                 }
                 else if (dummy < 0)
@@ -198,7 +237,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private void Place(int target, ScriptValue key, long hash, ScriptValue value, EvalContext ctx)
         {
-            ctx.Budget.ChargeAllocation(48); // per live entry (R5)
+            ctx.Budget.ChargeAllocation(48); // per live entry
             _entries[_entriesUsed] = new TableEntry
             {
                 Hash = hash,
@@ -211,6 +250,14 @@ namespace Outbridge.PyLite.Runtime.Values
             _entriesUsed++;
             _liveCount++;
             _version++;
+        }
+
+        // A key the caller knows is absent (one of another table's distinct keys, copied into an empty table):
+        // placed without a comparison, so no script __eq__ runs.
+        public void InsertAbsent(ScriptValue key, long hash, ScriptValue value, EvalContext ctx)
+        {
+            EnsureCapacityForInsert(ctx);
+            InsertNewKey(key, hash, value, ctx);
         }
 
         private void EnsureCapacityForInsert(EvalContext ctx)
@@ -263,6 +310,9 @@ namespace Outbridge.PyLite.Runtime.Values
 
         public bool Delete(ScriptValue key, long hash, EvalContext ctx, int depth)
         {
+        restart:
+            int[] index = _index;   // the arrays the probe reads: CPython restarts only when they are replaced
+            TableEntry[] entries = _entries;
             ulong mask = (ulong)(_index.Length - 1);
             ulong i = (ulong)hash & mask;
             ulong perturb = (ulong)hash;
@@ -275,7 +325,13 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (slot != DUMMY)
                 {
                     TableEntry e = _entries[slot];
-                    if (e.Hash == hash && (ReferenceEquals(e.Key, key) || PyOps.Equals(e.Key, key, ctx, depth + 1)))
+                    int m = e.Hash == hash ? Matches(e.Key, key, ctx, depth, slot, index, entries) : 0;
+                    // a delete through a stale index position would mark another key's slot: the __eq__ may have deleted
+                    // and re-added the key, which lands in the same trimmed entry at another position (CPython's
+                    // delitem_common looks the position up again)
+                    if (m < 0 || (m > 0 && _index[(int)i] != slot))
+                        goto restart;
+                    if (m > 0)
                     {
                         _index[(int)i] = DUMMY;
                         _entries[slot].Key = null;
@@ -341,6 +397,32 @@ namespace Outbridge.PyLite.Runtime.Values
         // OrderedDict.move_to_end(key, last=False): the entry moves to position 0 and the ones before it shift
         // up by one. Linear array moves and one pass over the index, but no rehash and no allocation (it used
         // to rebuild the whole table). False when the key is absent.
+        // Found first, changed after: a raising __eq__ leaves the key where it was. The stored key stays, not the one asked with.
+        public bool MoveToEnd(ScriptValue key, long hash, EvalContext ctx, int depth)
+        {
+            int p = FindSlot(key, hash, ctx, depth);
+            if (p < 0)
+                return false;
+            if (p == _entriesUsed - 1)
+                return true;
+            TableEntry e = _entries[p];
+            ulong mask = (ulong)(_index.Length - 1);
+            ulong i = (ulong)hash & mask;
+            ulong perturb = (ulong)hash;
+            while (_index[(int)i] != p)
+            {
+                perturb >>= 5;
+                i = (i * 5 + perturb + 1) & mask;
+            }
+            _index[(int)i] = DUMMY;
+            _entries[p].Key = null;
+            _entries[p].Value = null;
+            _liveCount--;
+            InsertAbsent(e.Key, hash, e.Value, ctx);
+            _version++;
+            return true;
+        }
+
         public bool MoveToFront(ScriptValue key, long hash, EvalContext ctx, int depth)
         {
             int p = FindSlot(key, hash, ctx, depth);
@@ -364,6 +446,29 @@ namespace Outbridge.PyLite.Runtime.Values
         }
 
         // Amortised constant time while draining from the front (set.pop, OrderedDict.popitem(False)).
+        // Where a forward walk starts, with the tombstones it still has to pass charged up front: a dict emptied
+        // from the front and walked in a loop scanned millions of dead slots per walk on a few steps.
+        public int WalkStart(EvalContext ctx)
+        {
+            int first = FindFirstLive();
+            if (first < 0)
+                return _entriesUsed;
+            int dead = _entriesUsed - first - _liveCount;
+            if (dead > FreeTombstones)
+                ctx.Budget.ChargeLinear(dead);
+            return first;
+        }
+
+        // The same charge for a walk that passes every tombstone (from the end).
+        public void ChargeWalk(EvalContext ctx)
+        {
+            int dead = _entriesUsed - _liveCount;
+            if (dead > FreeTombstones)
+                ctx.Budget.ChargeLinear(dead);
+        }
+
+        private const int FreeTombstones = 64;   // a few deletes cost a walk nothing worth a charge
+
         public int FindFirstLive()
         {
             while (_head < _entriesUsed && _entries[_head].Key == null)

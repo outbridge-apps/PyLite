@@ -30,10 +30,15 @@ namespace Outbridge.PyLite.Tests.Syntax
             Assert.Equal("unindent does not match any outer indentation level", e.Message);
         }
 
+        // CPython compares an indent with tabs to 8 and with tabs to 1: a line may mix them while both agree
         [Fact]
         public void MixedTabsAndSpacesInLine()
+            => Assert.Equal("KwIf Name Colon NewLine Indent Name NewLine Name NewLine Dedent EndOfFile", L.Kinds("if a:\n \tb\n \tc\n"));
+
+        [Fact]
+        public void TabsThatOnlyOneWidthSeesAsEqual()
         {
-            var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("if a:\n \tb\n"));
+            var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("if a:\n\tb\n        c\n"));
             Assert.Equal("TabError", e.PythonType);
             Assert.Equal("inconsistent use of tabs and spaces in indentation", e.Message);
         }

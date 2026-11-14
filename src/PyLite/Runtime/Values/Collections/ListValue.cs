@@ -52,7 +52,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return Items[NormIndex(index, ctx)];
         }
 
-        // One copy into the new list (P5): a contiguous slice is GetRange, a stepped one is filled in place.
+        // One copy into the new list: a contiguous slice is GetRange, a stepped one is filled in place.
         private List<ScriptValue> SliceList(SliceValue sl, EvalContext ctx)
         {
             SliceIndices ind = sl.Indices(Items.Count, ctx);
@@ -88,7 +88,9 @@ namespace Outbridge.PyLite.Runtime.Values
                 DelSlice((SliceValue)index, ctx);
                 return;
             }
-            Items.RemoveAt(NormIndex(index, ctx));
+            int i = NormIndex(index, ctx);
+            ctx.Budget.ChargeLinear(Items.Count - i);   // the tail moves down: `while L: del L[0]` was quadratic
+            Items.RemoveAt(i);
         }
 
         private int NormIndex(ScriptValue index, EvalContext ctx)
@@ -158,11 +160,17 @@ namespace Outbridge.PyLite.Runtime.Values
 
         private void SetSlice(SliceValue sl, ScriptValue rhs, EvalContext ctx)
         {
+            // The value first, then the bounds against the live length, as CPython's list_ass_subscript: an
+            // iterator on the right that shrinks the list moved the bounds past its end.
+            List<ScriptValue> repl = Materialize(rhs, ctx);
             SliceIndices ind = sl.Indices(Items.Count, ctx);
             int start = (int)ind.Start, step = ind.StepInt, len = (int)ind.Length;
-            List<ScriptValue> repl = Materialize(rhs, ctx);
             if (step == 1)
             {
+                long total = (long)Items.Count - len + repl.Count;   // l[0:0] = r grows past the cap as append would
+                if (total > ctx.Limits.MaxCollectionItems)
+                    SequenceOps.CheckCap(total, ctx);
+                ctx.Budget.ChargeLinear(Items.Count - start + repl.Count);   // the tail moves
                 Items.RemoveRange(start, len);
                 ctx.Budget.ChargeAllocation(8L * repl.Count);
                 Items.InsertRange(start, repl);
@@ -221,8 +229,10 @@ namespace Outbridge.PyLite.Runtime.Values
         }
     }
 
-    internal sealed class ListIterator : ScriptIteratorBase
+    internal sealed class ListIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly List<ScriptValue> _items;
         private int _pos;
         internal ListIterator(List<ScriptValue> items) { _items = items; }

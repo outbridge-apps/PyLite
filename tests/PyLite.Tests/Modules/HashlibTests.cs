@@ -93,7 +93,7 @@ namespace Outbridge.PyLite.Tests.Modern
         // msg= and digestmod= bind by name (msg= used to be dropped: the HMAC of an empty message, B9).
         [Theory]
         [InlineData("r = hmac.new(b'k', msg=b'x', digestmod='sha256').hexdigest() == hmac.new(b'k', b'x', 'sha256').hexdigest()", "True")]
-        [InlineData("r = hmac.new(key=b'k', msg=b'x', digestmod='md5').hexdigest() == hmac.new(b'k', b'x').hexdigest()", "True")]
+        [InlineData("r = hmac.new(key=b'k', msg=b'x', digestmod='md5').hexdigest() == hmac.new(b'k', b'x', 'md5').hexdigest()", "True")]
         [InlineData("r = hmac.new(b'k', None, 'sha1').hexdigest() == hmac.new(b'k', digestmod='sha1').hexdigest()", "True")]
         [InlineData("r = hmac.new(b'k', msg=b'x', digestmod='sha256').hexdigest() == hmac.new(b'k', digestmod='sha256').hexdigest()", "False")]
         public void HmacArgumentsBindByName(string body, string expected)

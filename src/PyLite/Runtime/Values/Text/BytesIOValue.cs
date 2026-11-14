@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -22,6 +21,16 @@ namespace Outbridge.PyLite.Runtime.Values
         private readonly string _name;               // a ZipExtFile's member name
         private readonly int _compressType;
         private Func<EvalContext, Exception> _failAtEnd;   // raised by the read that reaches the end
+
+        public override ScriptValue CopyShallow(EvalContext ctx)
+        {
+            if (_name != null)
+                throw Raise.TypeError(ctx, "cannot pickle 'ZipExtFile' object");
+            CheckOpen(ctx);
+            var data = new byte[_len];
+            Buffer.BlockCopy(_buf, 0, data, 0, _len);
+            return new BytesIOValue(ctx, data) { Pos = Pos };
+        }
 
         internal BytesIOValue(EvalContext ctx, byte[] initial)
         {
@@ -89,7 +98,6 @@ namespace Outbridge.PyLite.Runtime.Values
             _len = 0;
         }
 
-        internal bool Closed { get { return IsClosed; } }
         internal int Length { get { return _len; } }
 
         // zipfile reads and writes the archive in place through these.
@@ -122,6 +130,8 @@ namespace Outbridge.PyLite.Runtime.Values
             CheckOpen(ctx);
             if (data.Length == 0)
                 return 0;
+            if (Pos > long.MaxValue - data.Length)   // after seek(2**63-1)
+                throw Raise.Overflow(ctx, "new position too large");
             long end = Pos + data.Length;
             EnsureCapacity(ctx, end);
             ctx.Budget.ChargeLinear(data.Length);
@@ -171,9 +181,9 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             int start = (int)Pos;
             int limit = size < 0 || size > _len - start ? _len : start + (int)size;
-            ctx.Budget.ChargeLinear(limit - start);
             int nl = Array.IndexOf(_buf, (byte)'\n', start, limit - start);
             int stop = nl < 0 ? limit : nl + 1;
+            ctx.Budget.ChargeLinear(stop - start);   // what it scanned: the rest of the buffer per line was quadratic
             FailIfAtEnd(ctx, stop);
             var r = new byte[stop - start];
             Buffer.BlockCopy(_buf, start, r, 0, r.Length);

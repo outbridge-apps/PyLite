@@ -4,7 +4,7 @@ namespace Outbridge.PyLite.Runtime.Values
     // e.g. "count(1)"), instead of the generic "<name object>".
     internal interface IReprIterator
     {
-        void AppendRepr(BudgetStringBuilder sb, EvalContext ctx);
+        void AppendRepr(BudgetStringBuilder sb, EvalContext ctx, int depth);
     }
 
     // Result of iter(x); itself iterable with iter(it) is it. Hashable by identity.
@@ -37,7 +37,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (Types.TryGetValue(iterTypeName, out t))
                 _type = t;
             else if (Types.Count >= 1024)
-                _type = new ScriptTypeInfo(iterTypeName, slots);   // the cache outlives runs: never let it grow without end
+                _type = new ScriptTypeInfo(iterTypeName, slots);   // a backstop: names are the engine's, never a script's
             else
                 _type = Types.GetOrAdd(iterTypeName, n => new ScriptTypeInfo(n, slots));
         }
@@ -53,7 +53,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             IReprIterator r = Iterator as IReprIterator;
             if (r != null)
-                r.AppendRepr(sb, ctx);
+                r.AppendRepr(sb, ctx, depth);
             else
                 sb.Append("<" + IterTypeName + " object>");
         }

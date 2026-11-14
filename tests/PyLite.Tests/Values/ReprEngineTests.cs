@@ -159,7 +159,8 @@ namespace Outbridge.PyLite.Tests.Values
         {
             var ctx = Rt.Ctx();
             var big = ctx.Values.Int(BigInteger.Pow(10, 300000));
-            Assert.Throws<EngineAbort>(() => big.Repr(ctx));
+            var e = Assert.Throws<ScriptException>(() => big.Repr(ctx));   // CPython's ValueError, catchable: not a budget abort
+            Assert.Equal("ValueError", e.Value.ExcType.Name);
         }
     }
 }

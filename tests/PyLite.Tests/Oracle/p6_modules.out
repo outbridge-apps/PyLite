@@ -1,0 +1,108 @@
+iso OK datetime.IsoCalendarDate(year=2025, week=1, weekday=1)
+iso_week OK 1
+iso_repr OK 'datetime.IsoCalendarDate(year=2024, week=1, weekday=1)'
+strf_G OK '2025-01-1'
+strf_e OK ' 5'
+strf_colz OK '+05:30'
+strp_G OK datetime.datetime(2024, 1, 1, 0, 0)
+strp_sp OK datetime.datetime(2024, 1, 5, 0, 0)
+strp_sp2 OK datetime.datetime(1900, 1, 5, 0, 0)
+strp_colz OK datetime.datetime(1900, 1, 1, 0, 0, tzinfo=datetime.timezone(datetime.timedelta(seconds=19800)))
+csv_empty OK '""\r\n'
+csv_empty2 OK ',\r\n'
+csv_nonnum OK '1.5,1/2,True,"x",2\r\n'
+csv_eof OK [['a', 'b']]
+csv_eof_strict Error unexpected end of data
+dec_00 InvalidOperation [<class 'decimal.DivisionUndefined'>]
+dec_10 DivisionByZero [<class 'decimal.DivisionByZero'>]
+dec_pow00 InvalidOperation [<class 'decimal.InvalidOperation'>]
+dec_neg0 OK Decimal('0')
+dec_negneg0 OK Decimal('0')
+dec_float_neg0 OK -0.0
+dec_tuple OK Decimal('-1.4')
+dec_floordiv0 InvalidOperation [<class 'decimal.DivisionUndefined'>]
+dec_mod0 InvalidOperation [<class 'decimal.InvalidOperation'>]
+et_star1 OK [('a', '1'), ('b', '2'), ('c', None)]
+et_b2 OK [('b', '4')]
+et_last OK [('b', '4'), ('b', '5')]
+et_desc2 OK [('b', '4')]
+et_dslash OK [('a', '1'), ('b', '2'), ('a', '3'), ('b', '4'), ('c', None), ('b', '5')]
+et_root SyntaxError cannot use absolute path on element
+et_zero SyntaxError XPath position >= 1 expected
+et_attr1 OK []
+et_insert OK ['a', 'c', 'b']
+fmt_bool OK '    1'
+fmt_bool2 OK 'True'
+fmt_bool3 OK '0'
+fmt_bool4 OK '    1'
+round_none OK 2
+round_none2 OK 7
+int_b OK 12
+int_b2 OK 18
+float_b OK 1.5
+ord_b OK 97
+float_ar OK 1.5
+int_ar OK 12
+pct_map TypeError not enough arguments for format string
+pct_list OK 'abc'
+pct_list2 OK 'abc'
+pct_dict OK 'abc'
+title_astral OK '𐐀𐐩 X'
+swap_astral OK '𐐨𐐀'
+mangle OK (1, True)
+union_isinst OK True
+union_isinst2 OK False
+slice_hash OK True
+slice_dict OK 1
+frozen FrozenInstanceError cannot assign to field 'x'
+match_deque OK (1, 2)
+re_w_comb OK ['e', '²', 'Ⅰ']
+re_s OK ['\x1c', '\x1d', '\x1e', '\x1f', '\x85']
+re_z OK True
+json_mixed TypeError '<' not supported between instances of 'str' and 'int'
+b64_str TypeError a bytes-like object is required, not 'str'
+b16_lower Error Non-base16 digit found
+hmac_nodig TypeError Missing required argument 'digestmod'.
+cmp_digest TypeError a bytes-like object is required, not 'str'
+fromiso_sp ValueError Invalid isoformat string: '2024-01-02 '
+parse_qsl_none ValueError Separator must be of type string or bytes.
+b64_pad OK b'abc'
+b64_pad2 OK b'abc'
+intstr ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit
+hexbig OK 5003
+replace_big OverflowError Python int too large to convert to C ssize_t
+fromhex_zeros OK 1.0
+dt_strftime_Z OK 'UTC'
+hmean_one OK 5
+hmean_zero OK 0
+log_base1 ZeroDivisionError division by zero
+floor_str TypeError must be real number, not str
+trunc_str TypeError type str doesn't define __trunc__ method
+ceil_str TypeError must be real number, not str
+sqrt_ninf ValueError expected a nonnegative input, got -inf
+log2_frac OK -2.0
+rb_quote OK b"a\\'b"
+bad_lookbehind_grp OK re.compile('(a)(?<=\\1)b')
+re_global_late PatternError global flags not at the start of the expression at position 1
+re_range PatternError bad character range z-a at position 1
+re_cat_range PatternError bad character range \d-z at position 1
+re_redef PatternError redefinition of group name 'a' as group 2; was group 1 at position 12
+re_unknown_grp PatternError unknown group name 'b' at position 4
+re_ext PatternError unknown extension ?Q at position 1
+re_multi PatternError unbalanced parenthesis at position 3 (line 2, column 2)
+re_open_ref PatternError cannot refer to an open group at position 2
+re_octal PatternError octal escape value \777 outside of range 0-0o377 at position 0
+re_incomplete PatternError incomplete escape \x4 at position 0
+re_N PatternError undefined character name 'NOPE' at position 0
+re_flags PatternError unknown extension ?z at position 1
+re_onoff PatternError bad inline flags: flag turned on and off at position 5
+re_comment OK 'a(?#x(y)b'
+re_comment2 PatternError missing ), unterminated comment at position 1
+re_attrs2 OK ('missing ), unterminated subpattern', 3, 2, 1, 'missing ), unterminated subpattern at position 3 (line 2, column 1)')
+dt_iso 2024-01-02  ValueError Invalid isoformat string: '2024-01-02 '
+dt_iso 2024-01-02T ValueError Invalid isoformat string: '2024-01-02T'
+dt_iso 2024-01-02 10 OK datetime.datetime(2024, 1, 2, 10, 0)
+dt_iso 2024-01-02T10:30 OK datetime.datetime(2024, 1, 2, 10, 30)
+star_sub OK ('a', 'b', 'c', 'a')
+star_sub_set OK 'z'
+radix_lits OK (735, 735, 735, 0, 0)

@@ -70,7 +70,7 @@ namespace Outbridge.PyLite.Tests.Hosting
             yield return new object[] { "int-pow", "x = 10 ** 5000000\n" };
             yield return new object[] { "pow-chain", "x = 2\nwhile True:\n    x = x * x\n" };
             yield return new object[] { "str-of-bigint", "x = 10 ** 700000\ns = str(x)\n" };
-            yield return new object[] { "int-of-str", "s = '9' * 2000000\nx = int(s)\n" };
+            yield return new object[] { "int-of-str", "s = 'f' * 2000000\nx = int(s, 16)\n" };   // base 16: no 4,300-digit limit ends it first
             yield return new object[] { "factorial", "import math\nx = math.factorial(500000)\n" };
             yield return new object[] { "str-repeat-upper", "s = 'abc' * 1000000\nt = s.upper()\n" };
             yield return new object[] { "str-split", "s = 'a,' * 2000000\nt = s.split(',')\n" };

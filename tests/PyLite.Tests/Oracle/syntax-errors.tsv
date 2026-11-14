@@ -1,0 +1,563 @@
+# id	source (Python unicode_escape)	CPython 3.14.2: OK, or type	line	col	message
+s001	x = 'abc	SyntaxError	1	5	unterminated string literal (detected at line 1)
+s002	x = "abc\ny = 1	SyntaxError	1	5	unterminated string literal (detected at line 1)
+s003	x = '''abc	SyntaxError	1	5	unterminated triple-quoted string literal (detected at line 1)
+s004	x = 1\ny = """abc\n\nz = 2	SyntaxError	2	5	unterminated triple-quoted string literal (detected at line 4)
+s005	x = 1 \\ 2	SyntaxError	1	8	unexpected character after line continuation character
+s006	x = 1 \\	SyntaxError	1	8	unexpected EOF while parsing
+s007	x = 1 + \\\n	SyntaxError	1	10	unexpected EOF while parsing
+s008	x = $	SyntaxError	1	5	invalid syntax
+s009	x = a ? b	SyntaxError	1	7	invalid syntax
+s010	x = \u0060a\u0060	SyntaxError	1	5	invalid syntax
+s011	x = 1 ! 2	SyntaxError	1	7	invalid syntax
+s012	x = 0777	SyntaxError	1	5	leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers
+s013	x = 09	SyntaxError	1	5	leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers
+s014	x = 0_	SyntaxError	1	6	invalid decimal literal
+s015	x = 1_	SyntaxError	1	6	invalid decimal literal
+s016	x = 1__0	SyntaxError	1	6	invalid decimal literal
+s017	x = 0x	SyntaxError	1	6	invalid hexadecimal literal
+s018	x = 0xg	SyntaxError	1	6	invalid hexadecimal literal
+s019	x = 0o8	SyntaxError	1	7	invalid digit '8' in octal literal
+s020	x = 0b2	SyntaxError	1	7	invalid digit '2' in binary literal
+s021	x = 1e	SyntaxError	1	5	invalid decimal literal
+s022	x = 1e+	SyntaxError	1	7	invalid decimal literal
+s023	x = 1.e	SyntaxError	1	6	invalid decimal literal
+s024	x = 1_e5	SyntaxError	1	6	invalid decimal literal
+s025	x = 1.5_	SyntaxError	1	8	invalid decimal literal
+s026	x = 1j	OK
+s027	x = 123abc	SyntaxError	1	7	invalid decimal literal
+s028	x = 1.2.3	SyntaxError	1	8	invalid syntax
+s029	x = 0b	SyntaxError	1	6	invalid binary literal
+s030	x = 0o	SyntaxError	1	6	invalid octal literal
+s031	x = 1_000_	SyntaxError	1	10	invalid decimal literal
+s032	x = 0b1_	SyntaxError	1	8	invalid binary literal
+s033	x = 0x_	SyntaxError	1	7	invalid hexadecimal literal
+s034	x = 1if 1 else 2	OK
+s035	x = [0x1for x in y]	OK
+s036	x = 0 if 1else 2	OK
+s037	x = 1 in[1]	OK
+s038	\u20ac = 1	SyntaxError	1	1	invalid character '€' (U+20AC)
+s039	x = a\u00a0b	SyntaxError	1	6	invalid non-printable character U+00A0
+s040	x\u200b = 1	SyntaxError	1	2	invalid non-printable character U+200B
+s041	1x = 2	SyntaxError	1	1	invalid decimal literal
+s042	\U0001f600 = 1	SyntaxError	1	1	invalid character '😀' (U+1F600)
+s043	x = '\\N{FOO BAR}'	SyntaxError	1	5	(unicode error) 'unicodeescape' codec can't decode bytes in position 0-10: unknown Unicode character name
+s044	x = '\\N{'	SyntaxError	1	5	(unicode error) 'unicodeescape' codec can't decode bytes in position 0-2: malformed \N character escape
+s045	x = '\\x4'	SyntaxError	1	5	(unicode error) 'unicodeescape' codec can't decode bytes in position 0-2: truncated \xXX escape
+s046	x = '\\u12'	SyntaxError	1	5	(unicode error) 'unicodeescape' codec can't decode bytes in position 0-3: truncated \uXXXX escape
+s047	x = '\\U00110000'	SyntaxError	1	5	(unicode error) 'unicodeescape' codec can't decode bytes in position 0-9: illegal Unicode character
+s048	x = b'\\x4'	SyntaxError	1	5	(value error) invalid \x escape at position 0
+s049	x = b'\u00e9'	SyntaxError	1	5	bytes can only contain ASCII literal characters
+s050	x = 'abc' b'x'	SyntaxError	1	15	cannot mix bytes and nonbytes literals
+s051	x = b'x' 'y'	SyntaxError	1	13	cannot mix bytes and nonbytes literals
+s052	x = f'{}'	SyntaxError	1	8	f-string: valid expression required before '}'
+s053	x = f'{ }'	SyntaxError	1	9	f-string: valid expression required before '}'
+s054	x = f'}'	SyntaxError	1	7	f-string: single '}' is not allowed
+s055	x = f'{'	SyntaxError	1	8	f-string: expecting '}'
+s056	x = f'{x!}'	SyntaxError	1	10	f-string: missing conversion character
+s057	x = f'{x!z}'	SyntaxError	1	10	f-string: invalid conversion character 'z': expected 's', 'r', or 'a'
+s058	x = f'{=}'	SyntaxError	1	8	f-string: valid expression required before '='
+s059	x = f'{x:{y:{z:{w}}}}'	SyntaxError	1	15	f-string: expressions nested too deeply
+s060	x = f'{a b}'	SyntaxError	1	8	invalid syntax. Perhaps you forgot a comma?
+s061	x = f'{x)}'	SyntaxError	1	9	f-string: unmatched ')'
+s062	x = f'{x]}'	SyntaxError	1	9	f-string: unmatched ']'
+s063	x = f'{(x}'	SyntaxError	1	10	closing parenthesis '}' does not match opening parenthesis '('
+s064	x = f'{yield}'	SyntaxError	1	8	'yield' outside function
+s065	x = f'{*x}'	SyntaxError	1	8	can't use starred expression here
+s066	x = f'{x!r:{y}'	SyntaxError	1	15	f-string: expecting '}', or format specs
+s067	x = f'{#}'	SyntaxError	1	7	'{' was never closed
+s068	x = f'{x'	SyntaxError	1	9	f-string: expecting '}'
+s069	x = f'{!r}'	SyntaxError	1	8	f-string: valid expression required before '!'
+s070	x = f'{x!r=}'	SyntaxError	1	11	f-string: expecting ':' or '}'
+s071	x = f'{x:{'	SyntaxError	1	11	f-string: expecting '}'
+s072	x = f'{x}}'	SyntaxError	1	10	f-string: single '}' is not allowed
+s073	if x:\npass	IndentationError	2	1	expected an indented block after 'if' statement on line 1
+s074	  x = 1	IndentationError	1	2	unexpected indent
+s075	if x:\n    a\n  b	IndentationError	3	4	unindent does not match any outer indentation level
+s076	if x:\n\ta\n        b	TabError	3	1	inconsistent use of tabs and spaces in indentation
+s077	if x:\n \ta\n \tb	OK
+s078	def f():\n    x = 1\n   y = 2	IndentationError	3	9	unindent does not match any outer indentation level
+s079	for x in y:\n# c\nz	IndentationError	3	1	expected an indented block after 'for' statement on line 1
+s080	while 1:\n	IndentationError	1	9	expected an indented block after 'while' statement on line 1
+s081	class A:\nx=1	IndentationError	2	1	expected an indented block after class definition on line 1
+s082	try:\nx	IndentationError	2	1	expected an indented block after 'try' statement on line 1
+s083	x = (1 +	SyntaxError	1	5	'(' was never closed
+s084	x = [1, 2	SyntaxError	1	5	'[' was never closed
+s085	x = {1: 2	SyntaxError	1	5	'{' was never closed
+s086	x = )	SyntaxError	1	5	unmatched ')'
+s087	x = ]	SyntaxError	1	5	unmatched ']'
+s088	foo())	SyntaxError	1	6	unmatched ')'
+s089	(]	SyntaxError	1	2	closing parenthesis ']' does not match opening parenthesis '('
+s090	print 'x'	SyntaxError	1	1	Missing parentheses in call to 'print'. Did you mean print(...)?
+s091	x = 1 +	SyntaxError	1	8	invalid syntax
+s092	x =	SyntaxError	1	4	invalid syntax
+s093	= 1	SyntaxError	1	1	invalid syntax
+s094	if x = 1: pass	SyntaxError	1	4	invalid syntax. Maybe you meant '==' or ':=' instead of '='?
+s095	f(a b)	SyntaxError	1	3	invalid syntax. Perhaps you forgot a comma?
+s096	[1 2]	SyntaxError	1	2	invalid syntax. Perhaps you forgot a comma?
+s097	x = 1 2	SyntaxError	1	7	invalid syntax
+s098	def f(:	SyntaxError	1	7	invalid syntax
+s099	def f(a, a): pass	SyntaxError	1	10	duplicate argument 'a' in function definition
+s100	def f(a=1, b): pass	SyntaxError	1	12	parameter without a default follows parameter with a default
+s101	def f(*): pass	SyntaxError	1	7	named arguments must follow bare *
+s102	def f(**k, a): pass	SyntaxError	1	12	arguments cannot follow var-keyword argument
+s103	def f(/): pass	SyntaxError	1	7	invalid syntax
+s104	def f(a, /, b, /): pass	SyntaxError	1	16	/ may appear only once
+s105	def f(*a, /): pass	SyntaxError	1	11	/ must be ahead of *
+s106	def f(*, a, *b): pass	SyntaxError	1	13	* argument may appear only once
+s107	f(x for x in y, 1)	SyntaxError	1	3	Generator expression must be parenthesized
+s108	f(a=1, a=2)	SyntaxError	1	8	keyword argument repeated: a
+s109	f(a=1, 2)	SyntaxError	1	9	positional argument follows keyword argument
+s110	f(**k, *a)	SyntaxError	1	6	iterable argument unpacking follows keyword argument unpacking
+s111	f(**k, a)	SyntaxError	1	9	positional argument follows keyword argument unpacking
+s112	f(1=2)	SyntaxError	1	3	expression cannot contain assignment, perhaps you meant "=="?
+s113	f(a.b=1)	SyntaxError	1	3	expression cannot contain assignment, perhaps you meant "=="?
+s114	1 = x	SyntaxError	1	1	cannot assign to literal here. Maybe you meant '==' instead of '='?
+s115	f() = 1	SyntaxError	1	1	cannot assign to function call here. Maybe you meant '==' instead of '='?
+s116	a + b = 1	SyntaxError	1	1	cannot assign to expression here. Maybe you meant '==' instead of '='?
+s117	-a = 1	SyntaxError	1	1	cannot assign to expression here. Maybe you meant '==' instead of '='?
+s118	(a, 1) = x	SyntaxError	1	5	cannot assign to literal
+s119	[a, f()] = x	SyntaxError	1	5	cannot assign to function call
+s120	a, *b, *c = x	SyntaxError	1	1	multiple starred expressions in assignment
+s121	*a = x	SyntaxError	1	1	starred assignment target must be in a list or tuple
+s122	del 1	SyntaxError	1	5	cannot delete literal
+s123	del f()	SyntaxError	1	5	cannot delete function call
+s124	del *a	SyntaxError	1	5	cannot delete starred
+s125	del (a, *b)	SyntaxError	1	9	cannot delete starred
+s126	a, b += 1	SyntaxError	1	1	'tuple' is an illegal expression for augmented assignment
+s127	f() += 1	SyntaxError	1	1	'function call' is an illegal expression for augmented assignment
+s128	(a, b): int = 1	SyntaxError	1	1	only single target (not tuple) can be annotated
+s129	[a]: int	SyntaxError	1	1	only single target (not list) can be annotated
+s130	None = 1	SyntaxError	1	1	cannot assign to None
+s131	True = 1	SyntaxError	1	1	cannot assign to True
+s132	__debug__ = 1	SyntaxError	1	1	cannot assign to __debug__
+s133	def f(None): pass	SyntaxError	1	7	invalid syntax
+s134	for 1 in x: pass	SyntaxError	1	5	cannot assign to literal
+s135	for f() in x: pass	SyntaxError	1	5	cannot assign to function call
+s136	[x for 1 in y]	SyntaxError	1	8	cannot assign to literal
+s137	with a as 1: pass	SyntaxError	1	11	cannot assign to literal
+s138	with a as f(): pass	SyntaxError	1	11	cannot assign to function call
+s139	try:\n  pass\nexcept E as a.b:\n  pass	SyntaxError	3	13	cannot use except statement with attribute
+s140	import a as b.c	SyntaxError	1	13	cannot use attribute as import target
+s141	(a.b := 1)	SyntaxError	1	2	cannot use assignment expressions with attribute
+s142	(a[0] := 1)	SyntaxError	1	2	cannot use assignment expressions with subscript
+s143	(1 := 1)	SyntaxError	1	2	cannot use assignment expressions with literal
+s144	[i := 0 for i in x]	SyntaxError	1	2	assignment expression cannot rebind comprehension iteration variable 'i'
+s145	def f():\n  x = 1\n  global x	SyntaxError	3	3	name 'x' is assigned to before global declaration
+s146	def f(x):\n  global x	SyntaxError	2	3	name 'x' is parameter and global
+s147	nonlocal x	SyntaxError	1	1	nonlocal declaration not allowed at module level
+s148	def f():\n  nonlocal x	SyntaxError	2	3	no binding for nonlocal 'x' found
+s149	def f():\n  x = 1\n  def g():\n    global x\n    nonlocal x	SyntaxError	4	5	name 'x' is nonlocal and global
+s150	def f():\n  print(x)\n  global x	SyntaxError	3	3	name 'x' is used prior to global declaration
+s151	return	SyntaxError	1	1	'return' outside function
+s152	break	SyntaxError	1	1	'break' outside loop
+s153	continue	SyntaxError	1	1	'continue' not properly in loop
+s154	yield	SyntaxError	1	1	'yield' outside function
+s155	await x	SyntaxError	1	1	'await' outside function
+s156	async def f(): pass	OK
+s157	else: pass	SyntaxError	1	1	invalid syntax
+s158	elif x: pass	SyntaxError	1	1	invalid syntax
+s159	try: pass	SyntaxError	1	10	expected 'except' or 'finally' block
+s160	try:\n pass\nelse:\n pass	SyntaxError	3	1	expected 'except' or 'finally' block
+s161	try:\n pass\nexcept:\n pass\nexcept E:\n pass	SyntaxError	3	1	default 'except:' must be last
+s162	try:\n pass\nfinally:\n pass\nexcept:\n pass	SyntaxError	5	1	invalid syntax
+s163	try:\n pass\nexcept* E:\n pass	OK
+s164	if x pass	SyntaxError	1	6	invalid syntax
+s165	while x pass	SyntaxError	1	9	invalid syntax
+s166	for x in y pass	SyntaxError	1	12	invalid syntax
+s167	for x y: pass	SyntaxError	1	7	invalid syntax
+s168	def f() pass	SyntaxError	1	9	expected ':'
+s169	class A pass	SyntaxError	1	9	invalid syntax
+s170	if x:\n pass\nelse x:\n pass	SyntaxError	3	6	expected ':'
+s171	x = 1 if y	SyntaxError	1	5	expected 'else' after 'if' expression
+s172	x = 1 if y else	SyntaxError	1	16	expected expression after 'else', but statement is given
+s173	x = lambda x:	SyntaxError	1	14	invalid syntax
+s174	x = lambda (x): 1	SyntaxError	1	12	Lambda expression parameters cannot be parenthesized
+s175	x = [i for i in]	SyntaxError	1	16	invalid syntax
+s176	x = [for i in y]	SyntaxError	1	6	invalid syntax
+s177	x = {**a: 1}	SyntaxError	1	9	invalid syntax
+s178	x = {*a: 1}	SyntaxError	1	8	invalid syntax
+s179	x = {a: *b}	SyntaxError	1	9	cannot use a starred expression in a dictionary value
+s180	x = [*a for a in b]	SyntaxError	1	6	iterable unpacking cannot be used in comprehension
+s181	x = {**a for a in b}	SyntaxError	1	6	dict unpacking cannot be used in dict comprehension
+s182	x = (*a)	SyntaxError	1	6	cannot use starred expression here
+s183	print(*a for a in b)	SyntaxError	1	7	iterable unpacking cannot be used in comprehension
+s184	x = *a	SyntaxError	1	5	can't use starred expression here
+s185	def f():\n  return *a	SyntaxError	2	10	can't use starred expression here
+s186	assert x, y, z	SyntaxError	1	12	invalid syntax
+s187	raise x from	SyntaxError	1	13	invalid syntax
+s188	import	SyntaxError	1	7	Expected one or more names after 'import'
+s189	from x import	SyntaxError	1	14	Expected one or more names after 'import'
+s190	from x import *	OK
+s191	from . import x	OK
+s192	global	SyntaxError	1	7	invalid syntax
+s193	x.1	SyntaxError	1	2	invalid syntax
+s194	x.if	SyntaxError	1	3	invalid syntax
+s195	x..y	SyntaxError	1	3	invalid syntax
+s196	x[]	SyntaxError	1	3	invalid syntax
+s197	x[1:2:3:4]	SyntaxError	1	8	invalid syntax
+s198	f(,)	SyntaxError	1	3	invalid syntax
+s199	(,)	SyntaxError	1	2	invalid syntax
+s200	[,]	SyntaxError	1	2	invalid syntax
+s201	x = 1,,2	SyntaxError	1	7	invalid syntax
+s202	a = b c	SyntaxError	1	7	invalid syntax
+s203	print("a" "b" c)	SyntaxError	1	7	invalid syntax. Perhaps you forgot a comma?
+s204	x = not	SyntaxError	1	8	invalid syntax
+s205	x = a not b	SyntaxError	1	11	invalid syntax
+s206	x = a in not b	SyntaxError	1	10	invalid syntax
+s207	x = 1 < > 2	SyntaxError	1	9	invalid syntax
+s208	x <> y	SyntaxError	1	3	invalid syntax
+s209	x === y	SyntaxError	1	5	invalid syntax
+s210	x = !a	SyntaxError	1	5	invalid syntax
+s211	@\ndef f(): pass	SyntaxError	1	2	invalid syntax
+s212	@x\nx = 1	SyntaxError	2	1	invalid syntax
+s213	@x pass	SyntaxError	1	4	invalid syntax
+s214	match x:\n  case x:\n    pass\n  case 1:\n    pass	SyntaxError	2	8	name capture 'x' makes remaining patterns unreachable
+s215	match x:\n  case _:\n    pass\n  case 1:\n    pass	SyntaxError	2	8	wildcard makes remaining patterns unreachable
+s216	match x:\n  case [a, a]:\n    pass	SyntaxError	2	12	multiple assignments to name 'a' in pattern
+s217	match x:\n  case [a] | [b]:\n    pass	SyntaxError	2	8	alternative patterns bind different names
+s218	match x:\n  case {'a': 1, 'a': 2}:\n    pass	SyntaxError	2	8	mapping pattern checks duplicate key ('a')
+s219	match x:\n  case C(a=1, a=2):\n    pass	SyntaxError	2	17	attribute name repeated in class pattern: a
+s220	match x:\n  case 1 + 2:\n    pass	SyntaxError	2	12	imaginary number required in complex literal
+s221	match x:\n  case *a:\n    pass	SyntaxError	2	10	invalid syntax
+s222	match x:\n  case [*a, *b]:\n    pass	SyntaxError	2	8	multiple starred names in sequence pattern
+s223	match x:\n  case {**_}:\n    pass	SyntaxError	2	11	invalid syntax
+s224	match x:\n  case {**r, 'a': 1}:\n    pass	SyntaxError	2	14	invalid syntax
+s225	match x:\n  case x as _:\n    pass	SyntaxError	2	13	cannot use '_' as a target
+s226	match x:\n  case b'x':\n    pass	OK
+s227	match -1:\n  case _:\n    pass	OK
+s228	match b'x':\n  case _:\n    pass	OK
+s229	match x:\n  pass	SyntaxError	2	3	invalid syntax
+s230	match x:	IndentationError	1	9	expected an indented block after 'match' statement on line 1
+s231	match x:\n  case 1 if:\n    pass	SyntaxError	2	12	invalid syntax
+s232	match x:\n  case f'x':\n    pass	SyntaxError	2	8	patterns may only match literals and attribute lookups
+s233	match x:\n  case -x:\n    pass	SyntaxError	2	9	invalid syntax
+s234	match x:\n  case {a: 1}:\n    pass	SyntaxError	2	10	invalid syntax
+s235	match x:\n  case C(a=1, 2):\n    pass	SyntaxError	2	15	positional patterns follow keyword patterns
+s236	match ...:\n  case _:\n    pass	OK
+s237	match not x:\n  case _:\n    pass	OK
+s238	match *a, b:\n  case _:\n    pass	OK
+s239	match ~x:\n  case _:\n    pass	OK
+s240	match x:\n  case (a, b) | (b, a):\n    pass	OK
+s241	match x:\n  case [a, *_, a]:\n    pass	SyntaxError	2	16	multiple assignments to name 'a' in pattern
+s242	match x:\n  case {'k': a, **a}:\n    pass	SyntaxError	2	8	multiple assignments to name 'a' in pattern
+s243	match x:\n  case a | b:\n    pass	SyntaxError	2	8	name capture 'a' makes remaining patterns unreachable
+s244	match x:\n  case 1 | x:\n    pass	SyntaxError	2	8	alternative patterns bind different names
+s245	match x:\n  case (_ as a) as a:\n    pass	SyntaxError	2	8	multiple assignments to name 'a' in pattern
+s246	type X = int	OK
+s247	def f[T](x): pass	OK
+s248	class A[T]: pass	OK
+s249	x = 'a\\\nb' 'c	SyntaxError	2	4	unterminated string literal (detected at line 2)
+s250	x = u'x' b'y'	SyntaxError	1	14	cannot mix bytes and nonbytes literals
+s251	x = ub'x'	SyntaxError	1	5	'u' and 'b' prefixes are incompatible
+s252	x = fb'x'	SyntaxError	1	5	'b' and 'f' prefixes are incompatible
+s253	x = rr'x'	SyntaxError	1	7	invalid syntax
+s254	x = 1\x00	SyntaxError	None	None	source code string cannot contain null bytes
+s255	x = 1\n\ufeffy = 2	SyntaxError	2	1	invalid non-printable character U+FEFF
+s256	x = (1,\r\n2,\r\n	SyntaxError	1	5	'(' was never closed
+s257	x = (1,\r2,\r	SyntaxError	1	5	'(' was never closed
+s258	if 1:\n\x0c    pass\n  x	IndentationError	3	4	unindent does not match any outer indentation level
+s259	def f(a, b):\n    return a +\n	SyntaxError	2	15	invalid syntax
+s260	x = {\n  'a': 1,\n  'b' 2,\n}	SyntaxError	3	5	':' expected after dictionary key
+s261	x = [\n  1,\n  2\n  3,\n]	SyntaxError	3	3	invalid syntax. Perhaps you forgot a comma?
+s262	def f(\n  a,\n  b\n  c):\n  pass	SyntaxError	4	3	invalid syntax
+s263	x = (\n1 +\n	SyntaxError	1	5	'(' was never closed
+s264	s = '''\nabc\n	SyntaxError	1	5	unterminated triple-quoted string literal (detected at line 2)
+s265	x = 1\ny = (2\nz = 3\n	SyntaxError	2	5	'(' was never closed
+s266	if x:\n    y = [\n1,\n    2\n  ]\n   z = 1	IndentationError	6	9	unindent does not match any outer indentation level
+s267	class A:\n  def f(self):\n    return 1\n  return 2	SyntaxError	4	3	'return' outside function
+s268	x = 1;; y = 2	SyntaxError	1	7	invalid syntax
+s269	x = 1;\n;	SyntaxError	2	1	invalid syntax
+s270	lambda x=1, y: 0	SyntaxError	1	13	parameter without a default follows parameter with a default
+s271	lambda *: 0	SyntaxError	1	9	named arguments must follow bare *
+s272	lambda **k, a: 0	SyntaxError	1	13	arguments cannot follow var-keyword argument
+s273	def f(a, *, b, **c, d): pass	SyntaxError	1	21	arguments cannot follow var-keyword argument
+s274	x = {1: 2, 3}	SyntaxError	1	12	':' expected after dictionary key
+s275	x = {1, 2: 3}	SyntaxError	1	10	invalid syntax
+s276	f(*)	SyntaxError	1	4	Invalid star expression
+s277	f(**)	SyntaxError	1	5	invalid syntax
+s278	x = [1, 2, *]	SyntaxError	1	13	invalid syntax
+s279	x = a if b else c if d	SyntaxError	1	17	expected 'else' after 'if' expression
+s280	x = (yield)	SyntaxError	1	6	'yield' outside function
+s281	def f(): x = yield	OK
+s282	x: int: str = 1	SyntaxError	1	7	invalid syntax
+s283	x = 1 = 2	SyntaxError	1	5	cannot assign to literal
+s284	x += 1 = 2	SyntaxError	1	8	invalid syntax
+s285	a.b += c = d	SyntaxError	1	10	invalid syntax
+s286	with (a as b, c as d): pass	OK
+s287	with (a, b) as c: pass	OK
+s288	with a as b, : pass	SyntaxError	1	14	invalid syntax
+s289	with (yield) as x: pass	SyntaxError	1	7	'yield' outside function
+s290	for x in *a, b: pass	OK
+s291	for x in *a: pass	SyntaxError	1	10	can't use starred expression here
+s292	if x:\n  pass\n elif y:\n  pass	IndentationError	3	9	unindent does not match any outer indentation level
+s293	def f():\n\tif x:\n        pass	TabError	3	1	inconsistent use of tabs and spaces in indentation
+s294	x = 'abc' f'{x' 'y'	SyntaxError	1	19	f-string: expecting '}'
+s295	x = f'{"a" "b"}'	OK
+s296	x = f'{x:{y}}{'	SyntaxError	1	15	f-string: expecting '}'
+s297	x = f'''{\nx\n+}'''	SyntaxError	3	1	f-string: expecting '=', or '!', or ':', or '}'
+s298	x = f'{x:\\n}'	OK
+s299	x = f'{lambda: 1}'	SyntaxError	1	8	f-string: lambda expressions are not allowed without parentheses
+s300	x = f'{x:=1}'	OK
+s301	data = [1]\ndef g():\n    [(gg := x) for x in data]\n    global gg\n	SyntaxError	4	5	name 'gg' is assigned to before global declaration
+s302	data = [1]\ndef o():\n    gg = 0\n    def g():\n        [[(gg := x) for x in data] for y in data]\n        nonlocal gg\n	SyntaxError	6	9	name 'gg' is assigned to before nonlocal declaration
+s303	[(gg := 1) for x in []]\nglobal gg\n	OK
+s304	def g():\n    global gg\n    [(gg := 1) for x in []]\n	OK
+s305	match x:\n    case {1: a, 1.0: b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (1.0)
+s306	match x:\n    case {1: a, True: b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (True)
+s307	match x:\n    case {'a': 1, 'a': 2}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key ('a')
+s308	match x:\n    case {-1: a, -1.0: b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (-1.0)
+s309	match x:\n    case C(a=1, a=2):\n        pass\n	SyntaxError	2	19	attribute name repeated in class pattern: a
+s310	match x:\n    case [a, a]:\n        pass\n	SyntaxError	2	14	multiple assignments to name 'a' in pattern
+s311	match x:\n    case (a, b) | (b, c):\n        pass\n	SyntaxError	2	10	alternative patterns bind different names
+s312	match x:\n    case {0.5: a, 0.5: b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (0.5)
+s313	match x:\n    case {None: a, None: b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (None)
+s314	match x:\n    case {b'a': a, b'a': b}:\n        pass\n	SyntaxError	2	10	mapping pattern checks duplicate key (b'a')
+s315	try:\n    pass\nexcept E as (a):\n    pass\n	SyntaxError	3	14	cannot use except statement with name
+s316	try:\n    pass\nexcept E as x[0]:\n    pass\n	SyntaxError	3	13	cannot use except statement with subscript
+s317	try:\n    pass\nexcept E as x[0]\n    pass\n	SyntaxError	3	14	invalid syntax
+s318	try:\n    pass\nexcept E as a.b:\n    pass\n	SyntaxError	3	13	cannot use except statement with attribute
+s319	try:\n    pass\nexcept E as a b:\n    pass\n	SyntaxError	3	15	invalid syntax
+s320	try:\n    pass\nexcept E as 1:\n    pass\n	SyntaxError	3	13	cannot use except statement with literal
+s321	lambda x=: 0	SyntaxError	1	10	invalid syntax
+s322	lambda x=, y: 0	SyntaxError	1	9	expected default value expression
+s323	def f(a=): pass	SyntaxError	1	8	expected default value expression
+s324	def f(a=, b): pass	SyntaxError	1	8	expected default value expression
+s325	def f(a=: pass	SyntaxError	1	9	invalid syntax
+s326	def f(a= x y): pass	SyntaxError	1	10	invalid syntax. Perhaps you forgot a comma?
+s327	lambda (x): 0	SyntaxError	1	8	Lambda expression parameters cannot be parenthesized
+s328	lambda (x, y): 0	SyntaxError	1	8	Lambda expression parameters cannot be parenthesized
+s329	lambda (x, 1): 0	SyntaxError	1	8	invalid syntax
+s330	lambda (x=1): 0	SyntaxError	1	8	invalid syntax
+s331	lambda a, (x): 0	SyntaxError	1	11	Lambda expression parameters cannot be parenthesized
+s332	lambda ((x)): 0	SyntaxError	1	8	invalid syntax
+s333	lambda (): 0	SyntaxError	1	8	invalid syntax
+s334	def f((x)): pass	SyntaxError	1	7	Function parameters cannot be parenthesized
+s335	def f((x, y)): pass	SyntaxError	1	7	Function parameters cannot be parenthesized
+s336	def f((x, 1)): pass	SyntaxError	1	7	invalid syntax
+s337	def f((x=1)): pass	SyntaxError	1	7	invalid syntax
+s338	def f(a, (b)): pass	SyntaxError	1	10	Function parameters cannot be parenthesized
+s339	def f(()): pass	SyntaxError	1	7	invalid syntax
+s340	def f((*a)): pass	SyntaxError	1	7	invalid syntax
+s341	def f((x),): pass	SyntaxError	1	7	Function parameters cannot be parenthesized
+s342	lambda: yield	SyntaxError	1	9	invalid syntax
+s343	[yield x for x in y]	SyntaxError	1	2	invalid syntax
+s344	[yield]	SyntaxError	1	2	invalid syntax
+s345	{yield}	SyntaxError	1	2	invalid syntax
+s346	f(yield)	SyntaxError	1	3	invalid syntax
+s347	f(yield x)	SyntaxError	1	3	invalid syntax
+s348	x = yield	SyntaxError	1	5	'yield' outside function
+s349	x = yield 1	SyntaxError	1	5	'yield' outside function
+s350	x += yield	SyntaxError	1	6	'yield' outside function
+s351	yield	SyntaxError	1	1	'yield' outside function
+s352	(yield)	SyntaxError	1	2	'yield' outside function
+s353	(yield 1)	SyntaxError	1	2	'yield' outside function
+s354	print(yield)	SyntaxError	1	7	invalid syntax
+s355	a = [yield]	SyntaxError	1	6	invalid syntax
+s356	1 + yield	SyntaxError	1	5	invalid syntax
+s357	not yield	SyntaxError	1	5	invalid syntax
+s358	yield + 1	SyntaxError	1	1	'yield' outside function
+s359	def f():\n    lambda: yield\n	SyntaxError	2	13	invalid syntax
+s360	def f():\n    [yield x for x in y]\n	SyntaxError	2	6	invalid syntax
+s361	def f():\n    f(yield)\n	SyntaxError	2	7	invalid syntax
+s362	def f():\n    return yield\n	SyntaxError	2	12	invalid syntax
+s363	def f():\n    1 + yield\n	SyntaxError	2	9	invalid syntax
+s364	(a[0] := )	SyntaxError	1	7	invalid syntax
+s365	(a[0] := 1)	SyntaxError	1	2	cannot use assignment expressions with subscript
+s366	(1 := )	SyntaxError	1	4	invalid syntax
+s367	(1 := 2)	SyntaxError	1	2	cannot use assignment expressions with literal
+s368	(a.b := 1)	SyntaxError	1	2	cannot use assignment expressions with attribute
+s369	(a.b := )	SyntaxError	1	6	invalid syntax
+s370	x = (a := )	SyntaxError	1	11	invalid syntax
+s371	f(a[0] := 1)	SyntaxError	1	8	invalid syntax
+s372	(f() := )	SyntaxError	1	6	invalid syntax
+s373	[a[0] := ]	SyntaxError	1	7	invalid syntax
+s374	[x for x in y if a b]	SyntaxError	1	20	invalid syntax
+s375	(x for x in a b)	SyntaxError	1	15	invalid syntax
+s376	{x for x in a b}	SyntaxError	1	15	invalid syntax
+s377	f(x for x in a b)	SyntaxError	1	16	invalid syntax
+s378	x = [a for a in b c]	SyntaxError	1	19	invalid syntax
+s379	[a b for x in y]	SyntaxError	1	2	invalid syntax. Perhaps you forgot a comma?
+s380	[a for x in y z for w in v]	SyntaxError	1	15	invalid syntax
+s381	[x for x in (a b)]	SyntaxError	1	14	invalid syntax. Perhaps you forgot a comma?
+s382	f(a b)	SyntaxError	1	3	invalid syntax. Perhaps you forgot a comma?
+s383	[a b]	SyntaxError	1	2	invalid syntax. Perhaps you forgot a comma?
+s384	(a b)	SyntaxError	1	2	invalid syntax. Perhaps you forgot a comma?
+s385	{a b}	SyntaxError	1	2	invalid syntax. Perhaps you forgot a comma?
+s386	def f():\n    global x\n    x: int = 1\n	SyntaxError	3	5	annotated name 'x' can't be global
+s387	def f():\n    global x\n    x: int\n	SyntaxError	3	5	annotated name 'x' can't be global
+s388	def f():\n    x: int\n    global x\n	SyntaxError	3	5	annotated name 'x' can't be global
+s389	def f():\n    x: int = 1\n    global x\n	SyntaxError	3	5	annotated name 'x' can't be global
+s390	global x\nx: int = 1\n	OK
+s391	x: int\nglobal x\n	SyntaxError	2	1	annotated name 'x' can't be global
+s392	x: int = 1\nglobal x\n	SyntaxError	2	1	annotated name 'x' can't be global
+s393	def g():\n    x = 1\n    def f():\n        nonlocal x\n        x: int = 1\n	SyntaxError	5	9	annotated name 'x' can't be nonlocal
+s394	def g():\n    x = 1\n    def f():\n        x: int\n        nonlocal x\n	SyntaxError	5	9	annotated name 'x' can't be nonlocal
+s395	def f():\n    global x\n    (x): int = 1\n	OK
+s396	def f():\n    (x): int = 1\n    global x\n	SyntaxError	3	5	name 'x' is assigned to before global declaration
+s397	def f():\n    print(x)\n    x = 1\n    global x\n	SyntaxError	4	5	name 'x' is used prior to global declaration
+s398	def f():\n    x: int = 1\n    print(x)\n    global x\n	SyntaxError	4	5	name 'x' is used prior to global declaration
+s399	def f():\n    print(x)\n    x: int\n    global x\n	SyntaxError	4	5	name 'x' is used prior to global declaration
+s400	def f():\n    global x\n    x.a: int = 1\n	OK
+s401	def f(x):\n    x: int\n    global x\n	SyntaxError	3	5	name 'x' is parameter and global
+s402	def f():\n    global x\n    global x\n    x: int = 1\n	SyntaxError	4	5	annotated name 'x' can't be global
+s403	1._0\n	SyntaxError	1	2	invalid decimal literal
+s404	0._1\n	SyntaxError	1	2	invalid decimal literal
+s405	1._0e5\n	SyntaxError	1	2	invalid decimal literal
+s406	1._\n	SyntaxError	1	2	invalid decimal literal
+s407	1.0_1\n	OK
+s408	1_0.0_1\n	OK
+s409	1e1_0\n	OK
+s410	1.e5\n	OK
+s411	1_.0\n	SyntaxError	1	2	invalid decimal literal
+s412	1.0_\n	SyntaxError	1	4	invalid decimal literal
+s413	1._j\n	SyntaxError	1	2	invalid decimal literal
+s414	0x_1\n	OK
+s415	1.__class__\n	SyntaxError	1	2	invalid decimal literal
+s416	1 ._0\n	OK
+s417	(__debug__ := 1)\n	SyntaxError	1	2	cannot assign to __debug__
+s418	def f():\n    (__debug__ := 1)\n	SyntaxError	2	6	cannot assign to __debug__
+s419	[(__debug__ := 1) for y in z]\n	SyntaxError	1	3	cannot assign to __debug__
+s420	__debug__ = 1\n	SyntaxError	1	1	cannot assign to __debug__
+s421	f(__debug__=1)\n	SyntaxError	1	3	cannot assign to __debug__
+s422	def f(__debug__): pass\n	SyntaxError	1	7	cannot assign to __debug__
+s423	lambda __debug__: 1\n	SyntaxError	1	8	cannot assign to __debug__
+s424	import os as __debug__\n	SyntaxError	1	8	cannot assign to __debug__
+s425	from os import path as __debug__\n	SyntaxError	1	16	cannot assign to __debug__
+s426	for __debug__ in x: pass\n	SyntaxError	1	5	cannot assign to __debug__
+s427	with x as __debug__: pass\n	SyntaxError	1	11	cannot assign to __debug__
+s428	try:\n    pass\nexcept E as __debug__:\n    pass\n	SyntaxError	3	1	cannot assign to __debug__
+s429	def __debug__(): pass\n	SyntaxError	1	1	cannot assign to __debug__
+s430	class __debug__: pass\n	SyntaxError	1	1	cannot assign to __debug__
+s431	f(__debug__=1, __debug__=2)\n	SyntaxError	1	3	cannot assign to __debug__
+s432	f(a=1, a=2, __debug__=3)\n	SyntaxError	1	13	cannot assign to __debug__
+s433	def f(*, __debug__): pass\n	SyntaxError	1	10	cannot assign to __debug__
+s434	def f(**__debug__): pass\n	SyntaxError	1	9	cannot assign to __debug__
+s435	def f(*__debug__): pass\n	SyntaxError	1	8	cannot assign to __debug__
+s436	[x for __debug__ in y]\n	SyntaxError	1	8	cannot assign to __debug__
+s437	__debug__ += 1\n	SyntaxError	1	1	cannot assign to __debug__
+s438	del __debug__\n	SyntaxError	1	5	cannot delete __debug__
+s439	__debug__: int\n	SyntaxError	1	1	cannot assign to __debug__
+s440	x.__debug__ = 1\n	SyntaxError	1	1	cannot assign to __debug__
+s441	global __debug__\n	OK
+s442	print(__debug__)\n	OK
+s443	match x:\n    case __debug__:\n        pass\n	SyntaxError	2	10	cannot assign to __debug__
+s444	match x:\n    case [*__debug__]:\n        pass\n	SyntaxError	2	11	cannot assign to __debug__
+s445	import __debug__\n	SyntaxError	1	8	cannot assign to __debug__
+s446	from os import __debug__\n	SyntaxError	1	16	cannot assign to __debug__
+s447	import __debug__.x\n	SyntaxError	1	8	cannot assign to __debug__
+s448	match x:\n    case y as __debug__:\n        pass\n	SyntaxError	2	10	cannot assign to __debug__
+s449	match x:\n    case {**__debug__}:\n        pass\n	SyntaxError	2	10	cannot assign to __debug__
+s450	x.__debug__ += 1\n	SyntaxError	1	1	cannot assign to __debug__
+s451	del x.__debug__\n	SyntaxError	1	5	cannot delete __debug__
+s452	for x.__debug__ in y: pass\n	SyntaxError	1	5	cannot assign to __debug__
+s453	f(a=1, a=2, 3)\n	SyntaxError	1	14	positional argument follows keyword argument
+s454	f(a=1, a=2)\n	SyntaxError	1	8	keyword argument repeated: a
+s455	@d\ndef __debug__(): pass\n	SyntaxError	2	1	cannot assign to __debug__
+s456	@d\nclass __debug__: pass\n	SyntaxError	2	1	cannot assign to __debug__
+s457	def g():\n    def f():\n        x = 1\n        nonlocal x\n	SyntaxError	4	9	name 'x' is assigned to before nonlocal declaration
+s458	def g():\n    x = 1\n    def f():\n        print(x)\n        x = 1\n        nonlocal x\n	SyntaxError	6	9	name 'x' is used prior to nonlocal declaration
+s459	def g():\n    x = 1\n    def f():\n        x: int = 1\n        print(x)\n        nonlocal x\n	SyntaxError	6	9	name 'x' is used prior to nonlocal declaration
+s460	def f():\n    global x\n    nonlocal x\n	SyntaxError	2	5	name 'x' is nonlocal and global
+s461	0._\n	SyntaxError	1	2	invalid decimal literal
+s462	1..__class__\n	OK
+s463	y = 1._0 if a else b\n	SyntaxError	1	6	invalid decimal literal
+s464	1e1._0\n	OK
+s465	1.5._0\n	OK
+s466	x = 1.\n	OK
+s467	def f():\n    x: int\n    x = 1\n    global x\n	SyntaxError	4	5	annotated name 'x' can't be global
+s468	def f(a, a, __debug__): pass\n	SyntaxError	1	10	duplicate argument 'a' in function definition
+s469	def f(__debug__, __debug__): pass\n	SyntaxError	1	7	cannot assign to __debug__
+s470	lambda: (__debug__ := 1)\n	SyntaxError	1	10	cannot assign to __debug__
+s471	def f():\n    global x\n    x: int\n    x = 2\n	SyntaxError	3	5	annotated name 'x' can't be global
+s472	with a as (b, __debug__): pass\n	SyntaxError	1	15	cannot assign to __debug__
+s473	x, __debug__ = 1, 2\n	SyntaxError	1	4	cannot assign to __debug__
+s474	[*__debug__] = y\n	SyntaxError	1	3	cannot assign to __debug__
+s475	f(a=1, a=2, b=g(c=1, c=2))\n	SyntaxError	1	8	keyword argument repeated: a
+s476	f(a=1, a=2, b=(yield))\n	SyntaxError	1	8	keyword argument repeated: a
+s477	f(a=1, a=2, b=g(h=1, h=2), a=3)\n	SyntaxError	1	8	keyword argument repeated: a
+s478	match x:\n    case C(__debug__=1):\n        pass\n	SyntaxError	2	22	cannot assign to __debug__
+s479	match x:\n    case C(a=1, __debug__=[y]):\n        pass\n	SyntaxError	2	27	cannot assign to __debug__
+s480	match x:\n    case C(a=1, a=2, __debug__=3):\n        pass\n	SyntaxError	2	32	cannot assign to __debug__
+s481	match x:\n    case C(__debug__=1, y):\n        pass\n	SyntaxError	2	25	positional patterns follow keyword patterns
+s482	match x:\n    case C(__debug__=1, __debug__=2):\n        pass\n	SyntaxError	2	22	cannot assign to __debug__
+s483	match x:\n    case C(b=1, a=2, b=3, a=4):\n        pass\n	SyntaxError	2	24	attribute name repeated in class pattern: b
+s484	match x:\n    case C(a=1, __debug__=2, a=3):\n        pass\n	SyntaxError	2	27	cannot assign to __debug__
+s485	if x:	IndentationError	1	6	expected an indented block after 'if' statement on line 1
+s486	if x:\n	IndentationError	1	6	expected an indented block after 'if' statement on line 1
+s487	if x:\n\n	IndentationError	2	1	expected an indented block after 'if' statement on line 1
+s488	if x:\n\n\n	IndentationError	3	1	expected an indented block after 'if' statement on line 1
+s489	if x:  \n	IndentationError	1	8	expected an indented block after 'if' statement on line 1
+s490	if x: # c\n	IndentationError	1	10	expected an indented block after 'if' statement on line 1
+s491	if x:\n# c	IndentationError	2	4	expected an indented block after 'if' statement on line 1
+s492	if x:\n   # c\n	IndentationError	2	7	expected an indented block after 'if' statement on line 1
+s493	if x:\n\n# c\n\n	IndentationError	4	1	expected an indented block after 'if' statement on line 1
+s494	def f():\n    if x:	IndentationError	2	10	expected an indented block after 'if' statement on line 2
+s495	def f():\n    if x:\n	IndentationError	2	10	expected an indented block after 'if' statement on line 2
+s496	def f():\n    if x:\n\n	IndentationError	3	1	expected an indented block after 'if' statement on line 2
+s497	def f():\n    if x:\n    # c\n	IndentationError	3	8	expected an indented block after 'if' statement on line 2
+s498	def f():\n    if x:\n        # c\n	IndentationError	3	12	expected an indented block after 'if' statement on line 2
+s499	if 1:\n  while 2:\n	IndentationError	2	11	expected an indented block after 'while' statement on line 2
+s500	if 1:\n  while 2:   \n	IndentationError	2	14	expected an indented block after 'while' statement on line 2
+s501	class A:\n    def g(self):\n\n	IndentationError	3	1	expected an indented block after function definition on line 2
+s502	class A:\n    def g(self):\n	IndentationError	2	17	expected an indented block after function definition on line 2
+s503	while x:\nfoo()\n	IndentationError	2	1	expected an indented block after 'while' statement on line 1
+s504	def f():\n    if x:\n    y = 1\n	IndentationError	3	5	expected an indented block after 'if' statement on line 2
+s505	if x:\n  pass\nelse:	IndentationError	3	6	expected an indented block after 'else' statement on line 3
+s506	try:\n	IndentationError	1	5	expected an indented block after 'try' statement on line 1
+s507	with a:\n\n\n\n	IndentationError	4	1	expected an indented block after 'with' statement on line 1
+s508	while x:\n    # only a comment	IndentationError	2	21	expected an indented block after 'while' statement on line 1
+s509	if x:\r\n\r\n	IndentationError	2	1	expected an indented block after 'if' statement on line 1
+s510	\tpass\n pass\n	IndentationError	1	1	unexpected indent
+s511	\tpass\nx = 'abc\n	IndentationError	1	1	unexpected indent
+s512	 x = 1\n\tpass\n	IndentationError	1	1	unexpected indent
+s513	if 1:\n    a\n  b\n	IndentationError	3	4	unindent does not match any outer indentation level
+s514	a b\n pass\n	SyntaxError	1	3	invalid syntax
+s515	import a as b as c\n	SyntaxError	1	13	cannot use name as import target
+s516	import a as b c\n	SyntaxError	1	13	cannot use name as import target
+s517	import a as b; x = 1\n	OK
+s518	from m import (a as b as c)\n	SyntaxError	1	21	cannot use name as import target
+s519	import a as b if c\n	SyntaxError	1	13	expected 'else' after 'if' expression
+s520	match x:\n    case 1 as a.b:\n        pass\n	SyntaxError	2	15	cannot use attribute as pattern target
+s521	match x:\n    case 1 as a[0]:\n        pass\n	SyntaxError	2	16	invalid syntax
+s522	match x:\n    case 1 as (a):\n        pass\n	SyntaxError	2	16	cannot use name as pattern target
+s523	match x:\n    case 1 as 3:\n        pass\n	SyntaxError	2	15	cannot use literal as pattern target
+s524	f'{1 +}'\n	SyntaxError	1	6	f-string: expecting '=', or '!', or ':', or '}'
+s525	f'{a if}'\n	SyntaxError	1	6	f-string: expecting '=', or '!', or ':', or '}'
+s526	f'{1 + 2 *}'\n	SyntaxError	1	10	f-string: expecting '=', or '!', or ':', or '}'
+s527	f'{a.}'\n	SyntaxError	1	5	f-string: expecting '=', or '!', or ':', or '}'
+s528	f'{not}'\n	SyntaxError	1	4	f-string: expecting a valid expression after '{'
+s529	f'{-}'\n	SyntaxError	1	4	f-string: expecting a valid expression after '{'
+s530	f'{a +!r}'\n	SyntaxError	1	6	f-string: expecting '=', or '!', or ':', or '}'
+s531	f'{a + :x}'\n	SyntaxError	1	6	f-string: expecting '=', or '!', or ':', or '}'
+s532	[x, y for x in z]\n	SyntaxError	1	2	did you forget parentheses around the comprehension target?
+s533	{x, y for x in z}\n	SyntaxError	1	2	did you forget parentheses around the comprehension target?
+s534	(x, y for x in z)\n	SyntaxError	1	7	invalid syntax
+s535	x = (*)\n	SyntaxError	1	7	Invalid star expression
+s536	x = [*]\n	SyntaxError	1	7	Invalid star expression
+s537	x = {*}\n	SyntaxError	1	7	Invalid star expression
+s538	x = *,\n	SyntaxError	1	6	invalid syntax
+s539	x = (1, *)\n	SyntaxError	1	10	invalid syntax
+s540	f(a=)\n	SyntaxError	1	3	expected argument value expression
+s541	f(None=1)\n	SyntaxError	1	3	cannot assign to None
+s542	f(True=1)\n	SyntaxError	1	3	cannot assign to True
+s543	f(a=b=c)\n	SyntaxError	1	6	invalid syntax
+s544	def f(*a=1): pass\n	SyntaxError	1	9	var-positional argument cannot have default value
+s545	def f(**k=1): pass\n	SyntaxError	1	10	var-keyword argument cannot have default value
+s546	def f() -> : pass\n	SyntaxError	1	9	expected ':'
+s547	with (a as b c): pass\n	SyntaxError	1	12	invalid syntax. Perhaps you forgot a comma?
+s548	with (a b): pass\n	SyntaxError	1	7	invalid syntax. Perhaps you forgot a comma?
+s549	try:\n    pass\nfinally:\n    pass\nelse:\n    pass\n	SyntaxError	5	1	invalid syntax
+s550	try:\n    pass\nelse:\n    pass\n	SyntaxError	3	1	expected 'except' or 'finally' block
+s551	x = 1\x0b+ 2\n	SyntaxError	1	6	invalid non-printable character U+000B
+s552	x = 1\x1a\n	SyntaxError	1	6	invalid non-printable character U+001A
+s553	class C(a=1, b): pass\n	SyntaxError	1	15	positional argument follows keyword argument
+s554	class C(**k, *a): pass\n	SyntaxError	1	12	iterable argument unpacking follows keyword argument unpacking
+s555	class C(x for x in y): pass\n	SyntaxError	1	11	invalid syntax
+s556	class C(a=): pass\n	SyntaxError	1	9	expected argument value expression
+s557	class C(None=1): pass\n	SyntaxError	1	9	cannot assign to None
+s558	class C(a, a=1, a=2): pass\n	SyntaxError	1	17	keyword argument repeated: a
+s559	class C(**k, b): pass\n	SyntaxError	1	15	positional argument follows keyword argument unpacking
+s560	class C(a b): pass\n	SyntaxError	1	9	invalid syntax. Perhaps you forgot a comma?
+s561	class C(): pass\n	OK
+s562	class C(str, Enum): pass\n	OK

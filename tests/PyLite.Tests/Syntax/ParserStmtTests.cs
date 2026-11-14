@@ -50,7 +50,7 @@ namespace Outbridge.PyLite.Tests.Syntax
         public void SimpleShapes(string src, string expected) => Assert.Equal(expected, AstDump.OfModule(src));
 
         [Fact] public void BareExceptNotLast() => Assert.Equal("default 'except:' must be last", Err("try: a\nexcept: b\nexcept A: c"));
-        [Fact] public void ElseWithoutExcept() => Assert.Equal("'else' without 'except'", Err("try: a\nelse: b"));
+        [Fact] public void ElseWithoutExcept() => Assert.Equal("expected 'except' or 'finally' block", Err("try: a\nelse: b"));
         [Fact] public void TryWithoutHandler() => Assert.Equal("expected 'except' or 'finally' block", Err("try: a"));
 
         [Fact] public void ClassParses() => Assert.Equal("[(Class C)]", AstDump.OfModule("class C: pass"));
@@ -58,10 +58,12 @@ namespace Outbridge.PyLite.Tests.Syntax
         [Fact] public void WithLowersToTry() => Assert.Contains("(Try", AstDump.OfModule("with x: pass"));
         [Fact] public void AsyncWithForbidden() => Assert.Equal("async is not supported in this dialect", Err("async with x: pass"));
         [Fact] public void AsyncForbidden() => Assert.Equal("async is not supported in this dialect", Err("async def f(): pass"));
-        [Fact] public void AwaitForbidden() => Assert.Equal("await is not supported in this dialect", Err("await x"));
+        [Fact] public void AwaitOutsideFunction() => Assert.Equal("'await' outside function", Err("await x"));
+        [Fact] public void AwaitForbidden() => Assert.Equal("await is not supported in this dialect", Err("def f():\n    await x"));
         [Fact] public void DecoratedDef() => Assert.Equal("[(Def f @d [] [(Pass)])]", AstDump.OfModule("@d\ndef f(): pass"));
         [Fact] public void MultiDecoratedDef() => Assert.Equal("[(Def f @a @(Call b 1) [] [(Pass)])]", AstDump.OfModule("@a\n@b(1)\ndef f(): pass"));
-        [Fact] public void DecoratedClass() => Assert.Equal("[(Class C @d)]", AstDump.OfModule("@d\nclass C: pass"));
+        // A class decorator is computed before the class body (CPython's order), so it goes to a hidden variable first.
+        [Fact] public void DecoratedClass() => Assert.Equal("[(Assign [$cls1_decorator] d) (Class C @$cls1_decorator)]", AstDump.OfModule("@d\nclass C: pass"));
         [Fact] public void StarImportForbidden() => Assert.Equal("from ... import * is not supported in this dialect; import names explicitly", Err("from a import *"));
         [Fact] public void RelativeImportForbidden() => Assert.Equal("relative imports are not supported in this dialect", Err("from . import x"));
         [Fact] public void ParamAnnotationDiscarded() => Assert.Equal("[(Def f [x] [(Pass)])]", AstDump.OfModule("def f(x: int): pass"));

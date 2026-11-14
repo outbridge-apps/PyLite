@@ -52,6 +52,20 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal(expected, Body(body));
         }
 
+        // A defaultdict that is its own factory re-entered repr from C# at depth 0 for ever, and a chain of
+        // 100,000 of them took a C# frame each: a stack overflow killed the process. The factory is now
+        // walked like the items: a cycle through it prints "...", a chain prints in full.
+        [Fact]
+        public void AFactoryCycleOrChainReprsWithoutRecursion()
+        {
+            string body = "d = defaultdict(list)\nd.default_factory = d\n"
+                + "a = defaultdict(None)\nfor i in range(100000):\n    b = defaultdict(None)\n    b.default_factory = a\n    a = b\n"
+                + "s = repr(a)\n"
+                + "r = (repr(d), str(d), len(s), s[:40], repr(defaultdict(list, {1: 2})))";
+            Assert.Equal("('defaultdict(..., {})', 'defaultdict(..., {})', 1700021, 'defaultdict(defaultdict(defaultdict(defa', "
+                + "\"defaultdict(<class 'list'>, {1: 2})\")", Ev.Run(P + body, TestEngines.Unhurried).Repr("r"));
+        }
+
         [Theory]
         [InlineData("OrderedDict().popitem()", "KeyError")]
         [InlineData("OrderedDict([('a',1)]).move_to_end('z')", "KeyError")]

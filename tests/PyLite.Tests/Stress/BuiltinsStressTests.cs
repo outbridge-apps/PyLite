@@ -20,11 +20,10 @@ namespace Outbridge.PyLite.Tests.Stress
             return Assert.Throws<EngineAbort>(() => Ev.Run(src, lim));
         }
 
-        [Fact]  // quadratic int(str) parse dies on the step budget, not on time
-        public void HugeIntParseAbortsOnSteps()
+        [Fact]  // a power-of-two base packs bits: 400k bits fit a small step budget (the quadratic parse needed 10M)
+        public void HugeHexParseIsLinear()
         {
-            var ab = Abort("x = int('9' * 100000)\n", Steps(2_000_000));   // 332k bits: within MaxIntBits
-            Assert.Equal(EngineAbortKind.Steps, ab.Kind);
+            Ev.Run("x = int('f' * 100000, 16)\n", Steps(20_000));
         }
 
         [Fact]  // 8M bits read in one pass, then refused (a byte-at-a-time shift loop ran past the deadline)
@@ -37,9 +36,9 @@ namespace Outbridge.PyLite.Tests.Stress
         [Fact]  // more digits than MaxIntBits holds: refused by count, before the quadratic parse
         public void OverlongIntParseAbortsOnIntBits()
         {
-            var ab = Abort("x = int('9' * 1000000)\n");
+            var ab = Abort("x = int('f' * 1000000, 16)\n");   // base 16: no 4300-digit limit stops it first
             Assert.Equal("MaxIntBits", ab.LimitName);
-            Assert.InRange(ab.ActualValue, 3_321_000, 3_322_000);   // the estimate: 10**6 digits * log2(10)
+            Assert.InRange(ab.ActualValue, 3_999_000, 4_000_000);   // the estimate: 10**6 digits * 4 bits
         }
 
         [Fact]  // pre-estimated pow never allocates the giant result
@@ -79,7 +78,7 @@ namespace Outbridge.PyLite.Tests.Stress
         [Fact]  // print flood hits the output cap; script-level except cannot catch it
         public void PrintFloodAbortsOnOutput()
         {
-            var ab = Abort("while True:\n    print('x' * 1000)\n", Steps(100_000_000));
+            var ab = Abort("while True:\n    print('x' * 1000)\n", TestEngines.Unhurried.With(maxSteps: 100_000_000));
             Assert.True(ab.Kind == EngineAbortKind.OutputCap || ab.Kind == EngineAbortKind.Steps);
         }
 

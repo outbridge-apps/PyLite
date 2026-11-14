@@ -1,0 +1,33 @@
+map=[1, 2]
+map2=[1, 2]
+map_strict=[1, 2]
+map_next=[1, 2, 'dflt', 4]
+map_next_exc=(('s3',), 4, 5)
+map_nested=[1, 2]
+map_nested_resume=[[1, 2], [4, 5]]
+filter=[1, 2]
+filter_resume=[[1, 2], [4, 5]]
+filterfalse=[]
+takewhile=[1, 2]
+takewhile_resume=[[1, 2], [4, 5]]
+dropwhile=[1, 2, 3, 4, 5]
+dropwhile_resume=[[], []]
+accumulate=[1, 3]
+accumulate_resume=[[1, 3], [7, 12]]
+starmap=[1, 2]
+starmap_resume=[[1, 2], [4]]
+groupby=[1, 2]
+for_map=[1, 2]
+sum_map=3
+zip_map=[(1, 1), (2, 2)]
+in_map=False
+unpack_map=[1, 2]
+genexp_map=[1, 2]
+map_genexp=[1, 2]
+genexp_nested=[1, 2]
+map_list_inner=[[1, 2], [7, 8]]
+map_next_inner=[]
+map_valueerr!ValueError:invalid literal for int() with base 10: 'x'
+filter_keyerr!KeyError:1
+map_subclass=[1]
+takewhile_sub=[1]

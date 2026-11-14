@@ -67,7 +67,7 @@ namespace Outbridge.PyLite.Modules
                 if (!_srcs[i].MoveNext(ctx, out item))
                 {
                     if (_strict)
-                        CheckStrict(ctx, i);
+                        CheckStrict(ctx, _srcs, i, "zip");
                     value = null;
                     return false;   // first exhausted source ends the zip (values already read are dropped)
                 }
@@ -78,13 +78,13 @@ namespace Outbridge.PyLite.Modules
         }
 
         // CPython strict diagnostics: source i (0-based) exhausted first mid-row.
-        private void CheckStrict(EvalContext ctx, int i)
+        internal static void CheckStrict(EvalContext ctx, IScriptIterator[] _srcs, int i, string f)
         {
             if (i > 0)
             {
                 string plural = i == 1 ? "argument 1" : "arguments 1-" + i;
                 throw Outbridge.PyLite.Runtime.Errors.Raise.ValueError(ctx,
-                    "zip() argument " + (i + 1) + " is shorter than " + plural);
+                    f + "() argument " + (i + 1) + " is shorter than " + plural);
             }
             // Argument 1 ended the row: any later source still holding items is longer.
             for (int j = 1; j < _srcs.Length; j++)
@@ -92,7 +92,7 @@ namespace Outbridge.PyLite.Modules
                 ScriptValue extra;
                 if (_srcs[j].MoveNext(ctx, out extra))
                     throw Outbridge.PyLite.Runtime.Errors.Raise.ValueError(ctx,
-                        "zip() argument " + (j + 1) + " is longer than argument 1");
+                        f + "() argument " + (j + 1) + " is longer than " + (j == 1 ? "argument 1" : "arguments 1-" + j));
             }
         }
     }
@@ -100,17 +100,21 @@ namespace Outbridge.PyLite.Modules
     internal sealed class MapIterator : ScriptIteratorBase
     {
         private readonly ScriptValue _fn;
-        private readonly IScriptIterator[] _srcs;
+        private readonly IScriptIterator _src;
 
-        internal MapIterator(ScriptValue fn, IScriptIterator[] srcs) { _fn = fn; _srcs = srcs; }
+        internal MapIterator(ScriptValue fn, IScriptIterator src)
+        {
+            _fn = fn;
+            _src = src;
+        }
 
+        // one iterable: per-element call via the arrayless hook
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
-            if (_srcs.Length == 1)
+            try
             {
-                // single-iterable map: per-element call via the arrayless hook (T2.2)
                 ScriptValue one;
-                if (!_srcs[0].MoveNext(ctx, out one))
+                if (!_src.MoveNext(ctx, out one))
                 {
                     value = null;
                     return false;
@@ -118,58 +122,139 @@ namespace Outbridge.PyLite.Modules
                 value = ctx.CallHook1(_fn, one);
                 return true;
             }
-            var items = new ScriptValue[_srcs.Length];
-            for (int i = 0; i < _srcs.Length; i++)
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (IsStop(e))
             {
-                ScriptValue item;
-                if (!_srcs[i].MoveNext(ctx, out item))
-                {
-                    value = null;
-                    return false;   // stop at the shortest source
-                }
-                items[i] = item;
+                return EndOnStop(ctx, e, out value);
             }
-            value = ctx.CallHook(_fn, items, Outbridge.PyLite.Runtime.Evaluator.KwArgs.Empty);
-            return true;
+        }
+    }
+
+    // map over several iterables. Its own class: a pull is MoveNext and this MoveNextCore, as for one iterable.
+    internal sealed class MapManyIterator : ScriptIteratorBase
+    {
+        private readonly ScriptValue _fn;
+        private readonly IScriptIterator[] _srcs;
+        private readonly bool _strict;   // map(strict=True), 3.14
+
+        internal MapManyIterator(ScriptValue fn, IScriptIterator[] srcs, bool strict)
+        {
+            _fn = fn;
+            _srcs = srcs;
+            _strict = strict;
+        }
+
+        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+        {
+            try
+            {
+                var items = new ScriptValue[_srcs.Length];
+                for (int i = 0; i < _srcs.Length; i++)
+                {
+                    ScriptValue item;
+                    if (!_srcs[i].MoveNext(ctx, out item))
+                    {
+                        if (_strict)
+                            ZipIterator.CheckStrict(ctx, _srcs, i, "map");
+                        value = null;
+                        return false;   // stop at the shortest source
+                    }
+                    items[i] = item;
+                }
+                value = ctx.CallHook(_fn, items, Outbridge.PyLite.Runtime.Evaluator.KwArgs.Empty);
+                return true;
+            }
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (IsStop(e))
+            {
+                return EndOnStop(ctx, e, out value);
+            }
         }
     }
 
     internal sealed class FilterIterator : ScriptIteratorBase
     {
-        private readonly ScriptValue _fn;   // null => identity predicate (truthiness)
+        private readonly ScriptValue _fn;
         private readonly IScriptIterator _src;
 
         private readonly bool _keepWhenTrue;   // false: itertools.filterfalse
 
-        internal FilterIterator(ScriptValue fn, IScriptIterator src, bool keepWhenTrue = true)
+        private FilterIterator(ScriptValue fn, IScriptIterator src, bool keepWhenTrue)
         {
             _fn = fn;
             _src = src;
             _keepWhenTrue = keepWhenTrue;
         }
 
+        // fn null: the items' own truth (filter(None, xs)).
+        internal static IScriptIterator Of(ScriptValue fn, IScriptIterator src, bool keepWhenTrue)
+        {
+            return fn == null ? (IScriptIterator)new TruthFilterIterator(src, keepWhenTrue) : new FilterIterator(fn, src, keepWhenTrue);
+        }
+
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
-            ScriptValue item;
-            while (_src.MoveNext(ctx, out item))
+            try
             {
-                bool truthy = _fn == null
-                    ? item.IsTruthy(ctx)
-                    : ctx.CallHook1(_fn, item).IsTruthy(ctx);
-                if (truthy == _keepWhenTrue)
+                ScriptValue item;
+                while (_src.MoveNext(ctx, out item))
                 {
-                    value = item;
-                    return true;
+                    if (ctx.CallHook1(_fn, item).IsTruthy(ctx) == _keepWhenTrue)
+                    {
+                        value = item;
+                        return true;
+                    }
                 }
+                value = null;
+                return false;
             }
-            value = null;
-            return false;
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (IsStop(e))
+            {
+                return EndOnStop(ctx, e, out value);
+            }
+        }
+    }
+
+    // filter(None, xs) and filterfalse(None, xs). The handler for a StopIteration out of an item's __bool__ is in
+    // TruthOrStop, off the frame that nests: in MoveNextCore it brought a chain of these to the stack guard at
+    // 160,000 levels, where it went past 200,000 without one (review 12, row 5).
+    internal sealed class TruthFilterIterator : ScriptIteratorBase
+    {
+        private readonly IScriptIterator _src;
+        private readonly bool _keepWhenTrue;
+
+        internal TruthFilterIterator(IScriptIterator src, bool keepWhenTrue)
+        {
+            _src = src;
+            _keepWhenTrue = keepWhenTrue;
+        }
+
+        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+        {
+            ScriptValue item = null;
+            bool keep = false, more = true;
+            while (more && !keep)
+            {
+                more = _src.MoveNext(ctx, out item) && Test(ctx, item, out keep);
+            }
+            value = keep ? item : null;
+            return keep;
+        }
+
+        // Its own frame: one more local in MoveNextCore brings 200,000 nested filters back to the stack guard.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private bool Test(EvalContext ctx, ScriptValue item, out bool keep)
+        {
+            bool truthy;
+            bool tested = TruthOrStop(ctx, item, out truthy);
+            keep = tested && truthy == _keepWhenTrue;
+            return tested;
         }
     }
 
     // reversed() over a live list: LIVE semantics (a shrunk list ends early without error).
-    internal sealed class ReversedListIterator : ScriptIteratorBase
+    internal sealed class ReversedListIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly ListValue _list;
         private int _index;
 
@@ -189,8 +274,10 @@ namespace Outbridge.PyLite.Modules
     }
 
     // reversed() over an immutable snapshot (tuple / str).
-    internal sealed class ReversedArrayIterator : ScriptIteratorBase
+    internal sealed class ReversedArrayIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly ScriptValue[] _items;
         private int _index;
 

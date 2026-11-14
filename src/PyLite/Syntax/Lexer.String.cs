@@ -10,6 +10,7 @@ namespace Outbridge.PyLite.Syntax
             _pos += triple ? 3 : 1;
             int contentStart = _pos;
             _sb.Clear();
+            _escapedQuote = false;
             while (true)
             {
                 char c = Cur;
@@ -23,8 +24,7 @@ namespace Outbridge.PyLite.Syntax
 
                 if (c == '\\')
                 {
-                    if (InFStringExpr)
-                        throw PySyntaxErrorException.Syntax("f-string expression part cannot include a backslash", _line, CurCol);
+                    _escapedQuote |= At(_pos + 1) == q;
                     if (raw)
                         AppendRawEscape(triple, line0, col0);
                     else
@@ -46,6 +46,7 @@ namespace Outbridge.PyLite.Syntax
             _pos += triple ? 3 : 1;
             int contentStart = _pos;
             var bytes = new System.Collections.Generic.List<byte>();
+            _escapedQuote = false;
             while (true)
             {
                 char c = Cur;
@@ -56,9 +57,28 @@ namespace Outbridge.PyLite.Syntax
                     _pos += close;
                     break;
                 }
+                _escapedQuote |= c == '\\' && At(_pos + 1) == q;
                 if (c == '\\' && !raw)
                 {
                     CookByteEscape(bytes, triple, line0, col0, contentStart);
+                    continue;
+                }
+                if (c == '\\' && At(_pos + 1) != '\0')
+                {
+                    // raw: the backslash stays, and the char after it (a quote or a newline too) never ends the literal
+                    AddByte(bytes, (byte)'\\', line0, col0);
+                    _pos++;
+                    c = Cur;
+                    if (c == '\n' || c == '\r')
+                    {
+                        AddByte(bytes, (byte)'\n', line0, col0);
+                        ConsumeNewline();
+                        continue;
+                    }
+                    if (c > 0x7F)
+                        throw PySyntaxErrorException.Syntax("bytes can only contain ASCII literal characters", line0, col0);
+                    AddByte(bytes, (byte)c, line0, col0);
+                    _pos++;
                     continue;
                 }
                 if (c == '\n' || c == '\r')
@@ -170,12 +190,13 @@ namespace Outbridge.PyLite.Syntax
 
         // The two errors every literal scanner reports first: end of input, and end of line inside a
         // single-quoted literal.
-        private void RequireLiteralChar(char c, bool triple, int line0, int col0)
+        private void RequireLiteralChar(char c, bool triple, int line0, int col0, string what = "string")
         {
-            if (c == '\0')
-                throw Unterminated(triple, line0, col0);
-            if (!triple && (c == '\n' || c == '\r'))
-                throw PySyntaxErrorException.Syntax("EOL while scanning string literal", line0, col0);
+            if (c != '\0' && (triple || (c != '\n' && c != '\r')))
+                return;
+            if (InFStringExpr && !triple)
+                throw PySyntaxErrorException.Syntax("f-string: expecting '}'", line0, col0);   // a quote in a field opens a string
+            throw Unterminated(triple, line0, col0, what);
         }
 
         // 1 or 3 when c closes the literal (the quote run to consume); 0 otherwise -- a lone quote inside a
@@ -315,11 +336,16 @@ namespace Outbridge.PyLite.Syntax
             _sb.Append(c);
         }
 
-        private PySyntaxErrorException Unterminated(bool triple, int line0, int col0)
+        // CPython's texts, naming the line the end was found on: for a triple-quoted literal the last line
+        // of the source (a final newline starts no line of its own).
+        private bool _escapedQuote;   // the literal being scanned has a backslash before its own quote
+
+        private PySyntaxErrorException Unterminated(bool triple, int line0, int col0, string what = "string")
         {
-            return triple
-                ? PySyntaxErrorException.Syntax("EOF in multi-line string", line0, col0)
-                : PySyntaxErrorException.Syntax("EOL while scanning string literal", line0, col0);
+            int detected = triple && _pos > 0 && _pos == _lineStart ? _line - 1 : _line;
+            return PySyntaxErrorException.Syntax("unterminated " + (triple ? "triple-quoted " : "") + what + " literal (detected at line "
+                + detected.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+                + (!triple && what == "string" && _escapedQuote ? "; perhaps you escaped the end quote?" : ""), line0, col0);
         }
 
         private static int HexVal(char c)

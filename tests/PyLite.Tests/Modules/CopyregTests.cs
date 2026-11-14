@@ -57,7 +57,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [Theory]
         [InlineData("import copyreg\ncopyreg.pickle(int, 5)\n", "TypeError")]
         [InlineData("import copyreg\ncopyreg.constructor(5)\n", "TypeError")]
-        [InlineData("import pickle\n", "ImportError")]
+        [InlineData("import pickle\n", "ModuleNotFoundError")]
         public void Errors(string src, string excType)
         {
             Assert.Equal(excType, Raises(src).Value.ExcType.Name);

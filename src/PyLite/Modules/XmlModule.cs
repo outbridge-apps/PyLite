@@ -21,15 +21,15 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["Element"] = ctx.Values.Type("Element", ElementCtor, null, null);
+            m["Element"] = ctx.Values.EngineType("xml.etree.ElementTree.Element", ElementCtor, null, null);
             m["SubElement"] = BuiltinFunctionValue.Make("SubElement", SubElement);
-            m["fromstring"] = BuiltinFunctionValue.Make("fromstring", FromString);
-            m["XML"] = BuiltinFunctionValue.Make("XML", FromString);
+            m["fromstring"] = BuiltinFunctionValue.Make("fromstring", Args.LeadKeywords("fromstring", FromString, 1, "text", "parser"));
+            m["XML"] = BuiltinFunctionValue.Make("XML", Args.LeadKeywords("XML", FromString, 1, "text", "parser"));
             m["tostring"] = BuiltinFunctionValue.Make("tostring", ToStringFn);
-            m["indent"] = BuiltinFunctionValue.Make("indent", Indent);
-            m["ElementTree"] = ctx.Values.Type("xml.etree.ElementTree.ElementTree", ElementTreeCtor, ElementTreeValue.TreeType, null);
-            m["iselement"] = BuiltinFunctionValue.Make("iselement", IsElement);
-            m["register_namespace"] = BuiltinFunctionValue.Make("register_namespace", RegisterNamespace);
+            m["indent"] = BuiltinFunctionValue.Make("indent", Args.LeadKeywords("indent", Indent, 1, "tree", "space", "level"));
+            m["ElementTree"] = ctx.Values.EngineType("xml.etree.ElementTree.ElementTree", Args.Signature("ElementTree", 2, ElementTreeCtor, "element", "file"), ElementTreeValue.TreeType, null);
+            m["iselement"] = BuiltinFunctionValue.Make("iselement", Args.BoundKeywords("iselement", 1, IsElement, "element"));
+            m["register_namespace"] = BuiltinFunctionValue.Make("register_namespace", Args.BoundKeywords("register_namespace", 2, RegisterNamespace, "prefix", "uri"));
             m["Comment"] = CommentFn;
             m["ProcessingInstruction"] = ProcessingInstructionFn;
             m["PI"] = ProcessingInstructionFn;
@@ -40,24 +40,161 @@ namespace Outbridge.PyLite.Modules
             return ctx.Values.Module("xml.etree.ElementTree", m);
         }
 
-        // ParseError carries `position` as CPython's does: the (line, column) the reader stopped at.
-        // `code` is expat's error number and has no counterpart here, so it is left absent rather than
-        // invented. The DTD refusal gets its own wording: the reader's own sentence advises setting an
-        // XmlReaderSettings property, which is addressed to whoever embeds the engine, not to the script.
-        private static ScriptException ParseFailed(EvalContext ctx, XmlException xe)
+        // ParseError carries `position` and `code` as CPython's does. The reader's sentence is mapped to the
+        // expat text and number of the same fault, and the column moved to where expat points (the `&` of a
+        // reference, the `<` of a second root). The DTD refusal keeps its own wording: the reader's sentence
+        // advises an XmlReaderSettings property, which is addressed to the host, not to the script.
+        private static ScriptException ParseFailed(EvalContext ctx, XmlException xe, string text)
         {
             // The reader leaves both at 0 for a failure it spots before positioning (the DTD refusal);
             // a position is meant to point somewhere, so it starts at the first character instead.
             int line = xe.LineNumber < 1 ? 1 : xe.LineNumber;
             int col = xe.LinePosition < 1 ? 0 : xe.LinePosition - 1;
-            string what = xe.Message.IndexOf("DTD is prohibited", StringComparison.Ordinal) >= 0
-                ? "DTD is prohibited in this environment"
-                : xe.Message;
+            string m = xe.Message;
+            if (m.IndexOf("DTD is prohibited", StringComparison.Ordinal) >= 0)
+                return PositionedError(ctx, "DTD is prohibited in this environment", line, col, 0);
+            if (m.StartsWith(TooManyAttributes, StringComparison.Ordinal))
+                return PositionedError(ctx, m, line, col, 0);   // the sandbox's own limit, in its own words
+            int lineAt = LineOffset(text, line);
+            int at = Math.Min(lineAt + col, text.Length);
+            string what;
+            int code;
+            if (Has(m, "does not match the end tag"))
+            {
+                what = "mismatched tag";
+                code = 7;
+            }
+            else if (Has(m, "Root element is missing"))
+            {
+                return AtEnd(ctx, text, "no element found", 3);
+            }
+            else if (Has(m, "Unexpected end of file"))
+            {
+                // the input ends inside a tag (unclosed token at its `<`) or between tags (no element found at the end)
+                int lt = text.LastIndexOf('<');
+                if (lt >= 0 && text.IndexOf('>', lt) < 0)
+                    return PositionedAt(ctx, text, lt, "unclosed token", 5);
+                return AtEnd(ctx, text, "no element found", 3);
+            }
+            else if (Has(m, "Reference to undeclared entity"))
+            {
+                what = "undefined entity";
+                code = 11;
+                col = Back(text, lineAt, at, '&') - lineAt;
+            }
+            else if (Has(m, "duplicate attribute"))
+            {
+                what = "duplicate attribute";
+                code = 8;
+            }
+            else if (Has(m, "multiple root elements"))
+            {
+                what = "junk after document element";
+                code = 9;
+                col = Back(text, lineAt, at, '<') - lineAt;
+            }
+            else if (Has(m, "invalid character") && at > lineAt && Back(text, lineAt, at, '&') + 1 < text.Length
+                && text[Back(text, lineAt, at, '&') + 1] == '#' && text.IndexOf(';', Back(text, lineAt, at, '&')) >= at - 1)
+            {
+                what = "reference to invalid character number";
+                code = 14;
+                col = Back(text, lineAt, at, '&') - lineAt;
+            }
+            else if (Has(m, "Data at the root level is invalid"))
+            {
+                if (at < text.Length && text[at] == '<')
+                {
+                    // a tag the reader stopped at: never closed, or closed and then the input ended inside its element
+                    if (text.IndexOf('>', at) < 0)
+                        return PositionedAt(ctx, text, at, "unclosed token", 5);
+                    return AtEnd(ctx, text, "no element found", 3);
+                }
+                // text outside the root: after an element it is junk, before any it is a syntax error
+                bool afterElement = text.LastIndexOf("/>", Math.Max(0, at - 1), StringComparison.Ordinal) >= 0
+                    || text.LastIndexOf("</", Math.Max(0, at - 1), StringComparison.Ordinal) >= 0;
+                what = afterElement ? "junk after document element" : "syntax error";
+                code = afterElement ? 9 : 2;
+            }
+            else
+            {
+                what = "not well-formed (invalid token)";
+                code = 4;
+                if (Has(m, "']]>' is not allowed"))
+                    col += 2;   // expat points at the `>`
+            }
+            return PositionedError(ctx, what, line, col, code);
+        }
+
+        // An error at a character offset: its line and column counted as the reader counts them.
+        private static ScriptException PositionedAt(EvalContext ctx, string text, int offset, string what, int code)
+        {
+            int line = 1, start = 0;
+            for (int i = 0; i < offset && i < text.Length; i++)
+            {
+                if (text[i] == '\n' || (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n')))
+                {
+                    line++;
+                    start = i + 1;
+                }
+            }
+            return PositionedError(ctx, what, line, offset - start, code);
+        }
+
+        private static ScriptException AtEnd(EvalContext ctx, string text, string what, int code)
+        {
+            int line = 1, start = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n' || (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n')))
+                {
+                    line++;
+                    start = i + 1;
+                }
+            }
+            return PositionedError(ctx, what, line, text.Length - start, code);
+        }
+
+        private static bool Has(string s, string part)
+        {
+            return s.IndexOf(part, StringComparison.Ordinal) >= 0;
+        }
+
+        // The offset of the first character of a 1-based line (CR LF, CR and LF each end one, as for the reader).
+        private static int LineOffset(string text, int line)
+        {
+            int i = 0;
+            for (int l = 1; l < line && i < text.Length; i++)
+            {
+                if (text[i] == '\n' || (text[i] == '\r' && (i + 1 >= text.Length || text[i + 1] != '\n')))
+                    l++;
+            }
+            return i;
+        }
+
+        // The last `c` at or before `at` on the line that starts at lineAt; `at` itself when there is none.
+        private static int Back(string text, int lineAt, int at, char c)
+        {
+            for (int i = Math.Min(at, text.Length - 1); i >= lineAt; i--)
+            {
+                if (text[i] == c)
+                    return i;
+            }
+            return at;
+        }
+
+        private static ScriptException PositionedError(EvalContext ctx, string what, int line, int col)
+        {
+            return PositionedError(ctx, what, line, col, 4);   // the Sources checks: an encoding or token fault
+        }
+
+        private static ScriptException PositionedError(EvalContext ctx, string what, int line, int col, int code)
+        {
             ScriptException ex = Raise.Make(ctx, PyExceptionTypes.XmlParseError,
                 what + ": line " + line + ", column " + col);
-            ex.Value.Data = new Dictionary<string, ScriptValue>(1, StringComparer.Ordinal)
+            ex.Value.Data = new Dictionary<string, ScriptValue>(2, StringComparer.Ordinal)
             {
                 ["position"] = ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Int(line), ctx.Values.Int(col) }),
+                ["code"] = ctx.Values.Int(code),
             };
             return ex;
         }
@@ -66,31 +203,45 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue ElementCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             Args.Between(ctx, args, "Element", 1, 2);
-            return BuildElement(ctx, args[0], args.Length == 2 ? args[1] : null, kw);
+            return BuildElement(ctx, args[0], args.Length == 2 ? args[1] : null, kw, "Element() argument 2");
         }
 
-        private static ElementValue BuildElement(EvalContext ctx, ScriptValue tag, ScriptValue attribArg, KwArgs kw)
+        // attribArg: the positional attrib, null when not given; `where` names it in the error, as CPython does.
+        private static ElementValue BuildElement(EvalContext ctx, ScriptValue tag, ScriptValue attribArg, KwArgs kw, string where)
         {
-            DictValue attrib = ctx.Values.Dict(4);
-            ScriptValue attribKw;
-            if (kw.TryGet("attrib", out attribKw))
+            DictValue attrib = null;   // none unless there are attributes, as CPython keeps none
+            // Element(tag, attrib={...}) spelled by keyword is the dict; after a positional one it is an attribute
+            // named 'attrib', as _elementtree merges the keywords into the dict it parsed
+            ScriptValue attribKw = null;
+            bool attribByName = attribArg == null && kw.TryGet("attrib", out attribKw);
+            if (attribByName)
             {
-                // Element(tag, attrib={...}) spelled by keyword is the dict, not an attribute named 'attrib'
-                if (attribArg != null && attribArg.Kind != ValueKind.None)
-                    throw Raise.TypeError(ctx, "Element() got multiple values for argument 'attrib'");
                 attribArg = attribKw;
+                where = null;
             }
-            if (attribArg != null && attribArg.Kind != ValueKind.None)
+            if (attribArg != null)
             {
+                // None is refused too: CPython takes only a dict here
                 DictValue src = attribArg as DictValue;
                 if (src == null)
-                    throw Raise.TypeError(ctx, "attrib must be a dict");
-                CopyAttribs(ctx, attrib, src);
+                {
+                    throw Raise.TypeError(ctx, where == null
+                        ? "attrib must be dict, not " + attribArg.PyTypeName
+                        : where + " must be dict, not " + (attribArg.Kind == ValueKind.None ? "None" : attribArg.PyTypeName));
+                }
+                if (src.Count > 0)
+                {
+                    attrib = ctx.Values.Dict(4);
+                    CopyAttribs(ctx, attrib, src);
+                }
             }
             for (int j = 0; j < kw.Count; j++)
             {
-                if (kw.NameAt(j) != "attrib")
-                    attrib.SetItem(ctx.Values.Str(kw.NameAt(j)), kw.ValueAt(j), ctx);
+                if (attribByName && kw.NameAt(j) == "attrib")
+                    continue;
+                if (attrib == null)
+                    attrib = ctx.Values.Dict(4);
+                attrib.SetItem(ctx.Values.Str(kw.NameAt(j)), kw.ValueAt(j), ctx);
             }
             return new ElementValue(UnQName(tag), attrib, ctx);   // a QName tag is stored as its text
         }
@@ -98,7 +249,7 @@ namespace Outbridge.PyLite.Modules
         private static void CopyAttribs(EvalContext ctx, DictValue dst, DictValue src)
         {
             var t = src.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
@@ -113,9 +264,11 @@ namespace Outbridge.PyLite.Modules
             ElementValue parent = args[0] as ElementValue;
             if (parent == null)
                 throw Raise.TypeError(ctx, "SubElement() argument 1 must be an Element");
-            ElementValue el = BuildElement(ctx, args[1], args.Length == 3 ? args[2] : null, kw);
+            ElementValue el = BuildElement(ctx, args[1], args.Length == 3 ? args[2] : null, kw, "SubElement() argument 3");
+            parent.Grow(ctx);   // the item cap, as append has it: SubElement used to pass it
+            ElementValue.Placing(ctx, el);
             parent.Children.Add(el);
-            parent.Version++;
+            parent.AppendedLeaf(ctx, el);   // just built: no children, in no list
             return el;
         }
 
@@ -136,6 +289,7 @@ namespace Outbridge.PyLite.Modules
                 if (root == null)
                     throw Raise.TypeError(ctx, "ElementTree() argument 'element' must be an Element, not " + el.PyTypeName);
             }
+            ctx.Values.ChargeObject(1);
             return new ElementTreeValue(root);
         }
 
@@ -174,7 +328,7 @@ namespace Outbridge.PyLite.Modules
                 int lvl = item.Value;
                 string own = "\n" + Repeat(ctx, space, lvl);
                 string child = own + space;
-                if (IsBlank(e.Text))
+                if (IsBlank(ctx, e.Text))
                     e.Text = ctx.Values.Str(child);
                 ElementValue last = null;
                 foreach (ScriptValue c in e.Children)
@@ -184,21 +338,28 @@ namespace Outbridge.PyLite.Modules
                         continue;
                     if (ce.Children.Count > 0)
                         stack.Push(new KeyValuePair<ElementValue, int>(ce, lvl + 1));
-                    if (IsBlank(ce.Tail))
+                    if (IsBlank(ctx, ce.Tail))
                         ce.Tail = ctx.Values.Str(child);
                     last = ce;
                 }
-                if (last != null && IsBlank(last.Tail))
+                if (last != null && IsBlank(ctx, last.Tail))
                     last.Tail = ctx.Values.Str(own);
-                e.Version++;
+                e.Changed(ctx);
             }
             return ctx.Values.None;
         }
 
-        private static bool IsBlank(ScriptValue text)
+        // `not text.strip()`, charged for what it reads: a blank 4M-char tail on 400 children leaked the runner
+        private static bool IsBlank(EvalContext ctx, ScriptValue text)
         {
             StrValue s = text as StrValue;
-            return s == null || s.Value.Trim().Length == 0;
+            if (s == null)
+                return true;
+            int i = 0;
+            while (i < s.Value.Length && PyUnicode.IsPythonSpace(s.Value[i]))
+                i++;
+            ctx.Budget.ChargeLinear(i);
+            return i == s.Value.Length;
         }
 
         // The indentation of one level: n copies of the space string, sized against the string cap before
@@ -208,11 +369,10 @@ namespace Outbridge.PyLite.Modules
             long total = (long)s.Length * n;
             if (total > ctx.Limits.MaxStrChars)
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxStrChars", ctx.Limits.MaxStrChars, total);
+            if (total == 0)
+                return "";   // an empty space string: a level of 2e9 was 2e9 appends of nothing, on no step
             ctx.Values.PreCharge(2 * total + 24);
-            var sb = new StringBuilder((int)total);
-            for (int i = 0; i < n; i++)
-                sb.Append(s);
-            return sb.ToString();
+            return new StringBuilder((int)total).Insert(0, s, n).ToString();
         }
 
         private static ScriptValue IsElement(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -230,9 +390,9 @@ namespace Outbridge.PyLite.Modules
             StrValue s = args[0] as StrValue;
             if (s != null)
                 return Parse(ctx, s.Value);
-            BytesValue b = args[0] as BytesValue;   // a UTF-8 document (the only encoding the sandbox decodes)
+            BytesValue b = args[0] as BytesValue;
             if (b != null)
-                return Parse(ctx, BytesCodec.Decode(ctx, b.Data, "utf-8", "strict"));
+                return Parse(ctx, DecodeDocument(ctx, b.Data));
             throw Raise.TypeError(ctx, "fromstring() argument must be str or bytes, not " + args[0].PyTypeName);
         }
 
@@ -240,6 +400,8 @@ namespace Outbridge.PyLite.Modules
 
         private static ElementValue Parse(EvalContext ctx, string text)
         {
+            if (text.Length > 0 && text[0] == '﻿')
+                text = text.Substring(1);   // expat skips a leading byte order mark
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -253,6 +415,7 @@ namespace Outbridge.PyLite.Modules
             };
             try
             {
+                CheckAttributeCounts(ctx, text);
                 using (var sr = new StringReader(text))
                 using (var reader = XmlReader.Create(sr, settings))
                 {
@@ -271,7 +434,12 @@ namespace Outbridge.PyLite.Modules
                                 Flush(ctx, ref last, tail, pending);
                                 ElementValue el = new ElementValue(ctx.Values.Str(MapTag(reader)), ReadAttribs(ctx, reader), ctx);
                                 if (stack.Count > 0)
+                                {
+                                    stack.Peek().Grow(ctx);
+                                    ElementValue.Placing(ctx, el);
                                     stack.Peek().Children.Add(el);
+                                    stack.Peek().Changed(ctx);
+                                }
                                 else
                                     root = el;
                                 if (!reader.IsEmptyElement)
@@ -300,14 +468,70 @@ namespace Outbridge.PyLite.Modules
                         }
                     }
                     if (root == null)
-                        throw Raise.Make(ctx, PyExceptionTypes.XmlParseError, "no element found");
+                        throw AtEnd(ctx, text, "no element found", 3);   // expat reports the end of the input
                     return root;
                 }
             }
             catch (XmlException xe)
             {
-                throw ParseFailed(ctx, xe);
+                throw ParseFailed(ctx, xe, text);
             }
+        }
+
+        // .NET's reader is quadratic in the attributes of one start tag, inside one call the budget cannot
+        // interrupt (400K namespace declarations ran past the deadline + 5 s). Expat has no such limit; a tag
+        // with more than this many attributes is refused before the reader sees it.
+        private const int MaxAttributesPerTag = 10000;
+        private const string TooManyAttributes = "too many attributes in one element";
+
+        private static void CheckAttributeCounts(EvalContext ctx, string text)
+        {
+            ctx.Budget.ChargeLinear(text.Length);
+            int line = 1, count = 0;
+            bool inTag = false;
+            char quote = '\0';
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\n')
+                    line++;
+                if (quote != '\0')
+                {
+                    if (c == quote)
+                        quote = '\0';
+                    continue;
+                }
+                if (!inTag)
+                {
+                    if (c != '<' || i + 1 >= text.Length)
+                        continue;
+                    char next = text[i + 1];
+                    if (next == '!' || next == '?')
+                        i = SkipMarkup(text, i) - 1;   // comment, CDATA, PI: no attributes, may hold '<' and quotes
+                    else if (next != '/')
+                    {
+                        inTag = true;
+                        count = 0;
+                    }
+                    continue;
+                }
+                if (c == '"' || c == '\'')
+                    quote = c;
+                else if (c == '>')
+                    inTag = false;
+                else if (c == '=' && ++count > MaxAttributesPerTag)
+                    throw new XmlException(TooManyAttributes + " (limit " + MaxAttributesPerTag + ")", null, line, 1);
+            }
+        }
+
+        // The index just past the comment, CDATA section or processing instruction starting at `at`.
+        private static int SkipMarkup(string text, int at)
+        {
+            string end = string.CompareOrdinal(text, at, "<!--", 0, 4) == 0 ? "-->"
+                : string.CompareOrdinal(text, at, "<![CDATA[", 0, 9) == 0 ? "]]>"
+                : text[at + 1] == '?' ? "?>" : ">";
+            int close = text.IndexOf(end, at + 2, StringComparison.Ordinal);
+            return close < 0 ? text.Length : close + end.Length;
         }
 
         private static void Flush(EvalContext ctx, ref ElementValue last, bool tail, StringBuilder pending)
@@ -340,7 +564,7 @@ namespace Outbridge.PyLite.Modules
 
         private static DictValue ReadAttribs(EvalContext ctx, XmlReader reader)
         {
-            DictValue attrib = ctx.Values.Dict(4);
+            DictValue attrib = null;   // none for an element without attributes, as CPython keeps none
             if (reader.HasAttributes && reader.MoveToFirstAttribute())
             {
                 do
@@ -350,6 +574,8 @@ namespace Outbridge.PyLite.Modules
                     string key = string.IsNullOrEmpty(reader.NamespaceURI)
                         ? reader.LocalName
                         : "{" + reader.NamespaceURI + "}" + reader.LocalName;
+                    if (attrib == null)
+                        attrib = ctx.Values.Dict(4);
                     attrib.SetItem(ctx.Values.Str(key), ctx.Values.Str(reader.Value), ctx);
                 }
                 while (reader.MoveToNextAttribute());

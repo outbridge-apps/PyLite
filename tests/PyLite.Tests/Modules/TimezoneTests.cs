@@ -53,10 +53,10 @@ namespace Outbridge.PyLite.Tests.Modules
         }
 
         [Fact]
-        public void RangeMessageHasTrailingPeriod()
+        public void RangeMessageNamesTheOffset()
         {
             string src = Prelude + "msg = ''\ntry:\n    timezone(timedelta(hours=24))\nexcept ValueError as e:\n    msg = str(e)\n";
-            Assert.Equal("'offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).'",
+            Assert.Equal("'offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)'",
                 Ev.Run(src).Repr("msg"));
         }
     }

@@ -1,4 +1,3 @@
-using System;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -14,7 +13,7 @@ namespace Outbridge.PyLite.Runtime.Values
         internal static readonly StrValue Empty = new StrValue("", true);
 
         public readonly string Value;
-        private long _hashCache = long.MinValue;       // "not computed" sentinel (R8)
+        private long _hashCache = long.MinValue;       // "not computed" sentinel
         private readonly bool _sharedNoHashCache;      // process-wide instances must not bake a seed in
 
         internal StrValue(string v) { Value = v; }
@@ -48,7 +47,7 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override bool EqualsLeafCore(ScriptValue other, EvalContext ctx, int depth)
         {
             StrValue o = other as StrValue;
-            return o != null && Value.Length == o.Value.Length && string.Equals(Value, o.Value, StringComparison.Ordinal);
+            return o != null && PyOps.StrEquals(Value, o.Value, ctx);
         }
 
         protected internal override bool TryCompareLeafCore(ScriptValue other, EvalContext ctx, int depth, out int cmp)
@@ -59,7 +58,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 cmp = 0;
                 return false;
             }
-            cmp = string.CompareOrdinal(Value, o.Value);
+            cmp = PyOps.StrCompare(Value, o.Value, ctx);
             return true;
         }
 
@@ -188,6 +187,8 @@ namespace Outbridge.PyLite.Runtime.Values
             int i = 0;
             while (i < s.Length)
             {
+                if ((i & 0xFFFE) == 0xFFFE && ctx != null)   // a char class lookup per char: 15M are a second
+                    ctx.Budget.CheckDeadlineAfterCall();
                 char c = s[i];
                 int cp;
                 int adv;
@@ -273,32 +274,15 @@ namespace Outbridge.PyLite.Runtime.Values
             sb.Append(cp.ToString("x" + width.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture));
         }
 
-        private static bool IsPrintable(int cp)
-        {
-            UnicodeCategory cat = cp <= 0xFFFF
-                ? CharUnicodeInfo.GetUnicodeCategory((char)cp)
-                : CharUnicodeInfo.GetUnicodeCategory(char.ConvertFromUtf32(cp), 0);
-            switch (cat)
-            {
-                case UnicodeCategory.Control:
-                case UnicodeCategory.Format:
-                case UnicodeCategory.Surrogate:
-                case UnicodeCategory.PrivateUse:
-                case UnicodeCategory.OtherNotAssigned:
-                case UnicodeCategory.LineSeparator:
-                case UnicodeCategory.ParagraphSeparator:
-                case UnicodeCategory.SpaceSeparator:
-                    return false;
-                default:
-                    return true;
-            }
-        }
+        private static bool IsPrintable(int cp) { return PyUnicodeClass.IsPrintable(cp); }   // Unicode 16, as repr in 3.14
     }
 
     // Iterates by UTF-16 code units; each element is a length-1 string (ASCII cache when possible).
     // reversed(str) walks the same string backwards (lazily: no array of the whole length).
-    internal sealed class StrIterator : ScriptIteratorBase
+    internal sealed class StrIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly StrValue _s;
         private readonly bool _reverse;
         private int _pos;   // forward: the next index; reverse: the count still to yield

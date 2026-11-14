@@ -208,7 +208,7 @@ for bad in (lambda: math.factorial(2.5), lambda: math.gcd(1.5, 2), lambda: math.
         pass
 
 # ---- float-precision helpers ----
-assert math.fsum([0.1] * 10) == 1.0 and sum([0.1] * 10) != 1.0 and math.fsum([]) == 0.0 and math.fsum([1e100, 1, -1e100]) == 1.0
+assert math.fsum([0.1] * 10) == 1.0 and sum([0.1] * 10) == 1.0 and math.fsum([]) == 0.0 and math.fsum([1e100, 1, -1e100]) == 1.0
 assert math.fsum([1, 2, 3]) == 6.0 and isinstance(math.fsum([1, 2]), float) and math.fsum(range(10)) == 45.0
 assert math.remainder(10, 3) == 1.0 and math.remainder(11, 3) == -1.0 and math.remainder(7.5, 2) == -0.5 and math.remainder(-10, 3) == -1.0
 assert math.remainder(5, inf) == 5.0 and math.remainder(2, 4) == 2.0 and math.remainder(6, 4) == -2.0

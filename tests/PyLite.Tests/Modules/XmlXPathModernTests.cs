@@ -31,8 +31,10 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("e = fromstring('<a><c/><b i=\"1\"/><c/><b i=\"2\"/></a>')\nr = e.find('b[2]').get('i')", "'2'")]
         // per-parent grouping: b[1] of EACH matched subtree node
         [InlineData("e = fromstring('<r><a><b i=\"1\"/><b i=\"2\"/></a><a><b i=\"3\"/></a></r>')\nr = [x.get('i') for x in e.findall('a/b[1]')]", "['1', '3']")]
-        // combined with attribute predicate: filter first, then position
-        [InlineData("e = fromstring('<a><b x=\"n\"/><b x=\"y\" i=\"1\"/><b x=\"y\" i=\"2\"/></a>')\nr = e.find(\"b[@x='y'][2]\").get('i')", "'2'")]
+        // a position counts the element among ALL its same-tag siblings (ElementPath), not the filtered ones
+        [InlineData("e = fromstring('<a><b x=\"n\"/><b x=\"y\" i=\"1\"/><b x=\"y\" i=\"2\"/></a>')\nr = e.find(\"b[@x='y'][2]\").get('i')", "'1'")]
+        // on the descendant axis too
+        [InlineData("e = fromstring('<a><b/><c><b i=\"2\"/><b i=\"3\"/></c></a>')\nr = [x.get('i') for x in e.findall('.//b[2]')]", "['3']")]
         // ---- namespaces= ----
         [InlineData("e = fromstring('<ns:a xmlns:ns=\"http://x\"><ns:b>v</ns:b></ns:a>')\nr = e.findtext('p:b', None, {'p': 'http://x'})", "'v'")]
         [InlineData("e = fromstring('<ns:a xmlns:ns=\"http://x\"><ns:b/></ns:a>')\nr = e.find('p:b', {'p': 'http://x'}).tag", "'{http://x}b'")]
@@ -46,8 +48,9 @@ namespace Outbridge.PyLite.Tests.Modules
         }
 
         [Theory]
-        [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('p:b', {'q': 'http://x'})", "KeyError")]
-        [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('.//b[1]')", "ValueError")]
+        [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('p:b', {'q': 'http://x'})", "SyntaxError")]   // CPython's "prefix 'p' not found in prefix map"
+        [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('b[0]')", "SyntaxError")]
+        [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('/b')", "SyntaxError")]
         [InlineData("e = fromstring('<a><b/></a>')\nx = e.find('b', [1, 2])", "TypeError")]
         public void Errors(string body, string excType)
         {

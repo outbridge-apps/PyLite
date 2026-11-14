@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime;
-using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 using Outbridge.PyLite.Modules.Support;
@@ -19,20 +18,20 @@ namespace Outbridge.PyLite.Modules
             {
                 ["from_iterable"] = BuiltinFunctionValue.Make("chain.from_iterable", ChainFromIterable),
             };
-            return ctx.Values.Type("itertools.chain", ChainCtor, null, statics);
+            return ctx.Values.EngineType("itertools.chain", Args.NoKeywords("chain", ChainCtor), null, statics);
         }
 
         private static ScriptValue ChainCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             IScriptIterator outer = PyOps.GetIterator(ctx.Values.Tuple((ScriptValue[])args.Clone()), ctx);
-            return ctx.Values.Iterator(new ChainIterator(outer), "itertools.chain");
+            return ctx.Values.EngineIterator(new ChainIterator(outer), "itertools.chain");
         }
 
         private static ScriptValue ChainFromIterable(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             Args.Exactly(ctx, args, "from_iterable", 1);
             IScriptIterator outer = IterArg(ctx, args[0]);
-            return ctx.Values.Iterator(new ChainIterator(outer), "itertools.chain");
+            return ctx.Values.EngineIterator(new ChainIterator(outer), "itertools.chain");
         }
 
         private static ScriptValue Accumulate(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -47,7 +46,7 @@ namespace Outbridge.PyLite.Modules
             ScriptValue ikw;
             if (kw.TryGet("initial", out ikw) && ikw.Kind != ValueKind.None)
                 initial = ikw;
-            return ctx.Values.Iterator(new AccumulateIterator(src, func, initial), "itertools.accumulate");
+            return ctx.Values.EngineIterator(new AccumulateIterator(src, func, initial), "itertools.accumulate");
         }
 
         private static ScriptValue Compress(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -55,21 +54,21 @@ namespace Outbridge.PyLite.Modules
             Args.Exactly(ctx, args, "compress", 2);
             IScriptIterator data = IterArg(ctx, args[0]);
             IScriptIterator sel = IterArg(ctx, args[1]);
-            return ctx.Values.Iterator(new CompressIterator(data, sel), "itertools.compress");
+            return ctx.Values.EngineIterator(new CompressIterator(data, sel), "itertools.compress");
         }
 
         private static ScriptValue DropWhile(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             Args.Unpack(ctx, args, "dropwhile", 2, 2);
             IScriptIterator src = IterArg(ctx, args[1]);
-            return ctx.Values.Iterator(new DropWhileIterator(args[0], src), "itertools.dropwhile");
+            return ctx.Values.EngineIterator(new DropWhileIterator(args[0], src), "itertools.dropwhile");
         }
 
         private static ScriptValue TakeWhile(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             Args.Unpack(ctx, args, "takewhile", 2, 2);
             IScriptIterator src = IterArg(ctx, args[1]);
-            return ctx.Values.Iterator(new TakeWhileIterator(args[0], src), "itertools.takewhile");
+            return ctx.Values.EngineIterator(new TakeWhileIterator(args[0], src), "itertools.takewhile");
         }
 
         private static ScriptValue FilterFalse(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
@@ -77,7 +76,7 @@ namespace Outbridge.PyLite.Modules
             Args.Unpack(ctx, args, "filterfalse", 2, 2);
             ScriptValue pred = args[0].Kind == ValueKind.None ? null : args[0];
             IScriptIterator src = IterArg(ctx, args[1]);
-            return ctx.Values.Iterator(new FilterIterator(pred, src, keepWhenTrue: false), "itertools.filterfalse");
+            return ctx.Values.EngineIterator(FilterIterator.Of(pred, src, false), "itertools.filterfalse");
         }
     }
 
@@ -112,17 +111,24 @@ namespace Outbridge.PyLite.Modules
                 value = _total;
                 return true;
             }
-            ScriptValue nxt;
-            if (!_src.MoveNext(ctx, out nxt))
+            try
             {
-                value = null;
-                return false;
+                ScriptValue nxt;
+                if (!_src.MoveNext(ctx, out nxt))
+                {
+                    value = null;
+                    return false;
+                }
+                _total = _func == null
+                    ? PyOps.BinaryOp(PyBinOp.Add, _total, nxt, ctx)
+                    : ctx.CallHook(_func, new[] { _total, nxt }, KwArgs.Empty);
+                value = _total;
+                return true;
             }
-            _total = _func == null
-                ? PyOps.BinaryOp(PyBinOp.Add, _total, nxt, ctx)
-                : ctx.CallHook(_func, new[] { _total, nxt }, KwArgs.Empty);
-            value = _total;
-            return true;
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (_func != null && IsStop(e))
+            {
+                return EndOnStop(ctx, e, out value);
+            }
         }
     }
 
@@ -131,6 +137,7 @@ namespace Outbridge.PyLite.Modules
     {
         private readonly IScriptIterator _outer;
         private IScriptIterator _cur;
+        private bool _dropped;   // the source ended or raised, or a member's iter() raised: CPython's chain drops its source
 
         internal ChainIterator(IScriptIterator outer) { _outer = outer; }
 
@@ -144,14 +151,45 @@ namespace Outbridge.PyLite.Modules
                         return true;
                     _cur = null;
                 }
-                ScriptValue nextIterable;
-                if (!_outer.MoveNext(ctx, out nextIterable))
+                ScriptValue nextIterable = null;
+                if (!_dropped)
+                {
+                    _dropped = true;   // stays so if the source raises
+                    _dropped = !_outer.MoveNext(ctx, out nextIterable);
+                }
+                if (_dropped)
+                {
+                    ctx.CaughtStop = null;   // chain took a member's stop as that member's end
+                    value = null;
+                    return false;
+                }
+                if (!Acquire(ctx, nextIterable))
                 {
                     value = null;
                     return false;
                 }
-                _cur = ItertoolsModule.IterArg(ctx, nextIterable);
             }
+        }
+
+        // The next member's iterator; false when its iter() raised StopIteration, which ends the chain (review 13,
+        // row 26). The handler is here, off the frame that nests.
+        private bool Acquire(EvalContext ctx, ScriptValue iterable)
+        {
+            bool got;
+            try
+            {
+                _cur = ItertoolsModule.IterArg(ctx, iterable);
+                got = true;
+            }
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e)
+            {
+                _dropped = true;
+                if (!IsStop(e))
+                    throw;
+                ScriptValue none;
+                got = EndOnStop(ctx, e, out none);
+            }
+            return got;
         }
     }
 
@@ -165,20 +203,18 @@ namespace Outbridge.PyLite.Modules
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
-            while (true)
+            // No local more than it had: nested ones go as deep as they did.
+            ScriptValue s;
+            bool keep = false;
+            value = null;
+            while (!keep && _data.MoveNext(ctx, out value) && _selectors.MoveNext(ctx, out s) && TruthOrStop(ctx, s, out keep))
             {
-                ScriptValue d, s;
-                if (!_data.MoveNext(ctx, out d) || !_selectors.MoveNext(ctx, out s))
-                {
-                    value = null;
-                    return false;
-                }
-                if (s.IsTruthy(ctx))
-                {
-                    value = d;
-                    return true;
-                }
             }
+            if (!keep)
+            {
+                value = null;
+            }
+            return keep;
         }
     }
 
@@ -194,30 +230,37 @@ namespace Outbridge.PyLite.Modules
 
         protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
         {
-            if (_dropping)
+            try
             {
-                while (true)
+                if (_dropping)
                 {
-                    ScriptValue v;
-                    if (!_src.MoveNext(ctx, out v))
+                    while (true)
                     {
-                        value = null;
-                        return false;
-                    }
-                    if (!ctx.CallHook1(_pred, v).IsTruthy(ctx))
-                    {
-                        _dropping = false;
-                        value = v;
-                        return true;
+                        ScriptValue v;
+                        if (!_src.MoveNext(ctx, out v))
+                        {
+                            value = null;
+                            return false;
+                        }
+                        if (!ctx.CallHook1(_pred, v).IsTruthy(ctx))
+                        {
+                            _dropping = false;
+                            value = v;
+                            return true;
+                        }
                     }
                 }
+                if (!_src.MoveNext(ctx, out value))
+                {
+                    value = null;
+                    return false;
+                }
+                return true;
             }
-            if (!_src.MoveNext(ctx, out value))
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (IsStop(e))
             {
-                value = null;
-                return false;
+                return EndOnStop(ctx, e, out value);
             }
-            return true;
         }
     }
 
@@ -237,21 +280,27 @@ namespace Outbridge.PyLite.Modules
                 value = null;
                 return false;
             }
-            ScriptValue v;
-            if (!_src.MoveNext(ctx, out v))
+            try
             {
+                ScriptValue v;
+                if (!_src.MoveNext(ctx, out v))
+                {
+                    value = null;   // only a false predicate ends it for good: a source that resumes is read again
+                    return false;
+                }
+                if (ctx.CallHook1(_pred, v).IsTruthy(ctx))
+                {
+                    value = v;
+                    return true;
+                }
                 _done = true;
                 value = null;
                 return false;
             }
-            if (ctx.CallHook1(_pred, v).IsTruthy(ctx))
+            catch (Outbridge.PyLite.Runtime.Errors.ScriptException e) when (IsStop(e))
             {
-                value = v;
-                return true;
+                return EndOnStop(ctx, e, out value);
             }
-            _done = true;
-            value = null;
-            return false;
         }
     }
 

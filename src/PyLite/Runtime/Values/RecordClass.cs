@@ -25,6 +25,13 @@ namespace Outbridge.PyLite.Runtime.Values
         internal readonly Dictionary<string, ScriptValue> Constants;          // own class attributes (NAME = value)
         private readonly long _identity;
 
+        // What a new class's own tables take: per slot its list entry and index entry, per annotated field
+        // its default; a class statement in a loop makes them again on every pass.
+        internal static void ChargeTables(EvalContext ctx, int slots, int annotated)
+        {
+            ctx.Values.PreCharge(160 + 64L * slots + 96L * annotated);
+        }
+
         internal RecordClassValue(string name, RecordClassValue baseCls, IReadOnlyList<string> allSlots,
             Dictionary<string, int> slotIndex, Dictionary<string, FunctionValue> methods, bool frozen,
             string[] matchArgs, IReadOnlyDictionary<string, FieldDefault> annotationDefaults,
@@ -41,7 +48,7 @@ namespace Outbridge.PyLite.Runtime.Values
             AnnotationDefaults = annotationDefaults;
             Dataclass = dataclass;
             _identity = identity;
-            _type = new ScriptTypeInfo(name, null);
+            _type = new ScriptTypeInfo(name, namedByScript: true);
         }
 
         // @dataclass returns a copy with the generated-behavior flags set (fields/methods/slots unchanged).
@@ -66,7 +73,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return null;
         }
 
-        // The protocol dunders, resolved once per class (P9): methods never change after the class is made,
+        // The protocol dunders, resolved once per class: methods never change after the class is made,
         // and a dunder cannot be assigned to a class afterwards (TrySetAttrCore), so neither can the answer.
         private static readonly string[] DunderNames =
         {
@@ -116,6 +123,21 @@ namespace Outbridge.PyLite.Runtime.Values
         // generated for the nearest dataclass (which takes precedence over a base's written __init__).
         // Both null: object.__init__.
         internal void ResolveInit(out FunctionValue written, out RecordClassValue generated)
+        {
+            if (!_initResolved)   // methods, bases and the dataclass spec never change after the class is made
+            {
+                ResolveInitUncached(out _initWritten, out _initGenerated);
+                _initResolved = true;
+            }
+            written = _initWritten;
+            generated = _initGenerated;
+        }
+
+        private bool _initResolved;
+        private FunctionValue _initWritten;
+        private RecordClassValue _initGenerated;
+
+        private void ResolveInitUncached(out FunctionValue written, out RecordClassValue generated)
         {
             for (RecordClassValue c = this; c != null; c = c.Base)
             {
@@ -214,6 +236,7 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             if (name.StartsWith("__", StringComparison.Ordinal) && name.EndsWith("__", StringComparison.Ordinal))
                 return false;
+            ctx.ClassAttrVersion++;   // it may shadow a method a call site keeps
             ctx.Values.PreCharge(48);
             Constants[name] = value;
             return true;
@@ -274,7 +297,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (Class.TryFindClassAttr(name, out k, out m))
             {
                 FunctionValue kf = k as FunctionValue;
-                value = m != null ? new BoundUserMethodValue(this, m) : kf != null ? new BoundUserMethodValue(this, kf) : k;
+                value = m != null ? ctx.Values.BoundUserMethod(this, m) : kf != null ? ctx.Values.BoundUserMethod(this, kf) : k;
                 return true;
             }
             if (name == "__match_args__")
@@ -303,11 +326,20 @@ namespace Outbridge.PyLite.Runtime.Values
                 throw NoAttr(name, ctx);
             }
             if (Class.Frozen)
-                throw Raise.Make(ctx, PyExceptionTypes.AttributeError, "cannot assign to field '" + name + "'");
+                throw Raise.Make(ctx, PyExceptionTypes.FrozenInstanceError, "cannot assign to field '" + name + "'");
             Slots[idx] = value;
         }
 
         internal void InitSlot(int idx, ScriptValue value) { Slots[idx] = value; }   // bypasses frozen (generated __init__)
+
+        // The generated __eq__, ordering and __hash__ read self.f: an unset field (field(init=False)) is the AttributeError.
+        private ScriptValue FieldValue(int i, EvalContext ctx)
+        {
+            ScriptValue v = Slots[i];
+            if (v == null)
+                throw NoAttr(Class.AllSlots[i], ctx);
+            return v;
+        }
 
         private ScriptException NoAttr(string name, EvalContext ctx)
         {
@@ -340,7 +372,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 for (int i = 0; i < Slots.Length; i++)
                 {
                     if (Participates(i, FieldRole.Hash))
-                        items.Add(Slots[i] ?? ctx.Values.None);
+                        items.Add(FieldValue(i, ctx));
                 }
                 // A field that is itself a record re-enters the engine one level down, so a deep chain
                 // is a RecursionError at MaxDataDepth and not a walk down the C# stack.
@@ -399,7 +431,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 return false;
             for (int i = 0; i < Slots.Length; i++)
             {
-                if (Participates(i, FieldRole.Compare) && !PyOps.Equals(Slots[i], o.Slots[i], ctx, depth + 1))
+                if (Participates(i, FieldRole.Compare) && !PyOps.Equals(FieldValue(i, ctx), o.FieldValue(i, ctx), ctx, depth + 1))
                     return false;
             }
             return true;
@@ -430,11 +462,22 @@ namespace Outbridge.PyLite.Runtime.Values
                 cmp = 0;
                 return false;
             }
+            // CPython builds both field tuples before comparing: an unset field raises even after an unequal one
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                if (Participates(i, FieldRole.Compare))
+                    FieldValue(i, ctx);
+            }
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                if (Participates(i, FieldRole.Compare))
+                    o.FieldValue(i, ctx);
+            }
             for (int i = 0; i < Slots.Length; i++)
             {
                 if (!Participates(i, FieldRole.Compare))
                     continue;
-                ScriptValue a = Slots[i] ?? ctx.Values.None, b = o.Slots[i] ?? ctx.Values.None;
+                ScriptValue a = Slots[i], b = o.Slots[i];
                 if (!PyOps.Equals(a, b, ctx, depth + 1))
                 {
                     cmp = PyOps.RichCompare(PyCmpOp.Lt, a, b, ctx, depth + 1).IsTruthy(ctx) ? -1 : 1;
@@ -445,7 +488,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        // --- user-defined protocol methods (extended 2026-09-11) ----
+        // --- user-defined protocol methods ----
         // Every one of these dispatches through CallHook, which charges the budget and probes the stack,
         // so script code reached from inside an engine walk is bounded like any other call.
 
@@ -582,20 +625,18 @@ namespace Outbridge.PyLite.Runtime.Values
         }
 
         // __next__ drives this until it raises StopIteration. ScriptIteratorBase charges the step and
-        // probes the stack per element.
+        // probes the stack per element. Asked again after its end, it asks __next__ again, as CPython's
+        // filter or map over the object does (review 13, row 30).
         private sealed class RecordIterator : ScriptIteratorBase
         {
             private readonly RecordInstanceValue _self;
             private readonly FunctionValue _next;
-            private bool _done;
 
             internal RecordIterator(RecordInstanceValue self, FunctionValue next) { _self = self; _next = next; }
 
             protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
             {
                 value = null;
-                if (_done)
-                    return false;
                 try
                 {
                     value = ctx.CallHook1(_next, _self);
@@ -603,7 +644,6 @@ namespace Outbridge.PyLite.Runtime.Values
                 }
                 catch (ScriptException ex) when (ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration))
                 {
-                    _done = true;
                     return false;
                 }
             }
@@ -628,7 +668,9 @@ namespace Outbridge.PyLite.Runtime.Values
                     value = ctx.CallHook(_get, new ScriptValue[] { _self, ctx.Values.Int(_i++) }, KwArgs.Empty);
                     return true;
                 }
-                catch (ScriptException ex) when (ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.IndexError))
+                // As CPython's sequence iterator: __getitem__ ends it with IndexError or StopIteration.
+                catch (ScriptException ex) when (ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.IndexError)
+                    || ex.Value.ExcType.IsSubtypeOf(PyExceptionTypes.StopIteration))
                 {
                     _done = true;
                     return false;
@@ -766,12 +808,35 @@ namespace Outbridge.PyLite.Runtime.Values
         // self.x = ... assignment in a hand-written __init__ never carries field() options).
         internal FieldDefault ForName(string name)
         {
+            int i = IndexOf(name);
+            return i >= 0 ? Fields[i] : null;
+        }
+
+        // A field's slot by name; past a few fields through an index built once, since __init__ binding,
+        // asdict, repr and hash look up every field by name (quadratic for 40K fields).
+        private Dictionary<string, int> _index;
+
+        internal int IndexOf(string name)
+        {
+            if (FieldNames.Length > 16)
+            {
+                Dictionary<string, int> d = _index;
+                if (d == null)
+                {
+                    d = new Dictionary<string, int>(FieldNames.Length, StringComparer.Ordinal);
+                    for (int k = 0; k < FieldNames.Length; k++)
+                        d[FieldNames[k]] = k;
+                    _index = d;
+                }
+                int at;
+                return d.TryGetValue(name, out at) ? at : -1;
+            }
             for (int i = 0; i < FieldNames.Length; i++)
             {
                 if (string.Equals(FieldNames[i], name, StringComparison.Ordinal))
-                    return Fields[i];
+                    return i;
             }
-            return null;
+            return -1;
         }
     }
 
@@ -797,10 +862,6 @@ namespace Outbridge.PyLite.Runtime.Values
             Init = init; InRepr = repr; Compare = compare; KwOnly = kwOnly; Hash = hash; Metadata = metadata;
         }
 
-        internal FieldSpecValue(bool hasDefault, ScriptValue def, ScriptValue factory)
-        {
-            HasDefault = hasDefault; Default = def; DefaultFactory = factory;
-        }
         public override ScriptTypeInfo TypeInfo { get { return Type; } }
         internal override ValueKind Kind { get { return ValueKind.Opaque; } }
     }

@@ -15,14 +15,14 @@ namespace Outbridge.PyLite.Modules
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["suppress"] = ctx.Values.Type("contextlib.suppress", (self, a, kw, c) =>
+            m["suppress"] = ctx.Values.EngineType("contextlib.suppress", (self, a, kw, c) =>
             {
                 if (kw.Count > 0)
                     throw KwReader.UnexpectedError(c, "suppress", kw.NameAt(0));
                 c.Values.PreCharge(48 + 8L * a.Length);
                 return new SuppressValue((ScriptValue[])a.Clone());
             }, SuppressValue.SuppressType, null);
-            m["nullcontext"] = ctx.Values.Type("contextlib.nullcontext", (self, a, kw, c) =>
+            m["nullcontext"] = ctx.Values.EngineType("contextlib.nullcontext", (self, a, kw, c) =>
             {
                 ScriptValue result = a.Length > 0 ? a[0] : null;
                 if (a.Length > 1)
@@ -36,7 +36,7 @@ namespace Outbridge.PyLite.Modules
                 c.Values.PreCharge(32);
                 return new NullContextValue(result ?? c.Values.None);
             }, NullContextValue.NullType, null);
-            m["closing"] = ctx.Values.Type("contextlib.closing", (self, a, kw, c) =>
+            m["closing"] = ctx.Values.EngineType("contextlib.closing", (self, a, kw, c) =>
             {
                 if (kw.Count > 0)
                     throw KwReader.UnexpectedError(c, "closing", kw.NameAt(0));

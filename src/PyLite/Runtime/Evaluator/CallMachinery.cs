@@ -25,6 +25,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             if (n.Func.NodeKind == NodeKind.Attribute)
             {
                 AttributeNode at = (AttributeNode)n.Func;
+                ScriptValue superResult;
+                if (at.Value.NodeKind == NodeKind.Call && TrySuperCall(n, at, (CallNode)at.Value, env, ctx, out superResult))
+                    return superResult;
                 ScriptValue self = EvalExpr(at.Value, env, ctx);
 
                 // The #1 script idiom, list.append(x): ListValue is sealed, so Kind==List is exactly
@@ -40,22 +43,32 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     return ctx.Values.None;
                 }
 
-                // P3: obj.m() / obj.m(x) on a record instance runs the method with self as the first argument:
+                // obj.m() / obj.m(x) on a record instance runs the method with self as the first argument:
                 // no bound method, no argument arrays. The method is looked up before the argument runs.
-                if (self.Kind == ValueKind.RecordInstance && n.Args.Count <= 1
-                    && (n.Args.Count == 0 || n.Args[0].Kind == ArgKind.Positional))
+                if (self.Kind == ValueKind.RecordInstance)
                 {
-                    FunctionValue method = ((RecordInstanceValue)self).FindMethod(at.Attr);
+                    FunctionValue method = FindRecordMethod(at, (RecordInstanceValue)self, ctx);
                     if (method != null)
                     {
-                        ScriptValue a1 = n.Args.Count == 1 ? EvalExpr(n.Args[0].Value, env, ctx) : null;
-                        return OwnerOf(method.Program, ctx).CallFunctionDirect(method, n.Args.Count + 1, self, a1, ctx);
+                        if (n.Args.Count <= 1 && (n.Args.Count == 0 || n.Args[0].Kind == ArgKind.Positional))
+                        {
+                            ScriptValue a1 = n.Args.Count == 1 ? EvalExpr(n.Args[0].Value, env, ctx) : null;
+                            return OwnerOf(method.Program, ctx).CallFunctionDirect(method, n.Args.Count + 1, self, a1, ctx);
+                        }
+                        // any other argument list: self first, still without a bound method per call (a 2-argument
+                        // method called 1M times outgrew the default MaxAllocBytes that 1.1.0 fitted)
+                        KwArgs rkw;
+                        ScriptValue[] rargs = EvalCallArgs(n, env, ctx, out rkw);
+                        var full = new ScriptValue[rargs.Length + 1];
+                        full[0] = self;
+                        System.Array.Copy(rargs, 0, full, 1, rargs.Length);
+                        return Call(method, full, rkw, ctx);
                     }
                 }
 
                 // Monomorphic inline cache: one (TypeInfo -> descriptor) pair per call site. A single
                 // object write keeps concurrent readers safe (Slots tables are immutable, TypeInfo
-                // instances are static per value type).
+                // instances are static per value type, or per namedtuple class and released at run end).
                 SlotDescriptor d;
                 SlotCache cache = n.CachedCallSlot as SlotCache;
                 if (cache != null && ReferenceEquals(cache.Type, self.TypeInfo))
@@ -64,7 +77,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
                 else if (self.TypeInfo.Slots.TryGetValue(at.Attr, out d) && d.Kind == SlotKind.Method)
                 {
-                    n.CachedCallSlot = new SlotCache(self.TypeInfo, d);
+                    var entry = new SlotCache(self.TypeInfo, d);
+                    n.CachedCallSlot = entry;
+                    // A type this run created: whatever another run wrote here before, this run clears its
+                    // own last entry when it ends (a site skipped because it held another run's type kept
+                    // a namedtuple of 21 MB after both runs ended).
+                    if (self.TypeInfo.IsScriptDefined)
+                        (ctx.RunTypedCallSites ?? (ctx.RunTypedCallSites = new Dictionary<CallNode, object>()))[n] = entry;
                 }
                 else
                 {
@@ -79,6 +98,66 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 return DispatchCall(n, AttrOnValue(self, at.Attr, ctx), env, ctx);
             }
             return DispatchCall(n, EvalExpr(n.Func, env, ctx), env, ctx);
+        }
+
+        private static readonly BuiltinDelegate SuperDelegate = Modules.Builtins.SuperFn;
+
+        // super().m(...) as the parser writes it, super(<class>, <self>).m(...), with the builtin super: the method runs
+        // with self first, and neither the super object nor a bound method is made (1M super().__init__ calls no longer
+        // outgrew the default MaxAllocBytes that 1.1.0 fitted). Anything else is false, and the call site goes on as before.
+        private bool TrySuperCall(CallNode n, AttributeNode at, CallNode inner, Environment env, EvalContext ctx, out ScriptValue result)
+        {
+            result = null;
+            if (inner.Func.NodeKind != NodeKind.Name || ((NameNode)inner.Func).Id != "super" || inner.Args.Count != 2
+                || inner.Args[0].Kind != ArgKind.Positional || inner.Args[1].Kind != ArgKind.Positional)
+                return false;
+            BuiltinFunctionValue bf = EvalExpr(inner.Func, env, ctx) as BuiltinFunctionValue;
+            if (bf == null || bf.IsHostProvided || bf.Fn != SuperDelegate)
+                return false;
+            ScriptValue cls = EvalExpr(inner.Args[0].Value, env, ctx);
+            ScriptValue obj = EvalExpr(inner.Args[1].Value, env, ctx);
+            ctx.Budget.Step(BudgetCost.Call);   // the super() call this replaces
+            RecordClassValue k;
+            RecordInstanceValue inst;
+            Modules.Builtins.ResolveSuper(ctx, new[] { cls, obj }, KwArgs.Empty, out k, out inst);
+            FunctionValue fn = SuperValue.PlainMethod(k, at.Attr);
+            if (fn == null)
+            {
+                ctx.Values.ChargeObject(2);
+                result = DispatchCall(n, AttrOnValue(new SuperValue(k, inst), at.Attr, ctx), env, ctx);
+                return true;
+            }
+            if (n.Args.Count <= 1 && (n.Args.Count == 0 || n.Args[0].Kind == ArgKind.Positional))
+            {
+                ScriptValue a1 = n.Args.Count == 1 ? EvalExpr(n.Args[0].Value, env, ctx) : null;
+                result = OwnerOf(fn.Program, ctx).CallFunctionDirect(fn, n.Args.Count + 1, inst, a1, ctx);
+                return true;
+            }
+            KwArgs kw;
+            ScriptValue[] args = EvalCallArgs(n, env, ctx, out kw);
+            var full = new ScriptValue[args.Length + 1];
+            full[0] = inst;
+            System.Array.Copy(args, 0, full, 1, args.Length);
+            result = Call(fn, full, kw, ctx);   // the call prologue: depth, stack probe, the caller's line on return
+            return true;
+        }
+
+        // FindMethod, kept per call site: the same class, no class attribute assigned since, the instance field of
+        // that name (if the class has one) still unset.
+        private FunctionValue FindRecordMethod(AttributeNode at, RecordInstanceValue ri, EvalContext ctx)
+        {
+            MethodSite m = SiteOf(at) as MethodSite;
+            if (m != null && ReferenceEquals(m.Node, at) && ReferenceEquals(m.Class, ri.Class) && m.Version == ctx.ClassAttrVersion
+                && (m.FieldIndex < 0 || ri.Slots[m.FieldIndex] == null))
+                return m.Method;
+            FunctionValue method = ri.FindMethod(at.Attr);
+            if (method != null)
+            {
+                int idx;
+                SetSite(at, new MethodSite(at, ri.Class, ctx.ClassAttrVersion,
+                    ri.Class.SlotIndex.TryGetValue(at.Attr, out idx) ? idx : -1, method));
+            }
+            return method;
         }
 
         private ScriptValue DispatchCall(CallNode n, ScriptValue callee, Environment env, EvalContext ctx)
@@ -108,7 +187,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             EnterCall(ctx);
             try
             {
-                return d.Method(self, args, kw, ctx);
+                return d.Call(self, args, kw, ctx);
             }
             catch (System.OverflowException)
             {
@@ -117,6 +196,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             finally
             {
                 ctx.CallDepth--;
+                ctx.Budget.CheckDeadlineAfterCall();   // a raising call in a loop is work too
             }
         }
 
@@ -213,27 +293,113 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
+        // The copy lives as long as its call. Calls at one depth follow each other, so a depth pays its largest copy
+        // once (a loop of f(*big) pays one); copies alive together sit at different depths (min(*a, key=...) recursing)
+        // and each is paid, but the shallowest: a lone copy beside its charged list was free in 1.1.0 and stays so.
+        private static void PayStarCopy(EvalContext ctx, long bytes)
+        {
+            int d = ctx.CallDepth;
+            if (d <= ctx.StarCopyFreeDepth)
+            {
+                ctx.StarCopyFreeDepth = d;
+                return;
+            }
+            if (ctx.StarCopyPaid == null)
+                ctx.StarCopyPaid = new long[System.Math.Max(ctx.Limits.MaxCallDepth, 0) + 2];
+            if (d < 0 || d >= ctx.StarCopyPaid.Length)
+            {
+                ctx.Values.PreCharge(bytes);
+                return;
+            }
+            if (bytes <= ctx.StarCopyPaid[d])
+                return;
+            ctx.Values.PreCharge(bytes - ctx.StarCopyPaid[d]);
+            ctx.StarCopyPaid[d] = bytes;
+        }
+
         private void ExpandStar(ScriptValue star, List<ScriptValue> pos, string fname, EvalContext ctx)
         {
             IScriptIterator it = PyOps.TryGetIterator(star, ctx);
             if (it == null)
                 throw Raise.TypeError(ctx, fname + "() argument after * must be a sequence, not " + star.PyTypeName);
+            // A list or tuple: its passing copy is sized once (no doubling) and paid once per call depth.
+            ListValue sl = star as ListValue;
+            TupleValue st = star as TupleValue;
+            long known = sl != null ? sl.Items.Count : st != null ? st.Items.Length : 0;
+            if (known > 0)
+            {
+                ctx.Values.EnsureCollectionSize(pos.Count + known);
+                if (pos.Capacity < pos.Count + known)
+                {
+                    PayStarCopy(ctx, 8L * (pos.Count + known));
+                    pos.Capacity = (int)(pos.Count + known);
+                }
+            }
             ScriptValue el;
             while (it.MoveNext(ctx, out el))
             {
+                // f(*itertools.repeat(x)) grew this list without a charge or a cap (1.6 GB at default limits)
+                if (pos.Count == pos.Capacity)
+                {
+                    ctx.Values.EnsureCollectionSize(pos.Count + 1L);
+                    ctx.Values.PreCharge(8L * System.Math.Max(4, pos.Count));
+                    pos.Capacity = (int)System.Math.Min(System.Math.Max(4L, 2L * pos.Count), ctx.Limits.MaxCollectionItems);   // doubling must not jump the cap
+                }
                 pos.Add(el);
             }
         }
 
+        // CPython's _PyEval_FormatKwargsError: a KeyError with one argument out of the merge (keys(), its iteration,
+        // __getitem__) reads as a repeated keyword, named by that argument.
         private void ExpandDoubleStar(ScriptValue mapping, List<string> names, List<ScriptValue> values,
             HashSet<string> seen, string fname, EvalContext ctx)
         {
+            try
+            {
+                MergeDoubleStar(mapping, names, values, seen, fname, ctx);
+            }
+            catch (ScriptException e) when (e.Value.ExcType.IsSubtypeOf(PyExceptionTypes.KeyError) && e.Value.Args.Length == 1)
+            {
+                throw MultipleKwValues(ctx, fname, e.Value.Args[0].Str(ctx));
+            }
+        }
+
+        private void MergeDoubleStar(ScriptValue mapping, List<string> names, List<ScriptValue> values,
+            HashSet<string> seen, string fname, EvalContext ctx)
+        {
+            // CPython: anything with keys() is a mapping, read through its __getitem__ (what {**x} takes as well)
+            ChainMapValue chain = mapping as ChainMapValue;
+            if (chain != null)
+            {
+                mapping = chain.Merged(ctx);
+            }
             DictValue dd = mapping as DictValue;
-            if (dd == null)
+            ScriptValue keysFn = null;
+            if (dd == null && !(mapping is RecordInstanceValue && PyOps.TryGetAttr(mapping, "keys", ctx, out keysFn)))
             {
                 throw Raise.TypeError(ctx, fname + "() argument after ** must be a mapping, not " + mapping.PyTypeName);
             }
-            IScriptIterator it = PyOps.GetIterator(dd, ctx);
+            IScriptIterator it;
+            if (dd != null)
+            {
+                it = PyOps.GetIterator(dd, ctx);
+            }
+            else
+            {
+                ScriptValue keys = ctx.CallHook(keysFn, System.Array.Empty<ScriptValue>(), KwArgs.Empty);
+                try
+                {
+                    it = PyOps.TryGetIterator(keys, ctx);
+                }
+                catch (ScriptException e) when (e.Value.ExcType.IsSubtypeOf(PyExceptionTypes.TypeError))
+                {
+                    it = null;   // PyMapping_Keys: a TypeError out of iter(keys()) is the non-iterable error too
+                }
+                if (it == null)
+                {
+                    throw Raise.TypeError(ctx, mapping.PyTypeName + ".keys() returned a non-iterable (type " + keys.PyTypeName + ")");
+                }
+            }
             ScriptValue key;
             while (it.MoveNext(ctx, out key))
             {
@@ -247,7 +413,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     throw MultipleKwValues(ctx, fname, sk.Value);
                 }
                 names.Add(sk.Value);
-                values.Add(dd.GetItemOrThrow(key, ctx));
+                values.Add(dd != null ? dd.GetItemOrThrow(key, ctx) : PyOps.GetItem(mapping, key, ctx));
             }
         }
 
@@ -267,22 +433,25 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         }
 
         // The prologue every call path shares (Call, CallDescriptor, the arrayless fast call): the depth cap,
-        // the C# stack probe, the call step and the peak-depth statistic. The caller decrements CallDepth.
+        // the C# stack probe, the call step and the peak-depth statistic. The caller decrements CallDepth. The depth is
+        // raised only once nothing here can throw: a throw comes before the caller's finally, and a host that swallowed
+        // such an abort left the depth one high (its hang then read as script code, waited for 2 minutes).
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private static void EnterCall(EvalContext ctx)
         {
-            if (++ctx.CallDepth > ctx.Limits.MaxCallDepth)
-                throw DepthAbort(ctx);
-            StackGuard.Probe(ctx);
+            int depth = ctx.CallDepth + 1;
+            if (depth > ctx.Limits.MaxCallDepth)
+                throw DepthAbort(ctx, depth);
+            StackGuard.Probe(ctx, depth);
             ctx.Budget.Step(BudgetCost.Call);
-            if (ctx.CallDepth > ctx.Stats.PeakCallDepth)
-                ctx.Stats.PeakCallDepth = ctx.CallDepth;
+            ctx.CallDepth = depth;
+            if (depth > ctx.Stats.PeakCallDepth)
+                ctx.Stats.PeakCallDepth = depth;
         }
 
-        private static EngineAbort DepthAbort(EvalContext ctx)
+        private static EngineAbort DepthAbort(EvalContext ctx, int depth)
         {
-            ctx.CallDepth--;
-            return ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, ctx.CallDepth + 1);
+            return ctx.Budget.CreateAbort(EngineAbortKind.Recursion, "MaxCallDepth", ctx.Limits.MaxCallDepth, depth);
         }
 
         // A plain positional call of a simple signature: no keyword-only, *args or **kwargs parameter, and
@@ -327,7 +496,17 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     default:
                         if (callee.IsCallable)
                         {
-                            r = callee.CallCore(args, kw, ctx);   // callable opaque (functools.partial)
+                            // callable opaque (functools.partial, lru_cache, an Enum class, a record's __call__):
+                            // one call can do seconds of work on few steps, so the deadline is read after it, as
+                            // after a builtin, also when it raises (a loop of failing calls leaked its runner)
+                            try
+                            {
+                                r = callee.CallCore(args, kw, ctx);
+                            }
+                            finally
+                            {
+                                ctx.Budget.CheckDeadlineAfterCall();
+                            }
                             break;
                         }
                         throw Raise.TypeError(ctx, "'" + callee.PyTypeName + "' object is not callable");
@@ -350,6 +529,57 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
+        // Call() for a builtin's quiet twin: the same prologue, line restore and deadline reads, and a failure
+        // handed back is read as the throw it replaces.
+        private ScriptValue CallQuiet(QuietBuiltin quiet, bool isType, ScriptValue[] args, KwArgs kw, EvalContext ctx,
+            out ExceptionValue raised)
+        {
+            EnterCall(ctx);
+            int callerLine = ctx.CurrentLine;
+            bool returned = false;
+            try
+            {
+                ScriptException error;
+                ScriptValue r = quiet(args, kw, ctx, out error);
+                returned = true;
+                if (error != null)
+                {
+                    ctx.CurrentLine = callerLine;
+                    ctx.Budget.CheckDeadlineAfterCall();
+                    raised = error.Value;
+                    return null;
+                }
+                if (isType)
+                {
+                    ctx.Budget.CheckDeadlineAfterCall();   // as CallType
+                }
+                else
+                {
+                    ctx.Budget.CheckDeadlineNow();   // as CallBuiltin
+                    if (ctx.Budget.IsTerminating)
+                        throw ctx.Budget.PendingAbort;
+                }
+                ctx.CurrentLine = callerLine;
+                raised = null;
+                return r;
+            }
+            catch (ScriptException) when (RestoreLine(ctx, callerLine))
+            {
+                throw;   // never taken: the filter restores the line and declines
+            }
+            catch (System.OverflowException)
+            {
+                ctx.CurrentLine = callerLine;
+                throw OverflowEscaped(ctx);
+            }
+            finally
+            {
+                if (!returned)
+                    ctx.Budget.CheckDeadlineAfterCall();
+                ctx.CallDepth--;
+            }
+        }
+
         // The net under every builtin and slot method: an arithmetic overflow that escapes one (a cast
         // of a script's int past the C range that no guard caught) is the script's OverflowError, with
         // the text CPython's converters give, and never an engine fault the script cannot catch.
@@ -365,8 +595,19 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 // A host override: fence it so an arbitrary C# exception becomes HostError, not EngineFault.
                 return Outbridge.PyLite.Hosting.HostCallGuard.Invoke(fn.Name, fn.Fn, ctx, args, kw);
             }
-            ScriptValue r = fn.Fn(null, args, kw, ctx);   // free builtin: self == null
-            ctx.Budget.CheckDeadlineNow();   // after only (P7): the statements before it already checked
+            ScriptValue r;
+            bool returned = false;
+            try
+            {
+                r = fn.Fn(null, args, kw, ctx);   // free builtin: self == null
+                returned = true;
+            }
+            finally
+            {
+                if (!returned)
+                    ctx.Budget.CheckDeadlineAfterCall();   // a loop of raising calls is seen too
+            }
+            ctx.Budget.CheckDeadlineNow();   // after only: the statements before it already checked
             if (ctx.Budget.IsTerminating)
             {
                 throw ctx.Budget.PendingAbort;
@@ -376,7 +617,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private ScriptValue CallBound(BoundMethodValue bound, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            return bound.Descriptor.Method(bound.Self, args, kw, ctx);   // self is passed separately (not in args)
+            try
+            {
+                return bound.Descriptor.Call(bound.Self, args, kw, ctx);   // self is passed separately (not in args)
+            }
+            finally
+            {
+                ctx.Budget.CheckDeadlineAfterCall();   // also when it raises: a loop of raising calls
+            }
         }
 
         // A bound record method: prepend the instance as the first positional (self) and run the function.
@@ -394,18 +642,26 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 throw Raise.TypeError(ctx, "cannot create '" + type.Name + "' instances");
             }
-            return type.Constructor(null, args, kw, ctx);
+            try
+            {
+                return type.Constructor(null, args, kw, ctx);
+            }
+            finally
+            {
+                ctx.Budget.CheckDeadlineAfterCall();   // also when it raises: Decimal(bad) in a try loop
+            }
         }
 
         // --------- script function argument binding ----------
 
-        // The P4 fast-bind body shared by the array path and the arrayless direct path: acquire a
+        // The fast-bind body shared by the array path and the arrayless direct path: acquire a
         // frame (pooled when cell-free — such an Environment cannot escape the call, and the
         // allocation charge is kept so budget accounting matches the non-pooled path), bind the argc
         // leading params from either the array or the two direct values, fill defaults, run, release.
         private ScriptValue RunFastBind(FunctionValue fn, FunctionInfo info, ScriptValue[] argsOrNull,
             int argc, ScriptValue a0, ScriptValue a1, EvalContext ctx)
         {
+            ChargeFrame(info, ctx);
             int pc = info.PositionalCount;
             int dl = fn.Defaults != null ? fn.Defaults.Length : 0;
             Environment fastEnv;
@@ -471,6 +727,15 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private const int FramePoolCap = 16;   // covers fib-style tree recursion; deeper levels allocate
 
+        // A frame of n slots is n slots to clear and bind on every call: a NodeBatch per 64, as the tree walk
+        // charges its nodes (100 calls of a 45,000-default function were 1,000 steps for 4.5M bindings).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static void ChargeFrame(FunctionInfo info, EvalContext ctx)
+        {
+            if (info.LocalSlotCount >= 64)
+                ctx.Budget.Step(info.LocalSlotCount >> 6);
+        }
+
         // Arrayless entry for <= 2 plain positional args (DispatchCall). Mirrors Call()'s prologue
         // exactly (depth guard / stack probe / step / peak stat / caller-line restore); an ineligible
         // signature materializes the array once and takes the general path, so errors and *args/kw
@@ -506,12 +771,13 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         {
             FunctionInfo info = fn.Info;
 
-            // P4 fast path: no keywords and CanFastBind - bind slots directly, skip the bookkeeping arrays.
+            // Fast path: no keywords and CanFastBind - bind slots directly, skip the bookkeeping arrays.
             if (kw.Count == 0 && CanFastBind(fn, info, args.Length))
             {
                 return RunFastBind(fn, info, args, args.Length, null, null, ctx);
             }
 
+            ChargeFrame(info, ctx);
             Environment fenv = Environment.CreateFunction(ctx, info.LocalSlotCount, info.CellVars.Count,
                 fn.Closure ?? System.Array.Empty<Cell>(), (Environment)fn.GlobalsToken, info);
             var posFilled = new bool[info.PositionalCount];
@@ -566,7 +832,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 string name = kw.NameAt(j);
                 ScriptValue val = kw.ValueAt(j);
                 // PEP 570: keywords cannot bind positional-only params (indices below PositionalOnlyCount).
-                int pIdx = IndexOfName(info.ParamNames, name, info.PositionalOnlyCount, p);
+                int pIdx = IndexOfName(info, name, info.PositionalOnlyCount, p);
                 if (pIdx >= 0)
                 {
                     if (posFilled[pIdx])
@@ -577,7 +843,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     posFilled[pIdx] = true;
                     continue;
                 }
-                int kIdx = IndexOfName(info.ParamNames, name, kwStart, kwStart + k);
+                int kIdx = IndexOfName(info, name, kwStart, kwStart + k);
                 if (kIdx >= 0)
                 {
                     BindByIndex(fenv, info, kIdx, val);
@@ -588,7 +854,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 {
                     kwargsDict.SetItem(ctx.Values.Str(name), val, ctx);
                 }
-                else if (IndexOfName(info.ParamNames, name, 0, info.PositionalOnlyCount) >= 0)
+                else if (IndexOfName(info, name, 0, info.PositionalOnlyCount) >= 0)
                 {
                     throw Raise.TypeError(ctx, fn.Name
                         + "() got some positional-only arguments passed as keyword arguments: '" + name + "'");
@@ -634,14 +900,20 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
 
             int kwStart = p + (info.HasStarArg ? 1 : 0);
+            // KwDefaults follow the keyword-only parameters' order (ExecStmt.Def): one pass over both, where a
+            // search per parameter made 45,000 of them quadratic.
+            KeyValuePair<string, ScriptValue>[] kwDefaults = fn.KwDefaults;
+            int d = 0;
             for (int i = 0; i < kwFilled.Length; i++)
             {
+                string kname = info.ParamNames[kwStart + i];
+                ScriptValue dv = null;
+                if (kwDefaults != null && d < kwDefaults.Length && kwDefaults[d].Key == kname)
+                    dv = kwDefaults[d++].Value;
                 if (kwFilled[i])
                 {
                     continue;
                 }
-                string kname = info.ParamNames[kwStart + i];
-                ScriptValue dv = FindKwDefault(fn.KwDefaults, kname);
                 if (dv != null)
                 {
                     BindByIndex(fenv, info, kwStart + i, dv);
@@ -670,8 +942,8 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             {
                 if (fn.Info.Kind == ScopeKind.Lambda)
                 {
-                    // An expression-whitelist lambda body rides the closure-compiled form (T2.1
-                    // machinery; cache on the shared FunctionInfo), skipping per-node dispatch on
+                    // An expression-whitelist lambda body rides the closure-compiled form (cached on
+                    // the shared FunctionInfo), skipping per-node dispatch on
                     // every call — filter/map/sort-key predicates are exactly this shape.
                     CompiledEval bodyFn = GetCompiledExpr(ref fn.Info.CompiledLambdaBody, fn.LambdaBody, ctx);
                     return EvalCompiledOr(bodyFn, fn.LambdaBody, fenv, ctx);
@@ -679,7 +951,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 CompiledEval oneLine = OneLineReturn(fn, ctx);
                 if (oneLine != null)
                 {
-                    // P6: `def f(x): return <expr>` takes the lambda's compiled form. The return statement's
+                    // `def f(x): return <expr>` takes the lambda's compiled form. The return statement's
                     // prologue stays, so a traceback names its line and the budget sees the statement.
                     if (ctx.Budget.HardStopRequested)
                         throw ctx.Budget.PendingAbort;
@@ -719,7 +991,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             IReadOnlyList<StmtNode> body = fn.Body;
             ReturnNode ret = body.Count == 1 ? body[0] as ReturnNode
                 : body.Count == 2 && IsDocstring(body[0]) ? body[1] as ReturnNode : null;
-            return Store(ref fn.Info.CompiledReturnBody, ret != null && ret.Value != null ? TryCompileExpr(ret.Value) : null);
+            return Store(ref fn.Info.CompiledReturnBody, ret != null && ret.Value != null ? Charged(TryCompileExpr(ret.Value), ret.Value) : null);
         }
 
         private static bool IsDocstring(StmtNode s)
@@ -733,7 +1005,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         // expression never updates CurrentLine, and a lambda cannot contain a raise statement); the
         // FIRST frame otherwise uses the recorded raise site (survives a bare re-raise in the same
         // function); every later frame is the line that frame was executing.
-        // Exception filters that always decline (P2): they run on the unwind's first pass in the same
+        // Exception filters that always decline: they run on the unwind's first pass in the same
         // inner-to-outer order the catch-and-rethrow chain had, without a rethrow per frame.
         private static bool RestoreLine(EvalContext ctx, int line)
         {
@@ -743,7 +1015,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         private static bool AppendFrame(ScriptException se, FunctionValue fn, EvalContext ctx)
         {
-            TracebackBuilder.AppendFrame(se.Value, fn.Name, FrameLine(se.Value, fn, ctx));
+            TracebackBuilder.AppendFrame(se.Value, fn.Name, FrameLine(se.Value, fn, ctx), fn.Program == null ? null : fn.Program.ModuleFile);
             return false;
         }
 
@@ -772,8 +1044,18 @@ namespace Outbridge.PyLite.Runtime.Evaluator
             }
         }
 
-        private static int IndexOfName(IReadOnlyList<string> names, string name, int start, int end)
+        private const int ManyParams = 16;
+
+        // A short range is searched in place; a long one through the function's name index, so binding
+        // stays linear in the keywords.
+        private static int IndexOfName(FunctionInfo info, string name, int start, int end)
         {
+            if (end - start > ManyParams)
+            {
+                int at;
+                return info.ParamIndex.TryGetValue(name, out at) && at >= start && at < end ? at : -1;
+            }
+            IReadOnlyList<string> names = info.ParamNames;
             for (int i = start; i < end; i++)
             {
                 if (names[i] == name)
@@ -782,21 +1064,6 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 }
             }
             return -1;
-        }
-
-        private static ScriptValue FindKwDefault(KeyValuePair<string, ScriptValue>[] kwDefaults, string name)
-        {
-            if (kwDefaults != null)
-            {
-                for (int i = 0; i < kwDefaults.Length; i++)
-                {
-                    if (kwDefaults[i].Key == name)
-                    {
-                        return kwDefaults[i].Value;
-                    }
-                }
-            }
-            return null;
         }
 
         // --------- CPython parity error texts (wording advisory) ----------

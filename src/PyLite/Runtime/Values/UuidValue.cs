@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Numerics;
-using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
 
 namespace Outbridge.PyLite.Runtime.Values

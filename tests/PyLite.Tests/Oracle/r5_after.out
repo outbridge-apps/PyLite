@@ -1,0 +1,611 @@
+sin -30 -1 178345336098429
+sin 0 20 631335030608
+cos -30 -1 119343509860347
+cos 0 20 187280292931653
+tan -30 -1 77115160933718
+tan 0 20 105192682570298
+expm1 -60 -1 28127582348227
+expm1 0 9 125948121656979
+hypot 2 -5 5 80554549478905
+hypot 3 -5 5 90030062444592
+hypot 2 -300 300 35622016153093
+hypot 10 0 3 280892448495318
+hypot 2 -1074 -1020 110230318144062
+hypot 2 1000 1022 64607496666411
+triples 0
+0x1.c48c6001f0ac0p+2 2e+300 0.0 3.5 0x0.0000000000001p-1022
+sumprod -5 5 10 flt 207026724130106
+sumprod -5 5 100 int 275240260838016
+sumprod -50 50 30 flt 160134764807890
+sumprod 0 300 5 flt 275342155264194
+sumprod 400 500 5 flt 17705969889326
+sumprod -5 5 20 bool 53682254101955
+math.sumprod([0.1]*10, [1]*10) 1.0
+math.sumprod([1e100,1,-1e100],[1,1,1]) 0.0
+math.sumprod([1,2,3],[4,5,6]) 32
+math.sumprod([1,2.5],[3,4]) 13.0
+math.sumprod([1.5,2],[3,4]) 12.5
+math.sumprod([2**62,2**62],[2,2]) 18446744073709551616
+math.sumprod([10**30,1],[2,3]) 2000000000000000000000000000003
+math.sumprod([1.5,10**30],[2.0,1.5]) 1.5000000000000002e+30
+math.sumprod([1e308,1e308],[10.0,1.0]) inf
+math.sumprod([float('inf'),1.0],[1.0,1.0]) inf
+math.sumprod([float('nan')],[1.0]) nan
+math.sumprod([],[]) 0
+math.sumprod([True,False],[2,3]) 2
+math.sumprod([1.5,'a'],[2.0,1]) TypeError unsupported operand type(s) for +: 'float' and 'str'
+math.sumprod([1],[1,2]) ValueError Inputs are not the same length
+math.sumprod(['a','b'],[2,3]) TypeError unsupported operand type(s) for +: 'int' and 'str'
+math.sumprod([1.5, 2],[True, 2.5]) 6.5
+math.sumprod([1e308, -1e308, 1.0], [10.0, 10.0, 1.0]) nan
+math.sumprod([10**400, 1.5],[1, 2.0]) OverflowError int too large to convert to float
+sum([1.0, 2**53, 1.0]) 9007199254740994.0
+sum([1e100, 1, -1e100]) 1.0
+sum([b'a'], b'') TypeError sum() can't sum bytes [use b''.join(seq) instead]
+sum([1e308,1e308,-1e308]) inf
+sum([1.0,2**70,1.0]) 1.1805916207174113e+21
+sum([1.5,True,1e16]) 1.0000000000000002e+16
+sum([0.1]*10) 1.0
+sum([1,2.5,10**30]) 1e+30
+sum([0.0,-0.0]) 0.0
+sum([-0.0],-0.0) -0.0
+sum([1,2],1.5) 4.5
+sum([float('inf'),1,-1.0]) inf
+math.sin(7e22) 0.4699619490293273
+math.cos(7e22) 0.8826866751370817
+math.tan(1e19) 2.4727937658465273
+math.sin(1e22) -0.8522008497671888
+math.cos(1e22) 0.523214785395139
+math.sin(2**1023) 0.563127779850884
+math.sin(1.7976931348623157e308) 0.004961954789184062
+math.cos(1.7976931348623157e308) -0.9999876894265599
+math.tan(1.7976931348623157e308) -0.004962015874444895
+math.sin(-0.0) -0.0
+math.tan(-0.0) -0.0
+math.cos(-0.0) 1.0
+math.sin(5e-324) 5e-324
+math.sin(float('inf')) ValueError expected a finite input, got inf
+math.cos(float('nan')) nan
+math.tan(float('-inf')) ValueError expected a finite input, got -inf
+math.sin(math.pi) 1.2246467991473532e-16
+math.cos(math.pi/2) 6.123233995736766e-17
+math.tan(math.pi/2) 1.633123935319537e+16
+math.sin(6381956970095103.0 * 2.0**797) 1.0
+math.expm1(1e-5) 1.0000050000166668e-05
+math.expm1(709.0) 8.218407461554972e+307
+math.expm1(710.0) OverflowError math range error
+math.expm1(-50.0) -1.0
+math.expm1(0.0) 0.0
+math.expm1(-0.0) -0.0
+math.expm1(1e-300) 1e-300
+math.expm1(float('inf')) inf
+math.expm1(float('-inf')) -1.0
+math.expm1(float('nan')) nan
+math.expm1(0.5) 0.6487212707001282
+math.expm1(-0.5) -0.3934693402873666
+math.expm1(1.0) 1.718281828459045
+math.expm1(40.0) 2.3538526683701997e+17
+Decimal('1.1') ** 2 Decimal('1.21')
+Decimal('1.10') ** 2 Decimal('1.2100')
+Decimal('1.1') ** 50 Decimal('117.3908528796953165066664960')
+Decimal('1.0000001') ** 1000 Decimal('1.000100004995166171141794979')
+Decimal('1.23456789') ** 17 Decimal('35.95461244715757649256228303')
+Decimal('3') ** 40 Decimal('12157665459056928801')
+Decimal('3') ** 55 Decimal('174449211009120179071170507')
+Decimal('2') ** 90 Decimal('1237940039285380274899124224')
+Decimal('2') ** -1 Decimal('0.5')
+Decimal('2') ** -3 Decimal('0.125')
+Decimal('3') ** -1 Decimal('0.3333333333333333333333333333')
+Decimal('0.3') ** -7 Decimal('4572.473708276177411979881116')
+Decimal('-2') ** 3 Decimal('-8')
+Decimal('-2') ** 4 Decimal('16')
+Decimal('-1.5') ** 3 Decimal('-3.375')
+Decimal('0') ** 3 Decimal('0')
+Decimal('0.0') ** 3 Decimal('0')
+Decimal('-0') ** 3 Decimal('-0')
+Decimal('-0') ** 2 Decimal('0')
+Decimal('0') ** 0 InvalidOperation [<class 'decimal.InvalidOperation'>]
+Decimal('1') ** 1000000 Decimal('1')
+Decimal('1.0') ** 3 Decimal('1.000')
+Decimal('1.00') ** -2 Decimal('1')
+Decimal('1.0000000001') ** 1000000 Decimal('1.000100005000161670333392001')
+Decimal('0.9999999999') ** 1000000 Decimal('0.9999000049998283379998913356')
+Decimal('10') ** 5 Decimal('100000')
+Decimal('1E+2') ** 2 Decimal('1E+4')
+Decimal('1E+2') ** 3 Decimal('1E+6')
+Decimal('2.5') ** 0 Decimal('1')
+Decimal('2.5') ** 1 Decimal('2.5')
+Decimal('2.5') ** Decimal('3') Decimal('15.625')
+Decimal('2.5') ** Decimal('3.0') Decimal('15.625')
+Decimal('2.5') ** Decimal('3E+0') Decimal('15.625')
+Decimal('1.1') ** Decimal('2E+1') Decimal('6.72749994932560009201')
+Decimal('1.1') ** True Decimal('1.1')
+2 ** Decimal('3') Decimal('8')
+2 ** Decimal('-3') Decimal('0.125')
+Decimal('1.000000000000000000000000001') ** 3 Decimal('1.000000000000000000000000003')
+Decimal('9.99999999999999999999999999') ** 2 Decimal('99.99999999999999999999999980')
+Decimal('1234567.891') ** 3 Decimal('1881676376361628489.657928971')
+Decimal('1.1') ** (10**40) Overflow [<class 'decimal.Overflow'>]
+Decimal('1') ** (10**40) Decimal('1')
+Decimal('12345678901234567890123456789') // Decimal('7') Decimal('1763668414462081127160493827')
+Decimal('12345678901234567890123456789') % Decimal('7') Decimal('0')
+divmod(Decimal('12345678901234567890123456789'), Decimal('7')) (Decimal('1763668414462081127160493827'), Decimal('0'))
+Decimal('9999999999999999999999999999') // Decimal('3') Decimal('3333333333333333333333333333')
+Decimal('9999999999999999999999999999') % Decimal('9') Decimal('0')
+Decimal('1234567890123456789012345678') // Decimal('0.3') Decimal('4115226300411522630041152260')
+Decimal('1234567890123456789012345') // Decimal('0.1') Decimal('12345678901234567890123450')
+Decimal('1234567890123456789012345') % Decimal('0.1') Decimal('0.0')
+Decimal('7') // Decimal('2') Decimal('3')
+Decimal('-7') // Decimal('2') Decimal('-3')
+Decimal('7') // Decimal('-2') Decimal('-3')
+Decimal('-7') % Decimal('2') Decimal('-1')
+Decimal('7.5') % Decimal('2') Decimal('1.5')
+Decimal('7.50') % Decimal('2.0') Decimal('1.50')
+Decimal('1') // Decimal('3') Decimal('0')
+Decimal('-1') // Decimal('3') Decimal('-0')
+Decimal('-1') % Decimal('3') Decimal('-1')
+Decimal('0') // Decimal('3') Decimal('0')
+Decimal('-0') // Decimal('3') Decimal('-0')
+Decimal('0.0') % Decimal('3') Decimal('0.0')
+divmod(Decimal('7.5'), Decimal('2')) (Decimal('3'), Decimal('1.5'))
+divmod(Decimal('-7.5'), Decimal('2')) (Decimal('-3'), Decimal('-1.5'))
+divmod(Decimal('1E+2'), Decimal('7')) (Decimal('14'), Decimal('2'))
+Decimal('1E+2') // Decimal('7') Decimal('14')
+Decimal('1E+2') % Decimal('7') Decimal('2')
+Decimal('1E+2') % Decimal('30') Decimal('10')
+Decimal('1') % Decimal('0') InvalidOperation [<class 'decimal.InvalidOperation'>]
+Decimal('1') // Decimal('0') DivisionByZero [<class 'decimal.DivisionByZero'>]
+Decimal('0') // Decimal('0') InvalidOperation [<class 'decimal.DivisionUndefined'>]
+divmod(Decimal('1'), Decimal('0')) InvalidOperation [<class 'decimal.InvalidOperation'>, <class 'decimal.DivisionByZero'>]
+7 // Decimal('2') Decimal('3')
+7 % Decimal('2') Decimal('1')
+divmod(7, Decimal('2')) (Decimal('3'), Decimal('1'))
+Fraction(0) ** -1.0 ZeroDivisionError zero to a negative power
+Fraction(1, 2) ** 2.0 0.25
+Fraction(1, 2) ** Fraction(1, 2) 0.7071067811865476
+Fraction(0) ** Fraction(-1, 2) ZeroDivisionError zero to a negative power
+Fraction(4) ** 0.5 2.0
+2 ** Fraction(2) 4
+2 ** Fraction(-2) Fraction(1, 4)
+2 ** Fraction(1, 2) 1.4142135623730951
+2.0 ** Fraction(2) 4.0
+2.0 ** Fraction(-2) 0.25
+2.0 ** Fraction(1, 2) 1.4142135623730951
+True ** Fraction(2) 1
+0 ** Fraction(-1) ZeroDivisionError Fraction(1, 0)
+0.0 ** Fraction(-1) ZeroDivisionError zero to a negative power
+Fraction(2) ** 2 Fraction(4, 1)
+Fraction(2, 3) ** -2 Fraction(9, 4)
+repr(timezone(timedelta(hours=1), name='CET')) "datetime.timezone(datetime.timedelta(seconds=3600), 'CET')"
+timezone(timedelta(hours=1), name='CET').tzname(None) 'CET'
+timezone(offset=timedelta(hours=2)) datetime.timezone(datetime.timedelta(seconds=7200))
+timezone(offset=timedelta(hours=2), name='X').tzname(None) 'X'
+timezone(timedelta(0), name='Z') datetime.timezone(datetime.timedelta(0), 'Z')
+timezone(timedelta(0), 'Z').tzname(None) 'Z'
+timezone(timedelta(0)) datetime.timezone.utc
+timezone(timedelta(hours=1), 'CET') datetime.timezone(datetime.timedelta(seconds=3600), 'CET')
+timezone('x') TypeError timezone() argument 1 must be datetime.timedelta, not str
+timezone(timedelta(0), 1) TypeError timezone() argument 2 must be str, not int
+timezone(timedelta(0), 'a', 'b') TypeError timezone() takes at most 2 arguments (3 given)
+timezone(timedelta(hours=25)) ValueError offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1, seconds=3600)
+datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() 1577836800.0
+datetime(2020, 1, 1, 0, 0, 0, 123456, tzinfo=timezone.utc).timestamp() 1577836800.123456
+datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc).timestamp() 253402300800.0
+datetime(1, 1, 1, 0, 0, 0, 1, tzinfo=timezone.utc).timestamp() -62135596800.0
+datetime(5000, 6, 7, 8, 9, 10, 111111, tzinfo=timezone.utc).timestamp() 95631178150.11111
+datetime(5000, 6, 7, 8, 9, 10, 111113, tzinfo=timezone(timedelta(hours=3))).timestamp() 95631167350.11111
+datetime(1969, 12, 31, 23, 59, 59, 500000, tzinfo=timezone.utc).timestamp() -0.5
+timestamps 128740628511895
+pow 299 40744137568542
+pow 599 270080333143593
+pow 899 87232360105773
+pow 1199 237417469577423
+pow 1499 77593397792065
+4.3713 0.037038 194.62
+4.37124189 0.0370370370 194.619506
+4.3712418962088561002 0.037037037037037037038 194.6195068359375
+re.fullmatch(r'(a)\123', 'aS') is not None True
+re.fullmatch(r'(a)\1', 'aa') is not None True
+re.fullmatch(r'(a)\12', 'a\n') is not None PatternError invalid group reference 12 at position 4
+re.fullmatch(r'(a)\18', 'aa8') is not None PatternError invalid group reference 18 at position 4
+re.fullmatch(r'(a)\1a', 'aaa') is not None True
+re.fullmatch(r'(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\10', 'abcdefghijj') is not None True
+re.fullmatch(r'(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\10', 'abcdefghija0') is not None False
+re.fullmatch(r'(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\1', 'abcdefghija') is not None True
+re.fullmatch(r'(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\11', 'abcdefghij\t') is not None PatternError invalid group reference 11 at position 31
+re.fullmatch(r'\101', 'A') is not None True
+re.fullmatch(r'\0', '\x00') is not None True
+re.fullmatch(r'\08', '\x008') is not None True
+re.compile(r'\400') PatternError octal escape value \400 outside of range 0-0o377 at position 0
+re.compile(r'(a)\2') PatternError invalid group reference 2 at position 4
+re.compile(r'(a)\10') PatternError invalid group reference 10 at position 4
+re.compile(r'\8') PatternError invalid group reference 8 at position 1
+re.compile(r'(a)\128') PatternError invalid group reference 12 at position 4
+re.sub(r'(a)\141', 'X', 'aa') 'X'
+re.findall(r'[\w]', 'á²_ ١') ['a', '²', '_', '١']
+re.findall(r'[\W]', 'á²_ ١') ['́', ' ']
+re.findall(r'[^\w]', 'á²_ ١') ['́', ' ']
+re.findall(r'[^\W]', 'á²_ ١') ['a', '²', '_', '١']
+re.findall(r'[\s]', ' \t\x1c\x1d\x1e\x1f\x85\xa0a') [' ', '\t', '\x1c', '\x1d', '\x1e', '\x1f', '\x85', '\xa0']
+re.findall(r'[\S]', ' \t\x1c\x1f\x85\xa0a') ['a']
+re.findall(r'[^\s]', ' \x1c\x1fa') ['a']
+re.findall(r'[^\S]', ' \x1c\x1fa') [' ', '\x1c', '\x1f']
+re.findall(r'[\w-]', 'a-b c') ['a', '-', 'b', 'c']
+re.findall(r'[\w\s]', 'a \x1cb́-') ['a', ' ', '\x1c', 'b']
+re.findall(r'[\W\d]', 'a1 -') ['1', ' ', '-']
+re.findall(r'[^\W\d]', 'a1 -_') ['a', '_']
+re.findall(r'[\w]', 'á²', re.A) ['a']
+re.findall(r'[\d]', '1١a') ['1', '١']
+re.findall(r'[\w]+', 'ABC abc', re.I) ['ABC', 'abc']
+re.findall(r'(?a:[\w])[\w]', 'a²') ['a²']
+re.findall(r'[\D]', '1١a') ['a']
+enc('a\xe9\xe9\xe9b', 'ascii') ('ascii', 1, 4, 'ordinal not in range(128)', True, "'ascii' codec can't encode characters in position 1-3: ordinal not in range(128)")
+enc('a\xe9\xe9\xe9b', 'ascii', 'replace') b'a???b'
+enc('a\xe9\xe9\xe9b', 'ascii', 'ignore') b'ab'
+enc('a\xe9\xe9\xe9b', 'ascii', 'backslashreplace') b'a\\xe9\\xe9\\xe9b'
+enc('a\xe9\xe9\xe9b', 'ascii', 'xmlcharrefreplace') b'a&#233;&#233;&#233;b'
+enc('a\xe9\xe9\xe9b', 'ascii', 'namereplace') b'a\\N{LATIN SMALL LETTER E WITH ACUTE}\\N{LATIN SMALL LETTER E WITH ACUTE}\\N{LATIN SMALL LETTER E WITH ACUTE}b'
+enc('aĀāb', 'latin-1') ('latin-1', 1, 3, 'ordinal not in range(256)', True, "'latin-1' codec can't encode characters in position 1-2: ordinal not in range(256)")
+enc('aĀāb', 'latin-1', 'replace') b'a??b'
+enc('a\u20ac\xe9b', 'ascii') ('ascii', 1, 3, 'ordinal not in range(128)', True, "'ascii' codec can't encode characters in position 1-2: ordinal not in range(128)")
+enc('a\U0001F600\xe9b', 'ascii', 'replace') b'a??b'
+enc('a\U0001F600\xe9b', 'ascii', 'backslashreplace') b'a\\U0001f600\\xe9b'
+enc('aЖЗb', 'cp1252') ('charmap', 1, 3, 'character maps to <undefined>', True, "'charmap' codec can't encode characters in position 1-2: character maps to <undefined>")
+enc('aЖЗb', 'cp1252', 'replace') b'a??b'
+enc('a\ud800\ud801b', 'utf-8') ('utf-8', 1, 3, 'surrogates not allowed', True, "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed")
+enc('a\ud800\ud801b', 'utf-8', 'replace') b'a??b'
+enc('a\ud800\ud801b', 'utf-8', 'ignore') b'ab'
+enc('a\ud800\ud801b', 'utf-8', 'backslashreplace') b'a\\ud800\\ud801b'
+enc('a\ud800\ud801b', 'utf-16-le') ('utf-16-le', 1, 2, 'surrogates not allowed', True, "'utf-16-le' codec can't encode character '\\ud800' in position 1: surrogates not allowed")
+enc('\xe9', 'ascii') ('ascii', 0, 1, 'ordinal not in range(128)', True, "'ascii' codec can't encode character '\\xe9' in position 0: ordinal not in range(128)")
+'abc'.rfind('', 5) -1
+'abc'.rfind('', 2, 1) -1
+'abc'.rfind('', 3) 3
+'abc'.rfind('', 1) 3
+'abc'.rfind('', 1, 2) 2
+'abc'.rindex('', 5) ValueError substring not found
+'abc'.find('', 5) -1
+'abc'.find('', 3) 3
+'abc'.find('', 2, 1) -1
+'abc'.index('', 5) ValueError substring not found
+b'abc'.rfind(b'', 5) -1
+'\U0001F601'.strip('\U0001F600') '😁'
+'\U0001F600a\U0001F600'.strip('\U0001F600') 'a'
+'\U0001F600a\U0001F600'.lstrip('\U0001F600') 'a😀'
+'\U0001F600a\U0001F600'.rstrip('\U0001F600') '😀a'
+'\U0001F600\U0001F601a'.lstrip('\U0001F601\U0001F600') 'a'
+'xa\U0001F600'.strip('x\U0001F600') 'a'
+'\U0001F600'.strip('\U0001F600') ''
+'abc'.strip('\U0001F600') 'abc'
+'\ud83d'.strip('\U0001F600') '\ud83d'
+'\U00010428'.islower() True
+'\U00010400'.isupper() True
+'\U00010400'.istitle() True
+'\U00010428'.isupper() False
+'\U0001E900'.isupper() True
+'\U0001E922'.islower() True
+'\U00010D50'.isupper() True
+'\U00010D70'.islower() True
+'\U0001F130'.isupper() True
+'\U0001F130'.isalpha() False
+'\U0001D400'.isupper() True
+'\U0001DF00'.islower() True
+'\U0001E030'.islower() True
+'\U00016E40'.isupper() True
+'\U00010C80a'.istitle() True
+'\U00010C80\U00010CC0'.istitle() True
+'\U00010C80\U00010CC0'.isupper() False
+'a\U0001E922'.islower() True
+'A\U0001E922'.islower() False
+'\U0001F600'.isupper() False
+'\U0001F600'.islower() False
+'\U00010428'.upper() '𐐀'
+'\U00010400'.lower() '𐐨'
+'\U0001E900'.lower() '𞤢'
+'\U00010D50'.lower() '𐵰'
+base64.b32decode(b'MFRGG===') b'abc'
+base64.b32decode(b'mfrgg===') Error Non-base32 digit found
+base64.b32decode(b'mfrgg===', True) b'abc'
+base64.b32decode(b'mfrgg===', casefold=True) b'abc'
+base64.b32decode(b'MFRGG') Error Incorrect padding
+base64.b32decode(b'MFRGG==') Error Incorrect padding
+base64.b32decode(b'MF=GG===') Error Non-base32 digit found
+base64.b32decode(b'MFRGG=A=') Error Non-base32 digit found
+base64.b32decode(b'MFRGGZDF') b'abcde'
+base64.b32decode(b'MFRGGZA=') b'abcd'
+base64.b32decode(b'MFRGGZDFMY======') b'abcdef'
+base64.b32decode(b'MFRA====') b'ab'
+base64.b32decode(b'ME======') b'a'
+base64.b32decode(b'M=======') Error Incorrect padding
+base64.b32decode(b'========') Error Incorrect padding
+base64.b32decode(b'MF RGG==') Error Non-base32 digit found
+base64.b32decode(b'') b''
+base64.b32decode('MFRGG===') b'abc'
+base64.b32decode(b'0O======', map01=b'L') b's'
+base64.b32decode(b'M1======', map01=b'L') b'b'
+base64.b32decode(b'M1======', map01=b'LL') AssertionError b'LL'
+base64.b32decode(b'M1======') Error Non-base32 digit found
+base64.b32decode(b'M\xc9======') Error Non-base32 digit found
+bytes.fromhex('41 42') b'AB'
+bytes.fromhex('41\t42\n43\r44\x0b45\x0c46') b'ABCDEF'
+bytes.fromhex(' 41 ') b'A'
+bytes.fromhex('4 1') ValueError non-hexadecimal number found in fromhex() arg at position 1
+bytes.fromhex('4') ValueError fromhex() arg must contain an even number of hexadecimal digits
+bytes.fromhex('414') ValueError fromhex() arg must contain an even number of hexadecimal digits
+bytes.fromhex('41 4') ValueError fromhex() arg must contain an even number of hexadecimal digits
+bytes.fromhex('4g') ValueError non-hexadecimal number found in fromhex() arg at position 1
+bytes.fromhex('g4') ValueError non-hexadecimal number found in fromhex() arg at position 0
+bytes.fromhex('41\xa042') ValueError non-hexadecimal number found in fromhex() arg at position 2
+bytes.fromhex('41 4') ValueError non-hexadecimal number found in fromhex() arg at position 2
+bytes.fromhex('') b''
+bytes.fromhex(1) TypeError fromhex() argument must be str or bytes-like, not int
+s(el('x', '')) '<x />'
+s(el('x', 'a')) '<x>a</x>'
+s(el('x')) '<x />'
+s(el('x', '', '')) '<x />'
+s(el('x', None, 't')) '<x />t'
+s(el('x', '', short=''), short_empty_elements=False) '<x short=""></x>'
+s(el('x', ''), method='html') '<x></x>'
+s(el('x'), method='html') '<x></x>'
+s(el('br'), method='html') '<br>'
+s(el('BR'), method='html') '<BR>'
+s(el('br', 'in', 'tl'), method='html') '<br>intl'
+s(el('script', '<a&>'), method='html') '<script><a&></script>'
+s(el('STYLE', '<a&>'), method='html') '<STYLE><a&></STYLE>'
+s(el('p', '<a&>'), method='html') '<p>&lt;a&amp;&gt;</p>'
+s(el('p', a='<&>"\n\t'), method='html') '<p a="<&amp;&gt;&quot;\n\t"></p>'
+s(el('p', a='<&>"\n\t')) '<p a="&lt;&amp;&gt;&quot;&#10;&#09;" />'
+s(el('{u}br'), method='html') '<ns0:br xmlns:ns0="u"></ns0:br>'
+s(el('{u}script', '<'), method='html') '<ns0:script xmlns:ns0="u">&lt;</ns0:script>'
+s(ET.Comment('c<&')) '<!--c<&-->'
+s(ET.Comment('c<&'), method='html') '<!--c&lt;&amp;-->'
+s(ET.Comment()) '<!--None-->'
+s(ET.ProcessingInstruction('t', 'v<')) '<?t v<?>'
+s(ET.ProcessingInstruction('t', 'v<'), method='html') '<?t v&lt;?>'
+s(el(None, 'te<xt', 'tl')) 'te&lt;xttl'
+ET.tostring(ET.Comment()) b'<!--None-->'
+s(el('{http://www.w3.org/XML/1998/namespace}lang')) '<xml:lang />'
+s(el('{http://www.w3.org/1999/xhtml}p')) '<html:p xmlns:html="http://www.w3.org/1999/xhtml" />'
+s(el('{http://www.w3.org/2001/XMLSchema}e')) '<xs:e xmlns:xs="http://www.w3.org/2001/XMLSchema" />'
+s(el('{http://purl.org/dc/elements/1.1/}t')) '<dc:t xmlns:dc="http://purl.org/dc/elements/1.1/" />'
+s(el('{u1}t', **{'{u2}a': '1', '{u1}b': '2', '{http://www.w3.org/2001/XMLSchema-instance}c': '3', '{u3}d': '4'})) '<ns0:t xmlns:ns0="u1" xmlns:ns1="u2" xmlns:ns3="u3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ns1:a="1" ns0:b="2" xsi:c="3" ns3:d="4" />'
+s(el('a', **{'{u9}a': '1'})) '<a xmlns:ns0="u9" ns0:a="1" />'
+ET.register_namespace('xmlfoo', 'http://x/') None
+ET.register_namespace('ns0', 'http://x/') ValueError Prefix format reserved for internal use
+ET.register_namespace('ns12', 'http://x/') ValueError Prefix format reserved for internal use
+ET.register_namespace('ns', 'http://y/') None
+ET.register_namespace('nsa', 'http://z/') None
+s(el('{http://x/}a')) '<xmlfoo:a xmlns:xmlfoo="http://x/" />'
+s(el('{http://y/}a')) '<ns:a xmlns:ns="http://y/" />'
+s(el('{http://z/}a')) '<nsa:a xmlns:nsa="http://z/" />'
+ET.register_namespace('xs', 'http://k/') None
+s(el('{http://k/}a')) '<xs:a xmlns:xs="http://k/" />'
+s(el('{http://www.w3.org/2001/XMLSchema}a')) '<ns0:a xmlns:ns0="http://www.w3.org/2001/XMLSchema" />'
+ET.register_namespace('', 'http://dflt/') None
+s(el('{http://dflt/}a', **{'{u}k': 'v'})) '<a xmlns="http://dflt/" xmlns:ns1="u" ns1:k="v" />'
+s(el('{http://other/}a', **{'{u}k': 'v'})) '<ns0:a xmlns:ns0="http://other/" xmlns:ns1="u" ns1:k="v" />'
+s(el('x', 5)) TypeError cannot serialize 5 (type int)
+s(el(5)) TypeError cannot serialize 5 (type int)
+s(el('x', **{'a': 5})) TypeError cannot serialize 5 (type int)
+e1.get('zz', default='d') 'd'
+e1.get('zz', 'd') 'd'
+e1.get('zz') None
+e1.get(key='zz') None
+e1.get(key='zz', default=1) 1
+e1.get() TypeError get() missing required argument 'key' (pos 1)
+setsl(mk(), slice(0, 2), [ET.Element('n')]) ['n', 'c2', 'c3']
+setsl(mk(), slice(1, 1), [ET.Element('n'), ET.Element('m')]) ['c0', 'n', 'm', 'c1', 'c2', 'c3']
+setsl(mk(), slice(None, None, 2), [ET.Element('n'), ET.Element('m')]) ['n', 'c1', 'm', 'c3']
+setsl(mk(), slice(None, None, -1), [ET.Element('n'), ET.Element('m'), ET.Element('k'), ET.Element('j')]) ['j', 'k', 'm', 'n']
+setsl(mk(), slice(None, None, 2), [ET.Element('n')]) ValueError attempt to assign sequence of size 1 to extended slice of size 2
+setsl(mk(), slice(0, 2), 5) TypeError assignment expects an iterable
+setsl(mk(), slice(0, 2), [5]) TypeError expected an Element, not "int"
+setsl(mk(), slice(0, 2), (ET.Element('t'),)) ['t', 'c2', 'c3']
+delsl(mk(), slice(0, 2)) ['c2', 'c3']
+delsl(mk(), slice(None, None, 2)) ['c1', 'c3']
+delsl(mk(), slice(None, None, -1)) []
+delsl(mk(), slice(5, 9)) ['c0', 'c1', 'c2', 'c3']
+delsl(mk(), 1) ['c0', 'c2', 'c3']
+delsl(mk(), 9) IndexError child assignment index out of range
+(lambda e: (e.extend(e), tags(e))[1])(mk(2)) ['c0', 'c1', 'c0', 'c1']
+(lambda e: (e.extend([ET.Element('z')]), tags(e))[1])(mk(1)) ['c0', 'z']
+mk(1).extend([1]) TypeError expected an Element, not "int"
+mk(1).extend(1) TypeError 'elements' must be an iterable
+type(statistics.linear_regression([1, 2, 3], [2, 4, 7])) is type(statistics.linear_regression([1, 2, 4], [2, 4, 7])) True
+type(statistics.linear_regression([1, 2, 3], [2, 4, 7])).__name__ 'LinearRegression'
+statistics.linear_regression([1, 2, 3], [2, 4, 7]) LinearRegression(slope=2.5, intercept=-0.666666666666667)
+statistics.LinearRegression(1, 2) LinearRegression(slope=1, intercept=2)
+statistics.LinearRegression._fields ('slope', 'intercept')
+type(statistics.linear_regression([1, 2, 3], [2, 4, 7])) is statistics.LinearRegression True
+type(urlparse('http://a/b')) is ParseResult True
+repr(ParseResult) "<class 'urllib.parse.ParseResult'>"
+ParseResult.__name__ 'ParseResult'
+repr(type(urlparse('http://a/b'))) "<class 'urllib.parse.ParseResult'>"
+type(urlparse('http://a/b')).__name__ 'ParseResult'
+repr(statistics.LinearRegression) "<class 'statistics.LinearRegression'>"
+statistics.LinearRegression.__name__ 'LinearRegression'
+ParseResult('a', 'b', 'c', 'd', 'e', 'f').geturl() 'a://b/c;d?e#f'
+type(urlsplit('http://a/b')) is SplitResult True
+type(urldefrag('http://a/b#c')) is DefragResult True
+type(urlparse('http://a/')) is type(urlparse('http://b/')) True
+type(OrderedDict(a=1) | {'b': 2}).__name__ 'OrderedDict'
+OrderedDict(a=1) | {'b': 2} OrderedDict({'a': 1, 'b': 2})
+{'b': 2} | OrderedDict(a=1) OrderedDict({'b': 2, 'a': 1})
+type({'b': 2} | OrderedDict(a=1)).__name__ 'OrderedDict'
+(defaultdict(int, a=1) | {'b': 2}) defaultdict(<class 'int'>, {'a': 1, 'b': 2})
+type(defaultdict(int, a=1) | {'b': 2}).__name__ 'defaultdict'
+({'b': 2} | defaultdict(int, a=1)) defaultdict(<class 'int'>, {'b': 2, 'a': 1})
+({'b': 2} | defaultdict(int, a=1))['zz'] 0
+(defaultdict(list, a=1) | {'b': 2}).default_factory <class 'list'>
+OrderedDict(a=1) | defaultdict(int, b=2) OrderedDict({'a': 1, 'b': 2})
+defaultdict(int, b=2) | OrderedDict(a=1) defaultdict(<class 'int'>, {'b': 2, 'a': 1})
+OrderedDict(a=1) | OrderedDict(b=2) OrderedDict({'a': 1, 'b': 2})
+OrderedDict(a=1) | 5 TypeError unsupported operand type(s) for |: 'collections.OrderedDict' and 'int'
+{} | OrderedDict() OrderedDict()
+Counter(a=1) | Counter(a=2) Counter({'a': 2})
+OrderedDict(a=1) | Counter(b=2) OrderedDict({'a': 1, 'b': 2})
+{'a': 1} | {'b': 2} {'a': 1, 'b': 2}
+badmove() 2
+(lambda d: (d.move_to_end('a'), list(d))[1])(OrderedDict(a=1, b=2, c=3)) ['b', 'c', 'a']
+(lambda d: (d.move_to_end('c'), list(d))[1])(OrderedDict(a=1, b=2, c=3)) ['a', 'b', 'c']
+(lambda d: (d.move_to_end('b', last=False), list(d))[1])(OrderedDict(a=1, b=2, c=3)) ['b', 'a', 'c']
+(lambda d: (d.move_to_end(1.0), list(d))[1])(OrderedDict([(1, 'x'), (2, 'y')])) [2, 1]
+OrderedDict(a=1).move_to_end('z') KeyError 'z'
+(lambda d: ([d.move_to_end('a') for i in range(100)], d.popitem(), list(d))[1:])(OrderedDict(a=1, b=2)) (('a', 1), ['b'])
+(lc(1), lc(2), lc(1), lc(3), lc(2), lc.cache_info()) (2, 4, 2, 6, 4, CacheInfo(hits=1, misses=4, maxsize=2, currsize=2))
+ctxt(lambda: int('x')) ('ValueError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+ctxt(lambda: {}['k']) ('KeyError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+ctxt(lambda: [][1]) ('IndexError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+ctxt(lambda: 1 + 'a') ('TypeError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+ctxt(lambda: None.x) ('AttributeError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+ctxt(nested) ('IndexError', 'KeyError', "'k'", 'NoneType', False)
+ctxt(nocontext) ('ValueError', 'ZeroDivisionError', 'division by zero', 'NoneType', False)
+inhandler() ('division by zero', 'ZeroDivisionError')
+list(map(str, [1, 2], strict=True)) ['1', '2']
+list(map(pow, [1, 2], [3, 4], strict=True)) [1, 16]
+list(map(pow, [1, 2], [3], strict=True)) ValueError map() argument 2 is shorter than argument 1
+list(map(pow, [1], [3, 4], strict=True)) ValueError map() argument 2 is longer than argument 1
+list(map(pow, [1, 2], [3, 4], [5], strict=True)) ValueError map() argument 3 is shorter than arguments 1-2
+list(map(pow, [1, 2], [3, 4], [5, 6, 7], strict=True)) ValueError map() argument 3 is longer than arguments 1-2
+list(map(pow, [1, 2], [3], strict=False)) [1]
+list(map(str, [1], zzz=1)) TypeError map() got an unexpected keyword argument 'zzz'
+map() TypeError map() must have at least two arguments.
+map(str) TypeError map() must have at least two arguments.
+map(str, strict=True) TypeError map() must have at least two arguments.
+list(zip([1, 2], [3], strict=True)) ValueError zip() argument 2 is shorter than argument 1
+refused(lambda: st.fmean([1], zzz=1)) 'TypeError'
+refused(lambda: st.harmonic_mean([1], zzz=1)) 'TypeError'
+refused(lambda: st.correlation([1, 2, 3], [1, 2, 4], zzz=1)) 'TypeError'
+refused(lambda: st.linear_regression([1, 2, 3], [1, 2, 4], zzz=1)) 'TypeError'
+refused(lambda: op.add(1, 2, zzz=1)) 'TypeError'
+refused(lambda: op.neg(1, zzz=1)) 'TypeError'
+refused(lambda: op.lt(1, 2, zzz=1)) 'TypeError'
+refused(lambda: op.itemgetter(1, zzz=1)) 'TypeError'
+refused(lambda: op.attrgetter('a', zzz=1)) 'TypeError'
+refused(lambda: html.escape('a', zzz=1)) 'TypeError'
+refused(lambda: html.unescape('a', zzz=1)) 'TypeError'
+refused(lambda: textwrap.indent('a', '>', zzz=1)) 'TypeError'
+refused(lambda: textwrap.dedent('a', zzz=1)) 'TypeError'
+refused(lambda: functools.cmp_to_key(lambda a, b: 0, zzz=1)) 'TypeError'
+refused(lambda: functools.lru_cache(1, zzz=1)) 'TypeError'
+refused(lambda: copy.copy([1], zzz=1)) 'TypeError'
+refused(lambda: secrets.token_hex(1, zzz=1)) 'TypeError'
+refused(lambda: string.capwords('a', zzz=1)) 'TypeError'
+refused(lambda: collections.namedtuple('P', 'a', zzz=1)) 'TypeError'
+refused(lambda: collections.deque([1], zzz=1)) 'TypeError'
+refused(lambda: collections.ChainMap({}, zzz=1)) 'TypeError'
+refused(lambda: collections.OrderedDict.fromkeys([1], zzz=1)) 'TypeError'
+refused(lambda: up.quote('a', zzz=1)) 'TypeError'
+refused(lambda: up.unquote('a', zzz=1)) 'TypeError'
+refused(lambda: up.urlencode({}, zzz=1)) 'TypeError'
+refused(lambda: up.urlparse('a', zzz=1)) 'TypeError'
+refused(lambda: up.urljoin('a', 'b', zzz=1)) 'TypeError'
+refused(lambda: up.urldefrag('a', zzz=1)) 'TypeError'
+refused(lambda: up.parse_qs('a', zzz=1)) 'TypeError'
+refused(lambda: ET.fromstring('<a/>', zzz=1)) 'TypeError'
+refused(lambda: ET.indent(ET.Element('a'), zzz=1)) 'TypeError'
+refused(lambda: ET.iselement(1, zzz=1)) 'TypeError'
+refused(lambda: ET.register_namespace('a', 'b', zzz=1)) 'TypeError'
+refused(lambda: ET.XMLID('<a/>', zzz=1)) 'TypeError'
+refused(lambda: ET.Comment('a', zzz=1)) 'TypeError'
+refused(lambda: ET.parse(io.StringIO('<a/>'), zzz=1)) 'TypeError'
+refused(lambda: dataclasses.is_dataclass(1, zzz=1)) 'TypeError'
+refused(lambda: decimal.Decimal('1', zzz=1)) 'TypeError'
+refused(lambda: math.isclose(1, 1, zzz=1)) 'TypeError'
+refused(lambda: math.prod([1], zzz=1)) 'TypeError'
+refused(lambda: math.nextafter(1.0, 2.0, zzz=1)) 'TypeError'
+refused(lambda: random.choices([1], zzz=1)) 'TypeError'
+refused(lambda: struct.unpack_from('b', b'a', zzz=1)) 'TypeError'
+refused(lambda: binascii.b2a_base64(b'a', zzz=1)) 'TypeError'
+refused(lambda: gzip.decompress(gzip.compress(b'a'), zzz=1)) 'TypeError'
+refused(lambda: uuid.uuid4(zzz=1)) 'TypeError'
+refused(lambda: uuid.uuid5(ns, 'a', zzz=1)) 'TypeError'
+refused(lambda: uuid.uuid1(zzz=1)) 'TypeError'
+refused(lambda: uuid.UUID(int=1, zzz=1)) 'TypeError'
+refused(lambda: traceback.format_exc(zzz=1)) 'TypeError'
+refused(lambda: dt.datetime.now(zzz=1)) 'TypeError'
+refused(lambda: dt.date.fromordinal(1, zzz=1)) 'TypeError'
+refused(lambda: dt.datetime.fromordinal(1, zzz=1)) 'TypeError'
+refused(lambda: dt.date.fromtimestamp(1, zzz=1)) 'TypeError'
+refused(lambda: dt.datetime.utcfromtimestamp(1, zzz=1)) 'TypeError'
+refused(lambda: io.StringIO('a', zzz=1)) 'TypeError'
+refused(lambda: itertools.chain([1], foo=1)) 'TypeError'
+refused(lambda: itertools.cycle([1], foo=1)) 'TypeError'
+refused(lambda: itertools.permutations([1, 2], foo=1)) 'TypeError'
+refused(lambda: itertools.product([1], foo=1)) 'TypeError'
+refused(lambda: itertools.zip_longest([1], foo=1)) 'TypeError'
+refused(lambda: itertools.islice([1], 1, foo=2)) 'TypeError'
+refused(lambda: itertools.starmap(abs, [], foo=1)) 'TypeError'
+refused(lambda: itertools.count(1, foo=1)) 'TypeError'
+refused(lambda: itertools.repeat(1, 2, foo=1)) 'TypeError'
+refused(lambda: itertools.pairwise([1], foo=1)) 'TypeError'
+refused(lambda: itertools.batched([1], 1, foo=1)) 'TypeError'
+refused(lambda: itertools.groupby([1], foo=1)) 'TypeError'
+refused(lambda: itertools.accumulate([1], foo=1)) 'TypeError'
+refused(lambda: itertools.compress([1], [1], foo=1)) 'TypeError'
+refused(lambda: itertools.takewhile(abs, [1], foo=1)) 'TypeError'
+refused(lambda: itertools.dropwhile(abs, [1], foo=1)) 'TypeError'
+refused(lambda: itertools.filterfalse(abs, [1], foo=1)) 'TypeError'
+refused(lambda: itertools.tee([1], foo=1)) 'TypeError'
+refused(lambda: itertools.combinations([1], 1, foo=1)) 'TypeError'
+refused(lambda: itertools.combinations_with_replacement([1], 1, foo=1)) 'TypeError'
+refused(lambda: dataclasses.fields(Dc, zzz=1)) 'TypeError'
+html.escape(s='<a>', quote=False) '&lt;a&gt;'
+html.unescape(s='&lt;') '<'
+textwrap.indent(text='a', prefix='>') '>a'
+textwrap.dedent(text=' a') 'a'
+copy.copy(x=[1]) [1]
+collections.OrderedDict.fromkeys(iterable=[1], value=2) OrderedDict({1: 2})
+collections.OrderedDict.fromkeys('ab', value=2) OrderedDict({'a': 2, 'b': 2})
+up.urldefrag(url='a#b') DefragResult(url='a', fragment='b')
+up.quote(string='a b', safe='') 'a%20b'
+up.unquote(string='a%20b', errors='strict') 'a b'
+up.urlparse(url='http://a/', scheme='x') ParseResult(scheme='http', netloc='a', path='/', params='', query='', fragment='')
+up.urljoin(base='http://a/', url='b') 'http://a/b'
+up.parse_qs(qs='a=', keep_blank_values=True) {'a': ['']}
+up.urlencode(query={'a': 1}, doseq=True) 'a=1'
+ET.iselement(element=1) False
+ET.register_namespace(prefix='a', uri='http://q/') None
+tuple(itertools.compress(data=[1, 2], selectors=[0, 1])) (2,)
+next(itertools.count(start=1, step=2)) 1
+tuple(itertools.repeat(object=1, times=2)) (1, 1)
+tuple(itertools.permutations(iterable=[1, 2], r=1)) ((1,), (2,))
+tuple(itertools.combinations(iterable=[1, 2], r=1)) ((1,), (2,))
+tuple(itertools.combinations_with_replacement(iterable=[1], r=1)) ((1,),)
+tuple(itertools.accumulate(iterable=[1, 2], func=op.add, initial=1)) (1, 2, 4)
+tuple(k for k, g in itertools.groupby(iterable=[1, 1], key=abs)) (1,)
+tuple(itertools.zip_longest([1], [], fillvalue=0)) ((1, 0),)
+tuple(itertools.product([1], repeat=2)) ((1, 1),)
+tuple(itertools.batched(iterable=[1, 2], n=1, strict=True)) ((1,), (2,))
+functools.cmp_to_key(mycmp=lambda a, b: 0)(1) == functools.cmp_to_key(mycmp=lambda a, b: 0)(2) True
+functools.lru_cache(maxsize=1, typed=True)(abs)(-1) 1
+math.isclose(a=1.0, b=1.0, rel_tol=0.1, abs_tol=0.1) True
+math.prod([2], start=3) 6
+math.nextafter(1.0, 2.0, steps=0) 1.0
+random.choices([1], weights=[1], k=2) [1, 1]
+random.choices(population=[1], cum_weights=[1], k=1) [1]
+struct.unpack_from('b', buffer=b'ab', offset=1) (98,)
+binascii.b2a_base64(b'a', newline=False) b'YQ=='
+gzip.decompress(data=gzip.compress(b'a')) b'a'
+uuid.UUID(int=1, version=4) UUID('00000000-0000-4000-8000-000000000001')
+str(uuid.UUID(hex='12345678123456781234567812345678')) '12345678-1234-5678-1234-567812345678'
+str(uuid.uuid5(namespace=ns, name='a')) '4f3f2898-69e3-5a0d-820a-c4e87987dbce'
+str(uuid.uuid3(ns, name='a')) '4c104dd0-4821-30d5-9ce3-0e7a1f8b7c0d'
+traceback.format_exc(limit=1, chain=False) 'NoneType: None\n'
+dt.datetime.fromtimestamp(0, tz=dt.timezone.utc) datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+dt.datetime.combine(date=dt.date(2020, 1, 1), time=dt.time(1), tzinfo=None) datetime.datetime(2020, 1, 1, 1, 0)
+io.StringIO('a', newline='').read() 'a'
+io.StringIO(initial_value='a').read() 'a'
+decimal.Decimal(value='1') Decimal('1')
+collections.deque(iterable=[1], maxlen=1) deque([1], maxlen=1)
+collections.namedtuple(typename='P', field_names='a', rename=False, defaults=None, module=None)(1) P(a=1)
+secrets.token_hex(nbytes=0) ''
+string.capwords(s='a b', sep=' ') 'A B'
+st.fmean([1, 2], weights=[1, 1]) 1.5
+st.harmonic_mean([1, 2], weights=[1, 1]) 1.3333333333333333
+st.correlation([1, 2, 3], [1, 2, 4], method='ranked') 1.0
+st.linear_regression([1, 2, 3], [1, 2, 4], proportional=True) LinearRegression(slope=1.2142857142857142, intercept=0.0)
+ET.fromstring('<a/>').tag 'a'
+ET.tostring(ET.Comment(text='a')) b'<!--a-->'
+dataclasses.is_dataclass(obj=Dc) True
+[f.name for f in dataclasses.fields(class_or_instance=Dc)] ['a']

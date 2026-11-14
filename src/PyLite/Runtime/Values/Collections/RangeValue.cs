@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Modules.Support;
@@ -25,7 +24,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         // Integral membership without a scan (rangeobject.c range_index/range_count); a float that is
         // integral compares equal to its int, anything else is never a member.
-        private bool TryMember(ScriptValue item, out BigInteger x)
+        private bool TryMember(EvalContext ctx, ScriptValue item, out BigInteger x)
         {
             if (item.Kind == ValueKind.Int || item.Kind == ValueKind.Bool)
             {
@@ -42,23 +41,23 @@ namespace Outbridge.PyLite.Runtime.Values
                 return false;
             }
             bool inRange = Step.Sign > 0 ? (Start <= x && x < Stop) : (Stop < x && x <= Start);
-            return inRange && ((x - Start) % Step).IsZero;
+            return inRange && OnStep(ctx, x - Start);
         }
 
         private ScriptValue Index(ScriptValue[] a, EvalContext ctx)
         {
             Args.Exactly(ctx, a, "index", 1);
             BigInteger x;
-            if (!TryMember(a[0], out x))
+            if (!TryMember(ctx, a[0], out x))
                 throw Raise.ValueError(ctx, a[0].Repr(ctx) + " is not in range");
-            return ctx.Values.Int((x - Start) / Step);
+            return ctx.Values.Int(_bigStep ? BigOps.Divide(ctx, x - Start, Step) : (x - Start) / Step);
         }
 
         private ScriptValue Count(ScriptValue[] a, EvalContext ctx)
         {
             Args.Exactly(ctx, a, "count", 1);
             BigInteger x;
-            return ctx.Values.Int(TryMember(a[0], out x) ? 1 : 0);
+            return ctx.Values.Int(TryMember(ctx, a[0], out x) ? 1 : 0);
         }
         private BigInteger _length = BigInteger.MinusOne;   // lazy sentinel
 
@@ -75,12 +74,38 @@ namespace Outbridge.PyLite.Runtime.Values
             get
             {
                 if (_length.Sign < 0)
-                    _length = ComputeLength();
+                    _length = ComputeLength(null);
                 return _length;
             }
         }
 
-        private BigInteger ComputeLength()
+        // A range's divisions and products are long only with a step past a machine word (the other operand
+        // is at most MaxIntBits): such a range takes BigOps and gets its length here, where the context can
+        // bound it; every other one keeps the plain operators and the lazy, context-free Length. Whoever
+        // builds a range whose step may be that large calls this: range() and slicing (reversed() only
+        // iterates, which adds).
+        private bool _bigStep;
+
+        internal void PrimeLength(EvalContext ctx)
+        {
+            if (Step > long.MaxValue || Step < long.MinValue)
+            {
+                _bigStep = true;
+                _length = ComputeLength(ctx);
+            }
+        }
+
+        private bool OnStep(EvalContext ctx, BigInteger offset)
+        {
+            return (_bigStep ? BigOps.Remainder(ctx, offset, Step) : offset % Step).IsZero;
+        }
+
+        internal BigInteger TimesStep(EvalContext ctx, BigInteger k)
+        {
+            return _bigStep ? BigOps.Multiply(ctx, k, Step) : k * Step;
+        }
+
+        private BigInteger ComputeLength(EvalContext ctx)
         {
             BigInteger lo, hi, step;
             if (Step.Sign > 0)
@@ -97,7 +122,7 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             if (lo >= hi)
                 return BigInteger.Zero;
-            return (hi - lo - 1) / step + 1;
+            return (ctx == null ? (hi - lo - 1) / step : BigOps.Divide(ctx, hi - lo - 1, step)) + 1;
         }
 
         protected internal override bool IsTruthyCore(EvalContext ctx) { return Length.Sign > 0; }
@@ -169,7 +194,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 BigInteger x = NumericOps.AsBigInteger(item);
                 bool inRange = Step.Sign > 0 ? (Start <= x && x < Stop) : (Stop < x && x <= Start);
-                found = inRange && ((x - Start) % Step).IsZero;
+                found = inRange && OnStep(ctx, x - Start);
                 return true;
             }
             found = false;
@@ -187,7 +212,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     i += Length;
                 if (i.Sign < 0 || i >= Length)
                     throw Raise.IndexError(ctx, "range object index out of range");
-                return ctx.Values.Int(Start + i * Step);
+                return ctx.Values.Int(Start + TimesStep(ctx, i));
             }
             throw Raise.TypeError(ctx, "range indices must be integers or slices, not " + index.PyTypeName);
         }
@@ -195,34 +220,38 @@ namespace Outbridge.PyLite.Runtime.Values
         private RangeValue SliceRange(SliceValue sl, EvalContext ctx)
         {
             SliceIndices ind = sl.Indices(Length, ctx);
-            BigInteger newStep = Step * ind.Step;
-            BigInteger newStart = Start + ind.Start * Step;
-            BigInteger newStop = Start + ind.Stop * Step;
-            return ctx.Values.Range(newStart, newStop, newStep);
+            BigInteger newStep = TimesStep(ctx, ind.Step);
+            BigInteger newStart = Start + TimesStep(ctx, ind.Start);
+            BigInteger newStop = Start + TimesStep(ctx, ind.Stop);
+            RangeValue r = ctx.Values.Range(newStart, newStop, newStep);
+            r.PrimeLength(ctx);
+            return r;
         }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
             sb.Append("range(");
-            sb.Append(Start.ToString(CultureInfo.InvariantCulture));
+            sb.Append(NumericOps.ToDecimalString(Start, ctx));
             sb.Append(", ");
-            sb.Append(Stop.ToString(CultureInfo.InvariantCulture));
+            sb.Append(NumericOps.ToDecimalString(Stop, ctx));
             if (Step != BigInteger.One)
             {
                 sb.Append(", ");
-                sb.Append(Step.ToString(CultureInfo.InvariantCulture));
+                sb.Append(NumericOps.ToDecimalString(Step, ctx));
             }
             sb.Append(')');
         }
     }
 
-    internal sealed class RangeIterator : ScriptIteratorBase
+    internal sealed class RangeIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly BigInteger _stop, _step;
         private readonly bool _up;
         private BigInteger _current;
 
-        // P1: when start/stop/step sit comfortably inside long (quarter-range keeps _curL += _stepL
+        // when start/stop/step sit comfortably inside long (quarter-range keeps _curL += _stepL
         // overflow-free), iterate on machine words; huge ranges keep the exact BigInteger walk.
         private readonly bool _small;
         private readonly long _stopL, _stepL;

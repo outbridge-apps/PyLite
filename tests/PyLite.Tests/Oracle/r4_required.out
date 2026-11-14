@@ -1,0 +1,95 @@
+True
+True
+True
+False
+(<class 'int'>, <class 'str'>)
+(<class 'int'>, <class 'NoneType'>, <class 'str'>)
+<class 'typing.Union'>
+'Union'
+int | str
+int | str | None
+None | int
+__main__.A | __main__.B
+__main__.A | __main__.B
+__main__.A | int | __main__.B | None
+<class 'int'>
+int | str
+True
+True
+TypeError 'typing.Union' object is not callable
+TypeError '<' not supported between instances of 'typing.Union' and 'typing.Union'
+TypeError object of type 'typing.Union' has no len()
+'dflt'
+True
+AttributeError 'typing.Union' object has no attribute 'x'
+True
+True
+TypeError unsupported operand type(s) for |: 'type' and 'int'
+TypeError unsupported operand type(s) for |: 'NoneType' and 'NoneType'
+'int | str'
+'int | str'
+1
+ValueError fold must be either 0 or 1, not 2
+ValueError fold must be either 0 or 1, not -1
+OverflowError Python int too large to convert to C long
+OverflowError Python int too large to convert to C long
+OverflowError Python int too large to convert to C long
+OverflowError Python int too large to convert to C long
+OverflowError Python int too large to convert to C long
+OverflowError Python int too large to convert to C ssize_t
+OverflowError Python int too large to convert to C ssize_t
+OverflowError Python int too large to convert to C ssize_t
+Decimal('1E+5')
+Decimal('0.00001')
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+'0.3333333333'
+'3.3333333333'
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+ValueError Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_dig
+'133333634'
+'0.3333333333'
+'1/3'
+'-3.143'
+1 NFD 10 'a\u0327\u0316\u0323\u0301\u0300\u0345b\u0323\u0301' '\u0301\u0300\u0345b\u0323\u0301' True
+1 NFC 8 '\xe1\u0327\u0316\u0323\u0300\u0345\u1e05\u0301' '\u0316\u0323\u0300\u0345\u1e05\u0301' True
+1 NFKD 10 'a\u0327\u0316\u0323\u0301\u0300\u0345b\u0323\u0301' '\u0301\u0300\u0345b\u0323\u0301' True
+1 NFKC 8 '\xe1\u0327\u0316\u0323\u0300\u0345\u1e05\u0301' '\u0316\u0323\u0300\u0345\u1e05\u0301' True
+2 NFD 18 'a\u0327\u0327\u0316\u0323\u0316\u0323\u0301\u0300\u0301\u0300\u0345\u0345b' '\u0345b\u0323\u0323\u0301\u0301' True
+2 NFC 16 '\xe1\u0327\u0327\u0316\u0323\u0316\u0323\u0300\u0301\u0300\u0345\u0345\u1e05\u0323' '\u0345\u0345\u1e05\u0323\u0301\u0301' True
+2 NFKD 18 'a\u0327\u0327\u0316\u0323\u0316\u0323\u0301\u0300\u0301\u0300\u0345\u0345b' '\u0345b\u0323\u0323\u0301\u0301' True
+2 NFKC 16 '\xe1\u0327\u0327\u0316\u0323\u0316\u0323\u0300\u0301\u0300\u0345\u0345\u1e05\u0323' '\u0345\u0345\u1e05\u0323\u0301\u0301' True
+3 NFD 26 'a\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0301\u0300\u0301\u0300' '\u0323\u0323\u0323\u0301\u0301\u0301' True
+3 NFC 24 '\xe1\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0300\u0301\u0300\u0301' '\u1e05\u0323\u0323\u0301\u0301\u0301' True
+3 NFKD 26 'a\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0301\u0300\u0301\u0300' '\u0323\u0323\u0323\u0301\u0301\u0301' True
+3 NFKC 24 '\xe1\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0300\u0301\u0300\u0301' '\u1e05\u0323\u0323\u0301\u0301\u0301' True
+5 NFD 42 'a\u0327\u0327\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0316\u0323' '\u0323\u0301\u0301\u0301\u0301\u0301' True
+5 NFC 40 '\xe1\u0327\u0327\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0316\u0323' '\u0323\u0301\u0301\u0301\u0301\u0301' True
+5 NFKD 42 'a\u0327\u0327\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0316\u0323' '\u0323\u0301\u0301\u0301\u0301\u0301' True
+5 NFKC 40 '\xe1\u0327\u0327\u0327\u0327\u0327\u0316\u0323\u0316\u0323\u0316\u0323\u0316\u0323' '\u0323\u0301\u0301\u0301\u0301\u0301' True
+20 NFD 162 'a\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+20 NFC 160 '\xe1\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+20 NFKD 162 'a\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+20 NFKC 160 '\xe1\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+400 NFD 3202 'a\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+400 NFC 3200 '\xe1\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+400 NFKD 3202 'a\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+400 NFKC 3200 '\xe1\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327\u0327' '\u0301\u0301\u0301\u0301\u0301\u0301' True
+'\u0635\u0644\u0649 \u0627\u0644\u0644\u0647 \u0639\u0644\u0 9000
+{"k000": 0, "k001": 173, "k002": 146, "k003": 119, "k004": 9
+{"": 3, "B": 5, "a": 2, "ab": 4, "b": 1, "\u00e9": 6, "\u00ff": 8}
+{
+ "a": 0,
+ "x": {
+  "y": [
+   {
+    "p": 2,
+    "q": 1
+   }
+  ],
+  "z": 1
+ }
+}
+{} {"only": 1}

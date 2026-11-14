@@ -53,6 +53,7 @@ namespace Outbridge.PyLite.Hosting
             registry.Register("traceback", TracebackModule.Create);
             registry.Register("textwrap", TextwrapModule.Create);
             registry.Register("secrets", SecretsModule.Create);
+            registry.Register("__future__", FutureModule.Create);
         }
     }
 }

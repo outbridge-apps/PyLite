@@ -102,7 +102,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("ZoneInfo(1)", "TypeError", "ZoneInfo keys must be strings, not int")]
         [InlineData("ZoneInfo()", "TypeError", "ZoneInfo() takes exactly one argument (0 given)")]
         [InlineData("ams.utcoffset(1)", "TypeError", "utcoffset(dt) argument must be a datetime instance or None")]
-        [InlineData("datetime(2024, 1, 1, fold=2)", "ValueError", "fold must be either 0 or 1")]
+        [InlineData("datetime(2024, 1, 1, fold=2)", "ValueError", "fold must be either 0 or 1, not 2")]
         [InlineData("datetime(2024, 1, 1).replace(fold='x')", "TypeError", "'str' object cannot be interpreted as an integer")]
         public void Errors(string expr, string exc, string message)
         {

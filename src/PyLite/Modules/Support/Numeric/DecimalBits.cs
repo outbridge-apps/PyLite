@@ -263,14 +263,7 @@ namespace Outbridge.PyLite.Modules.Support
         // Half-even round of m (>=0) from fromScale down to toScale (toScale < fromScale).
         public static BigInteger RoundUnscaledToScale(BigInteger m, int fromScale, int toScale)
         {
-            int drop = fromScale - toScale;
-            BigInteger divisor = BigInteger.Pow(10, drop);
-            BigInteger r;
-            BigInteger q = BigInteger.DivRem(m, divisor, out r);
-            BigInteger twice = r * 2;
-            if (twice > divisor || (twice == divisor && !q.IsEven))
-                q += 1;
-            return q;
+            return BigIntMath.DivNearHalfEven(m, BigInteger.Pow(10, fromScale - toScale));
         }
 
         public static int SignificantDigits(BigInteger m)

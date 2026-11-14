@@ -2,7 +2,6 @@ using System;
 using System.Security.Cryptography;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
@@ -37,7 +36,7 @@ namespace Outbridge.PyLite.Modules
                 if (dkLen < 1)
                     throw Raise.ValueError(ctx, "key length must be greater than 0.");
             }
-            ctx.Values.PreCharge(24 + dkLen);
+            ctx.Values.PreCharge(28L + dkLen + salt.Length);
 
             int blocks = (dkLen + hashLen - 1) / hashLen;
             var dk = new byte[blocks * hashLen];
@@ -47,6 +46,8 @@ namespace Outbridge.PyLite.Modules
                 Array.Copy(salt, input, salt.Length);
                 for (int b = 1; b <= blocks; b++)
                 {
+                    // Every block hashes the whole salt again: a long salt and a large dklen multiply.
+                    ctx.Budget.ChargeLinear(input.Length);
                     input[salt.Length] = (byte)(b >> 24);
                     input[salt.Length + 1] = (byte)(b >> 16);
                     input[salt.Length + 2] = (byte)(b >> 8);

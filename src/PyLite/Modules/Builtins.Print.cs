@@ -41,13 +41,18 @@ namespace Outbridge.PyLite.Modules
                 }
             }
 
+            // The line is capped as it grows: a 16M-char sep between many arguments built gigabytes before
+            // the output limit saw any of it.
             var sb = new StringBuilder();
             for (int i = 0; i < args.Length; i++)
             {
+                string piece = args[i].Str(c);   // Str charges through the value model
+                c.Values.CheckStrLen((long)sb.Length + (i > 0 ? sep.Length : 0) + piece.Length);
                 if (i > 0)
                     sb.Append(sep);
-                sb.Append(args[i].Str(c));   // Str charges through the value model
+                sb.Append(piece);
             }
+            c.Values.CheckStrLen((long)sb.Length + end.Length);
             sb.Append(end);
             Emit(c, sb.ToString());
             return c.Values.None;

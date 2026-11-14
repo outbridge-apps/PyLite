@@ -16,10 +16,10 @@ namespace Outbridge.PyLite.Runtime.Values
         private ScriptValue[] _buf;
         private int _head;
         private int _count;
-        private readonly int _maxlen;   // -1 => unbounded
+        private readonly long _maxlen;   // -1 => unbounded
         private int _version;
 
-        internal DequeValue(int maxlen)
+        internal DequeValue(long maxlen)
         {
             _maxlen = maxlen;
             _buf = new ScriptValue[8];
@@ -29,10 +29,24 @@ namespace Outbridge.PyLite.Runtime.Values
         internal override ValueKind Kind { get { return ValueKind.Opaque; } }
         internal int Version { get { return _version; } }
         internal int Count { get { return _count; } }
-        internal int MaxLenRaw { get { return _maxlen; } }
+        internal long MaxLenRaw { get { return _maxlen; } }
 
         private int Phys(int i) { return (_head + i) % _buf.Length; }
         internal ScriptValue GetLogical(int i) { return _buf[Phys(i)]; }
+
+        // CPython checks a deque's state after every comparison a walk makes: an __eq__ (or the __bool__ of
+        // what it returned) that mutates the deque ends the walk with this error, not on a moved slot.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private void CheckUnchanged(int version, EvalContext ctx)
+        {
+            if (_version != version)
+                ThrowMutated(ctx);   // out of line: a method that throws is not inlined
+        }
+
+        private static void ThrowMutated(EvalContext ctx)
+        {
+            throw Raise.RuntimeError(ctx, "deque mutated during iteration");
+        }
 
         // ---- ScriptValue hooks ----
 
@@ -40,17 +54,11 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override bool TryLengthCore(out long length) { length = _count; return true; }
         protected internal override IScriptIterator GetIteratorCore(EvalContext ctx) { return new DequeIterator(this); }
 
-        // reversed(d): a snapshot walked right-to-left (a deque is small; no live reverse cursor needed).
-        protected internal override IScriptIterator GetReverseIteratorCore(EvalContext ctx)
-        {
-            var arr = new ScriptValue[_count];
-            for (int i = 0; i < _count; i++)
-                arr[i] = GetLogical(_count - 1 - i);
-            return PyOps.GetIterator(ctx.Values.Tuple(arr), ctx);
-        }
+        protected internal override IScriptIterator GetReverseIteratorCore(EvalContext ctx) { return new DequeReverseIterator(this); }
 
         protected internal override bool TryContainsCore(ScriptValue item, EvalContext ctx, int depth, out bool found)
         {
+            int v = _version;
             for (int i = 0; i < _count; i++)
             {
                 ctx.Budget.Step();
@@ -59,6 +67,7 @@ namespace Outbridge.PyLite.Runtime.Values
                     found = true;
                     return true;
                 }
+                CheckUnchanged(v, ctx);
             }
             found = false;
             return true;
@@ -73,15 +82,14 @@ namespace Outbridge.PyLite.Runtime.Values
         protected internal override bool TrySetItemCore(ScriptValue index, ScriptValue value, EvalContext ctx)
         {
             int i = NormIndex(ctx, index);
-            _buf[Phys(i)] = value;
-            _version++;
+            _buf[Phys(i)] = value;   // not a mutation to an iterator: CPython's deque state counts size and order changes
             return true;
         }
 
         protected internal override bool TryDelItemCore(ScriptValue index, EvalContext ctx)
         {
             int i = NormIndex(ctx, index);
-            RemoveAt(i);
+            RemoveAt(i, ctx);
             return true;
         }
 
@@ -92,9 +100,16 @@ namespace Outbridge.PyLite.Runtime.Values
                 return ReferenceEquals(this, other);
             if (_count != o._count)
                 return false;
-            for (int i = 0; i < _count; i++)
-                if (!PyOps.Equals(GetLogical(i), o.GetLogical(i), ctx, depth + 1))
+            // As CPython compares two deques, by iterators: a mutation shows when the next pair is read, and
+            // the end of an iteration is a read.
+            int n = _count, v = _version, ov = o._version;
+            for (int i = 0; i <= n; i++)
+            {
+                CheckUnchanged(v, ctx);
+                o.CheckUnchanged(ov, ctx);
+                if (i < n && !PyOps.Equals(GetLogical(i), o.GetLogical(i), ctx, depth + 1))
                     return false;
+            }
             return true;
         }
 
@@ -106,9 +121,11 @@ namespace Outbridge.PyLite.Runtime.Values
                 cmp = 0;
                 return false;
             }
-            int n = Math.Min(_count, o._count);
+            int n = Math.Min(_count, o._count), v = _version, ov = o._version;
             for (int i = 0; i < n; i++)
             {
+                CheckUnchanged(v, ctx);
+                o.CheckUnchanged(ov, ctx);
                 ScriptValue a = GetLogical(i), b = o.GetLogical(i);
                 if (!PyOps.Equals(a, b, ctx, depth + 1))
                 {
@@ -116,11 +133,30 @@ namespace Outbridge.PyLite.Runtime.Values
                     return true;
                 }
             }
+            CheckUnchanged(v, ctx);
+            o.CheckUnchanged(ov, ctx);
             cmp = _count.CompareTo(o._count);
             return true;
         }
 
         protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth)
+        {
+            if (!ReprEngine.EnterLeaf(ctx, this))
+            {
+                sb.Append("[...]");   // CPython's deque marks itself as a list does
+                return;
+            }
+            try
+            {
+                ReprBody(sb, ctx, depth);
+            }
+            finally
+            {
+                ReprEngine.ExitLeaf(ctx, this);
+            }
+        }
+
+        private void ReprBody(BudgetStringBuilder sb, EvalContext ctx, int depth)
         {
             ListValue lst = ctx.Values.List(_count);
             for (int i = 0; i < _count; i++)
@@ -224,20 +260,36 @@ namespace Outbridge.PyLite.Runtime.Values
         // Shallow clone preserving maxlen and element references (copy.copy / copy.deepcopy scaffolding).
         internal DequeValue CloneShallow(EvalContext ctx)
         {
-            var d = new DequeValue(_maxlen);
+            int cap = Math.Max(8, _count);
+            ctx.Values.PreCharge(88 + 8L * cap);   // the object and its buffer: kept copies were charged a third of their size
+            var d = new DequeValue(_maxlen) { _buf = new ScriptValue[cap] };
             for (int i = 0; i < _count; i++)
-                d.AppendRaw(GetLogical(i), ctx);
+                d._buf[i] = GetLogical(i);
+            d._count = _count;
             return d;
         }
 
         // Append without maxlen eviction (used by CloneShallow / deepcopy fill).
         internal void AppendRawPublic(ScriptValue x, EvalContext ctx) { AppendRaw(x, ctx); }
 
-        private void RemoveAt(int i)
+        // Shifts the shorter side, as CPython's deque does, and charges what it moves.
+        private void RemoveAt(int i, EvalContext ctx)
         {
-            for (int j = i; j < _count - 1; j++)
-                _buf[Phys(j)] = _buf[Phys(j + 1)];
-            _buf[Phys(_count - 1)] = null;
+            if (i < _count / 2)
+            {
+                ctx.Budget.ChargeLinear(i);
+                for (int j = i; j > 0; j--)
+                    _buf[Phys(j)] = _buf[Phys(j - 1)];
+                _buf[_head] = null;
+                _head = (_head + 1) % _buf.Length;
+            }
+            else
+            {
+                ctx.Budget.ChargeLinear(_count - 1 - i);
+                for (int j = i; j < _count - 1; j++)
+                    _buf[Phys(j)] = _buf[Phys(j + 1)];
+                _buf[Phys(_count - 1)] = null;
+            }
             _count--;
             _version++;
         }
@@ -313,7 +365,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 if (a[0].Kind != ValueKind.Int && a[0].Kind != ValueKind.Bool)
                     throw Raise.TypeError(ctx, "'" + a[0].PyTypeName + "' object cannot be interpreted as an integer");
-                n = NumericOps.AsBigInteger(a[0]);
+                n = Coerce.ToSsize64(ctx, NumericOps.AsBigInteger(a[0]));
             }
             else if (a.Length > 1)
             {
@@ -333,8 +385,8 @@ namespace Outbridge.PyLite.Runtime.Values
                     for (int t = 0; t < d._count - k; t++)
                         d.AppendRaw(d.PopLeftRaw(), ctx);         // left rotation: head -> tail
                 }
+                d._version++;   // CPython counts a rotation of two or more items only
             }
-            d._version++;
             return ctx.Values.None;
         }
 
@@ -342,11 +394,15 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             DequeValue d = (DequeValue)self;
             ScriptValue target = Args.One(ctx, a, "remove");
+            int v = d._version;
             for (int i = 0; i < d._count; i++)
             {
-                if (PyOps.Equals(target, d.GetLogical(i), ctx, 0))
+                bool eq = PyOps.Equals(target, d.GetLogical(i), ctx, 0);
+                if (d._version != v)
+                    throw Raise.IndexError(ctx, "deque mutated during iteration");   // CPython 3.14's text
+                if (eq)
                 {
-                    d.RemoveAt(i);
+                    d.RemoveAt(i, ctx);
                     return ctx.Values.None;
                 }
             }
@@ -359,7 +415,7 @@ namespace Outbridge.PyLite.Runtime.Values
             ScriptValue target = Args.One(ctx, a, "count");
             long needle;
             bool fast = PyOps.TryGetSmallInt(target, out needle);
-            int c = 0;
+            int c = 0, v = d._version;
             for (int i = 0; i < d._count; i++)
             {
                 ctx.Budget.Step();   // per-element cadence, matching ListMethods.Count
@@ -375,6 +431,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 }
                 if (PyOps.Equals(target, el, ctx, 0))
                     c++;
+                d.CheckUnchanged(v, ctx);
             }
             return ctx.Values.Int(c);
         }
@@ -389,8 +446,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 d._buf[pi] = d._buf[pj];
                 d._buf[pj] = t;
             }
-            d._version++;
-            return ctx.Values.None;
+            return ctx.Values.None;   // reverse() leaves CPython's state counter alone
         }
 
         private static ScriptValue Clear_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
@@ -423,11 +479,13 @@ namespace Outbridge.PyLite.Runtime.Values
             Args.Unpack(ctx, a, "index", 1, 3);
             int start = a.Length >= 2 ? ClampIndex(ctx, a[1], d._count) : 0;
             int stop = a.Length == 3 ? ClampIndex(ctx, a[2], d._count) : d._count;
+            int v = d._version;
             for (int i = start; i < stop; i++)
             {
                 ctx.Budget.Step();
                 if (PyOps.Equals(a[0], d.GetLogical(i), ctx, 0))
                     return ctx.Values.Int(i);
+                d.CheckUnchanged(v, ctx);
             }
             throw Raise.ValueError(ctx, "deque.index(x): x not in deque");
         }
@@ -474,6 +532,8 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal void RepeatInPlace(BigInteger n, EvalContext ctx)
         {
+            if (n > long.MaxValue || n < long.MinValue)
+                throw Raise.Overflow(ctx, "cannot fit 'int' into an index-sized integer");
             if (n <= 0)
             {
                 Clear_(this, System.Array.Empty<ScriptValue>(), KwArgs.Empty, ctx);
@@ -482,13 +542,16 @@ namespace Outbridge.PyLite.Runtime.Values
             int count = _count;
             if (count == 0)
                 return;
+            ctx.Values.PreCharge(8L * count);
+            ctx.Budget.ChargeLinear(count);
             var snapshot = new ScriptValue[count];
             for (int i = 0; i < count; i++)
                 snapshot[i] = GetLogical(i);
             for (BigInteger r = 1; r < n; r++)
             {
-                if (_maxlen >= 0 && r * count > _maxlen + count)
+                if (_maxlen >= 0 && r * count > (BigInteger)_maxlen + count)
                     break;   // further rounds only evict what they add
+                ctx.Budget.ChargeLinear(count);   // a full deque under maxlen appends without growing: no charge of its own
                 for (int i = 0; i < count; i++)
                     Append(snapshot[i], ctx);
             }
@@ -520,28 +583,30 @@ namespace Outbridge.PyLite.Runtime.Values
         private static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             var s = new Slots(v => ((DequeValue)v)._count);
-            s.Method("append", Append_);
-            s.Method("appendleft", AppendLeft_);
-            s.Method("pop", Pop_);
-            s.Method("popleft", PopLeft_);
-            s.Method("extend", Extend_);
-            s.Method("extendleft", ExtendLeft_);
-            s.Linear("rotate", Rotate_);
-            s.Linear("remove", Remove_);
-            s.Linear("count", Count_);
-            s.Linear("reverse", Reverse_);
-            s.Method("clear", Clear_);
-            s.Linear("copy", Copy_);
-            s.Linear("index", Index_);
-            s.Linear("insert", Insert_);
+            s.Method("append", 1, 1, Append_);
+            s.Method("appendleft", 1, 1, AppendLeft_);
+            s.Method("pop", 0, 0, Pop_);
+            s.Method("popleft", 0, 0, PopLeft_);
+            s.Method("extend", 1, 1, Extend_);
+            s.Method("extendleft", 1, 1, ExtendLeft_);
+            s.Linear("rotate", 0, 1, Rotate_);
+            s.Linear("remove", 1, 1, Remove_);
+            s.Linear("count", 1, 1, Count_);
+            s.Linear("reverse", 0, 0, Reverse_);
+            s.Method("clear", 0, 0, Clear_);
+            s.Linear("copy", 0, 0, Copy_);
+            s.Linear("index", 1, 3, Index_);
+            s.Linear("insert", 2, 2, Insert_);
             s.Property("maxlen", Maxlen);
             return s.Table;
         }
     }
 
     // deque iterator with a mutation-during-iteration version guard.
-    internal sealed class DequeIterator : ScriptIteratorBase
+    internal sealed class DequeIterator : ScriptIteratorBase, ICopyableIterator
     {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
         private readonly DequeValue _d;
         private readonly int _version;
         private int _idx;
@@ -559,6 +624,36 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             value = _d.GetLogical(_idx);
             _idx++;
+            return true;
+        }
+    }
+
+    // reversed(deque): a live cursor from the right end, as CPython's: it reads what the slot holds now, and
+    // a change of the length (or a rotation) since reversed() is a RuntimeError that also ends the iterator.
+    internal sealed class DequeReverseIterator : ScriptIteratorBase, ICopyableIterator
+    {
+        public IScriptIterator CopyPosition() { return (IScriptIterator)MemberwiseClone(); }
+
+        private readonly DequeValue _d;
+        private readonly int _version;
+        private int _left;
+
+        internal DequeReverseIterator(DequeValue d) { _d = d; _version = d.Version; _left = d.Count; }
+
+        protected override bool MoveNextCore(EvalContext ctx, out ScriptValue value)
+        {
+            if (_left == 0)
+            {
+                value = null;
+                return false;
+            }
+            if (_d.Version != _version)
+            {
+                _left = 0;
+                throw Raise.RuntimeError(ctx, "deque mutated during iteration");
+            }
+            _left--;
+            value = _d.GetLogical(_left);
             return true;
         }
     }

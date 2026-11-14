@@ -19,7 +19,7 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["compress"] = BuiltinFunctionValue.Make("compress", (s, a, kw, c) => Compress(c, a, kw));
             m["decompress"] = BuiltinFunctionValue.Make("decompress",
-                (s, a, kw, c) => Decompress(c, ZlibModule.DataArg(c, a, "decompress")));
+                Args.BoundKeywords("decompress", 1, (s, a, kw, c) => Decompress(c, ZlibModule.DataArg(c, a, "decompress")), "data"));
             m["BadGzipFile"] = ModuleKit.ExceptionClass(PyExceptionTypes.BadGzipFile);
             return ctx.Values.Module("gzip", m);
         }
@@ -29,35 +29,41 @@ namespace Outbridge.PyLite.Modules
             return Raise.Make(ctx, PyExceptionTypes.BadGzipFile, msg);
         }
 
+        // CPython's _read_exact: a member cut short is an EOFError, not a BadGzipFile
+        private static ScriptException Truncated(EvalContext ctx)
+        {
+            return Raise.Make(ctx, PyExceptionTypes.EOFError, "Compressed file ended before the end-of-stream marker was reached");
+        }
+
         private static ScriptValue Compress(EvalContext c, ScriptValue[] a, KwArgs kw)
         {
             byte[] data = ZlibModule.DataArg(c, a, "compress");
             int level = 9;
-            uint mtime = 0;
             Args.AtMost(c, a, "compress", 2);
             if (a.Length >= 2)
                 level = ZlibModule.IntArg(c, a[1]);
             var r = new KwReader(c, kw, "compress");
-            ScriptValue v;
+            ScriptValue v, mtimeArg;
             if (r.TryGet("compresslevel", out v))
                 level = ZlibModule.IntArg(c, v);
-            if (r.TryGet("mtime", out v))
-                mtime = MtimeArg(c, v);
+            bool timed = r.TryGet("mtime", out mtimeArg);
             r.RejectInvalid();
             if (level < 0 || level > 9)
                 throw Raise.ValueError(c, "Bad compression level");
+            // read after the level, as CPython packs the header after zlib has compressed
+            uint mtime = timed ? MtimeArg(c, mtimeArg) : 0;
             byte[] body = ZlibModule.DeflateRaw(c, data, level);
             return c.Values.Bytes(GzipWrap(c, body, data, mtime, level));
         }
 
         private static uint MtimeArg(EvalContext c, ScriptValue v)
         {
-            if (v.Kind == ValueKind.None)
-                return 0;
-            FloatValue f = v as FloatValue;
-            if (f != null)
-                return (uint)Math.Max(0, (long)f.Value);
-            return BinasciiModule.SeedArg(c, v, "compress");   // int/bool masked; non-int -> script TypeError
+            // mtime=None is 0 too, where CPython writes the time now (docs/deviations.md). CPython packs int(mtime)
+            // as 'L': out of range is struct.error, not a wrapped value
+            System.Numerics.BigInteger n = v.Kind == ValueKind.None ? System.Numerics.BigInteger.Zero : Builtins.IntOf(c, v);
+            if (n < 0 || n > uint.MaxValue)
+                throw Raise.Make(c, PyExceptionTypes.StructError, "'L' format requires 0 <= number <= 4294967295");
+            return (uint)n;
         }
 
         // header(10) + raw deflate + crc32(LE) + isize(LE). XFL mirrors CPython (2 best / 4 fastest).
@@ -78,16 +84,27 @@ namespace Outbridge.PyLite.Modules
         }
 
         // Shared with zlib.decompress(wbits=16+/32+). Members are concatenated, as in CPython.
-        internal static ScriptValue Decompress(EvalContext c, byte[] data)
+        // firstOnly: zlib.decompress with a gzip wbits reads one member and ignores what follows it.
+        internal static ScriptValue Decompress(EvalContext c, byte[] data, bool firstOnly = false)
         {
             List<byte[]> members = null;
             byte[] first = null;
             int offset = 0;
             while (offset < data.Length)
             {
+                if (first != null && firstOnly)
+                    break;
+                if (first != null)
+                {
+                    // zero padding after a member is skipped, as CPython's _read_eof does
+                    while (offset < data.Length && data[offset] == 0)
+                        offset++;
+                    if (offset == data.Length)
+                        break;
+                }
                 int pos = ParseHeader(c, data, offset);
                 if (data.Length - pos < 8)
-                    throw BadGzip(c, "Compressed file ended before the end-of-stream marker was reached");
+                    throw Truncated(c);
                 int end;
                 byte[] outp = InflateMember(c, data, pos, out end);
                 offset = end;
@@ -142,17 +159,22 @@ namespace Outbridge.PyLite.Modules
                         throw;
                     continue;
                 }
-                if (BinasciiModule.Crc32Raw(c, outp, 0) != ZlibModule.ReadLE32(data, k - 8))
+                uint crc = BinasciiModule.Crc32Raw(c, outp, 0);
+                if (crc != ZlibModule.ReadLE32(data, k - 8) || (uint)outp.Length != ZlibModule.ReadLE32(data, k - 4))
                 {
-                    if (last)
+                    if (!last)
+                        continue;
+                    // Bytes after the last member (zero padding, junk): the stream ends where it ends, so the
+                    // output is the same; its trailer is the first 8 bytes that match it. None: the old errors.
+                    int t = FirstTrailer(data, bodyStart + 8, k, crc, (uint)outp.Length);
+                    if (t > 0)
+                    {
+                        end = t;
+                        return outp;
+                    }
+                    if (crc != ZlibModule.ReadLE32(data, k - 8))
                         throw BadGzip(c, "CRC check failed");
-                    continue;
-                }
-                if ((uint)outp.Length != ZlibModule.ReadLE32(data, k - 4))
-                {
-                    if (last)
-                        throw BadGzip(c, "Incorrect length of data produced");
-                    continue;
+                    throw BadGzip(c, "Incorrect length of data produced");
                 }
                 end = k;
                 return outp;
@@ -160,11 +182,31 @@ namespace Outbridge.PyLite.Modules
             throw BadGzip(c, "CRC check failed");   // unreachable: the end-of-data candidate always throws
         }
 
+        private static int FirstTrailer(byte[] data, int from, int to, uint crc, uint size)
+        {
+            for (int k = from; k < to; k++)
+            {
+                if (ZlibModule.ReadLE32(data, k - 8) == crc && ZlibModule.ReadLE32(data, k - 4) == size)
+                    return k;
+            }
+            return 0;
+        }
+
+        private static byte[] Slice(byte[] d, int start, int max)
+        {
+            int n = Math.Min(max, d.Length - start);
+            var r = new byte[n];
+            Buffer.BlockCopy(d, start, r, 0, n);
+            return r;
+        }
+
         // RFC 1952 header: fixed 10 bytes, then optional FEXTRA/FNAME/FCOMMENT/FHCRC by FLG.
         private static int ParseHeader(EvalContext c, byte[] d, int start)
         {
-            if (d.Length - start < 10 || d[start] != 0x1F || d[start + 1] != 0x8B)
-                throw BadGzip(c, "Not a gzipped file");
+            if (d.Length - start < 2 || d[start] != 0x1F || d[start + 1] != 0x8B)
+                throw BadGzip(c, "Not a gzipped file (" + c.Values.Bytes(Slice(d, start, 2)).Repr(c) + ")");
+            if (d.Length - start < 10)
+                throw Truncated(c);
             if (d[start + 2] != 8)
                 throw BadGzip(c, "Unknown compression method");
             byte flg = d[start + 3];
@@ -172,7 +214,7 @@ namespace Outbridge.PyLite.Modules
             if ((flg & 4) != 0)   // FEXTRA
             {
                 if (pos + 2 > d.Length)
-                    throw BadGzip(c, "Compressed file ended before the end-of-stream marker was reached");
+                    throw Truncated(c);
                 int xlen = d[pos] | (d[pos + 1] << 8);
                 pos += 2 + xlen;
             }
@@ -183,7 +225,7 @@ namespace Outbridge.PyLite.Modules
             if ((flg & 2) != 0)   // FHCRC
                 pos += 2;
             if (pos > d.Length)
-                throw BadGzip(c, "Compressed file ended before the end-of-stream marker was reached");
+                throw Truncated(c);
             return pos;
         }
 
@@ -192,7 +234,7 @@ namespace Outbridge.PyLite.Modules
             while (pos < d.Length && d[pos] != 0)
                 pos++;
             if (pos >= d.Length)
-                throw BadGzip(c, "Compressed file ended before the end-of-stream marker was reached");
+                throw Truncated(c);
             return pos + 1;
         }
     }

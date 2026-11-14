@@ -62,28 +62,28 @@ namespace Outbridge.PyLite.Tests.Syntax
         public void UnterminatedSingle()
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("'abc"));
-            Assert.Equal("EOL while scanning string literal", e.Message);
+            Assert.Equal("unterminated string literal (detected at line 1)", e.Message);
         }
 
         [Fact]
         public void NewlineInSingle()
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("'a\nb'"));
-            Assert.Equal("EOL while scanning string literal", e.Message);
+            Assert.Equal("unterminated string literal (detected at line 1)", e.Message);
         }
 
         [Fact]
         public void UnterminatedTriple()
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("'''abc"));
-            Assert.Equal("EOF in multi-line string", e.Message);
+            Assert.Equal("unterminated triple-quoted string literal (detected at line 1)", e.Message);
         }
 
         [Fact]
         public void FourQuotesAfterTriple()
         {
             var e = Assert.Throws<PySyntaxErrorException>(() => L.Go("'''ab''''"));
-            Assert.Equal("EOL while scanning string literal", e.Message);
+            Assert.Equal("unterminated string literal (detected at line 1)", e.Message);
         }
 
         [Theory]

@@ -65,8 +65,8 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.TypeError(c, "'" + v.PyTypeName + "' object cannot be interpreted as an integer");
                 return v;
             }));
-            m["itemgetter"] = BuiltinFunctionValue.Make("itemgetter", ItemGetter);
-            m["attrgetter"] = BuiltinFunctionValue.Make("attrgetter", AttrGetter);
+            m["itemgetter"] = BuiltinFunctionValue.Make("itemgetter", Args.NoKeywords("itemgetter", ItemGetter));
+            m["attrgetter"] = BuiltinFunctionValue.Make("attrgetter", Args.NoKeywords("attrgetter", AttrGetter));
             m["methodcaller"] = BuiltinFunctionValue.Make("methodcaller", MethodCaller);
             return ctx.Values.Module("operator", m);
         }
@@ -79,17 +79,17 @@ namespace Outbridge.PyLite.Modules
 
         private static void Bin(Dictionary<string, ScriptValue> m, string name, PyBinOp op)
         {
-            m[name] = BuiltinFunctionValue.Make(name, (s, a, k, c) => PyOps.BinaryOp(op, Exactly(c, a, 2, name)[0], a[1], c));
+            m[name] = BuiltinFunctionValue.Make(name, Args.NoKeywords(name, (s, a, k, c) => PyOps.BinaryOp(op, Exactly(c, a, 2, name)[0], a[1], c)));
         }
 
         private static void Un(Dictionary<string, ScriptValue> m, string name, PyUnaryOp op)
         {
-            m[name] = BuiltinFunctionValue.Make(name, (s, a, k, c) => PyOps.UnaryOp(op, Exactly(c, a, 1, name)[0], c));
+            m[name] = BuiltinFunctionValue.Make(name, Args.NoKeywords(name, (s, a, k, c) => PyOps.UnaryOp(op, Exactly(c, a, 1, name)[0], c)));
         }
 
         private static void Cmp(Dictionary<string, ScriptValue> m, string name, PyCmpOp op)
         {
-            m[name] = BuiltinFunctionValue.Make(name, (s, a, k, c) => PyOps.RichCompare(op, Exactly(c, a, 2, name)[0], a[1], c));
+            m[name] = BuiltinFunctionValue.Make(name, Args.NoKeywords(name, (s, a, k, c) => PyOps.RichCompare(op, Exactly(c, a, 2, name)[0], a[1], c)));
         }
 
         private static ScriptValue CountOf(EvalContext ctx, ScriptValue[] a)
@@ -127,8 +127,9 @@ namespace Outbridge.PyLite.Modules
             if (items.Length == 0)
                 throw Raise.TypeError(ctx, "itemgetter expected 1 argument, got 0");
             ScriptValue[] keys = (ScriptValue[])items.Clone();
-            return BuiltinFunctionValue.Make("itemgetter", Args.Positional("itemgetter", 1, int.MaxValue, (s, a, k, c) =>
+            return ctx.Values.Closure("itemgetter", (s, a, k, c) =>
             {
+                Positional(c, a, k, "itemgetter", int.MaxValue);
                 ScriptValue obj = Exactly(c, a, 1, "itemgetter")[0];
                 if (keys.Length == 1)
                     return PyOps.GetItem(obj, keys[0], c);
@@ -136,7 +137,7 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 0; i < keys.Length; i++)
                     got[i] = PyOps.GetItem(obj, keys[i], c);
                 return c.Values.Tuple(got);
-            }));
+            }, keys.Length, false);
         }
 
         // attrgetter(name, ...): dotted names walk; one name -> the attribute, several -> the tuple.
@@ -150,10 +151,12 @@ namespace Outbridge.PyLite.Modules
                 StrValue s = names[i] as StrValue;
                 if (s == null)
                     throw Raise.TypeError(ctx, "attribute name must be a string");
+                ctx.Values.PreCharge(SplitBytes(s.Value));   // kept by the getter: 15M dots made 120 MB each
                 paths[i] = s.Value.Split('.');
             }
-            return BuiltinFunctionValue.Make("attrgetter", Args.Positional("attrgetter", 1, int.MaxValue, (s, a, k, c) =>
+            return ctx.Values.Closure("attrgetter", (s, a, k, c) =>
             {
+                Positional(c, a, k, "attrgetter", int.MaxValue);
                 ScriptValue obj = Exactly(c, a, 1, "attrgetter")[0];
                 if (paths.Length == 1)
                     return Walk(c, obj, paths[0]);
@@ -161,13 +164,49 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 0; i < paths.Length; i++)
                     got[i] = Walk(c, obj, paths[i]);
                 return c.Values.Tuple(got);
-            }));
+            }, paths.Length, false);
+        }
+
+        // Args.Positional's checks inside the getter's own delegate: one delegate a getter, not two.
+        private static void Positional(EvalContext c, ScriptValue[] a, KwArgs k, string f, int max)
+        {
+            if (k.Count != 0 || a.Length < 1 || a.Length > max)
+            {
+                Args.NoKw(c, k, f);
+                Args.CheckPositional(c, a, f, 1, max);
+            }
+        }
+
+        // What name.Split('.') keeps: its array, and a string per non-empty part (an empty one is String.Empty).
+        private static long SplitBytes(string name)
+        {
+            long bytes = 24;
+            int len = 0;
+            for (int i = 0; i <= name.Length; i++)
+            {
+                if (i < name.Length && name[i] != '.')
+                {
+                    len++;
+                    continue;
+                }
+                bytes += 8 + (len > 0 ? 24 + 2L * len : 0);
+                len = 0;
+            }
+            return bytes;
         }
 
         private static ScriptValue Walk(EvalContext ctx, ScriptValue obj, string[] path)
         {
-            foreach (string step in path)
-                obj = PyOps.GetAttr(obj, step, ctx);
+            // An attribute read per part, charged as it goes: 3M parts were one step per call.
+            for (int i = 0; i < path.Length; i++)
+            {
+                if ((i & (BudgetCost.LinearChunkSize - 1)) == 0)
+                {
+                    ctx.Budget.ChargeLinear(Math.Min(BudgetCost.LinearChunkSize, path.Length - i));
+                    ctx.Budget.CheckDeadlineAfterCall();   // two steps a chunk read the clock every ~2M parts: 0.4 s late
+                }
+                obj = PyOps.GetAttr(obj, path[i], ctx);
+            }
             return obj;
         }
 
@@ -181,11 +220,12 @@ namespace Outbridge.PyLite.Modules
                 throw Raise.TypeError(ctx, "method name must be a string");
             var rest = new ScriptValue[a.Length - 1];
             Array.Copy(a, 1, rest, 0, rest.Length);
-            return BuiltinFunctionValue.Make("methodcaller", Args.Positional("methodcaller", 1, 1, (s, args, k, c) =>
+            return ctx.Values.Closure("methodcaller", (s, args, k, c) =>
             {
+                Positional(c, args, k, "methodcaller", 1);
                 ScriptValue obj = Exactly(c, args, 1, "methodcaller")[0];
                 return c.CallHook(PyOps.GetAttr(obj, name.Value, c), rest, kw);
-            }));
+            }, a.Length + kw.Count, false);
         }
     }
 }

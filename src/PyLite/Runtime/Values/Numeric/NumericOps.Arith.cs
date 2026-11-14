@@ -11,7 +11,7 @@ namespace Outbridge.PyLite.Runtime.Values
     {
         internal static ScriptValue BinaryNumeric(PyBinOp op, ScriptValue a, ScriptValue b, EvalContext ctx)
         {
-            // P1 fast path: both operands are long-backed ints (BoolValue never is) — stay in machine words.
+            // Fast path: both operands are long-backed ints (BoolValue never is) — stay in machine words.
             IntValue ia = a as IntValue, ib = b as IntValue;
             if (ia != null && ib != null && ia.IsSmall && ib.IsSmall)
             {
@@ -57,7 +57,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyBinOp.FloorDiv:
                 case PyBinOp.Mod:
                     if (b == 0)
-                        throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     break;
                 case PyBinOp.LShift:
                     if (b < 0)
@@ -86,7 +86,7 @@ namespace Outbridge.PyLite.Runtime.Values
         // — the caller redoes the op on the exact path, which raises/charges canonically. Callers
         // that bypass IntOpSmall (the fused comprehension delegates) must gate on MaxIntBits >= 128
         // themselves so the estimate-based aborts of the big path stay reachable.
-        // a * b in a long, false on overflow without the cost of a thrown OverflowException (P1): operands
+        // a * b in a long, false on overflow without the cost of a thrown OverflowException: operands
         // both within ±2^31 cannot overflow; otherwise the product is checked by dividing back.
         internal static bool TryMulLong(long a, long b, out long r)
         {
@@ -179,7 +179,7 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static ScriptValue UnaryNumeric(PyUnaryOp op, ScriptValue a, EvalContext ctx)
         {
-            // P1 fast path for long-backed ints.
+            // Fast path for long-backed ints.
             IntValue iv = a as IntValue;
             if (iv != null && iv.IsSmall)
             {
@@ -190,7 +190,7 @@ namespace Outbridge.PyLite.Runtime.Values
                             return ctx.Values.Int(-iv.Small);
                         break;   // -MinValue overflows long; exact path below
                     case PyUnaryOp.Pos:
-                        return a;
+                        return EnumClassValue.MemberOf(a, ctx) != null ? ctx.Values.Int(iv.Small) : a;   // +C.A is the plain int, as int.__pos__ makes it
                     case PyUnaryOp.Invert:
                         return ctx.Values.Int(~iv.Small);   // two's complement ~a == -a-1, never overflows
                 }
@@ -203,7 +203,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyUnaryOp.Pos:
                     if (isFloat)
                         return a;
-                    return a.Kind == ValueKind.Bool ? ctx.Values.Int(AsBigInteger(a)) : a;
+                    return a.Kind == ValueKind.Bool || EnumClassValue.MemberOf(a, ctx) != null ? ctx.Values.Int(AsBigInteger(a)) : a;
                 case PyUnaryOp.Invert:
                     return isFloat ? null : ctx.Values.Int(-AsBigInteger(a) - 1);
                 default:
@@ -245,11 +245,11 @@ namespace Outbridge.PyLite.Runtime.Values
                     return TrueDivide(a, b, ctx);
                 case PyBinOp.FloorDiv:
                     if (b.IsZero)
-                        throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     { BigInteger r; return ctx.Values.Int(FloorDiv(a, b, out r, ctx)); }
                 case PyBinOp.Mod:
                     if (b.IsZero)
-                        throw Raise.ZeroDivision(ctx, "integer division or modulo by zero");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     { BigInteger r; FloorDiv(a, b, out r, ctx); return ctx.Values.Int(r); }
                 case PyBinOp.Pow: return PowIntOrFloat(a, b, ctx);
                 case PyBinOp.LShift: return LShiftInt(a, b, ctx);
@@ -269,8 +269,12 @@ namespace Outbridge.PyLite.Runtime.Values
             long bitsA = a.BitLength(), bitsB = b.BitLength();
             if (bitsA + bitsB - 1 > ctx.Limits.MaxIntBits)   // a product has bitsA+bitsB-1 or bitsA+bitsB bits
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits, bitsA + bitsB);
-            if ((bitsA / 64 + 1) * (bitsB / 64 + 1) > BigOps.LongWork)
-                return ctx.Values.Int(BigOps.MultiplyLong(ctx, a.Value, b.Value));
+            if (Math.Min(bitsA, bitsB) >= BigOps.KernelSquareBits || (bitsA / 64 + 1) * (bitsB / 64 + 1) > BigOps.LongWork)
+            {
+                BigInteger av = a.Value, bv = b.Value;   // past 64 bits each here, short of a lone huge product
+                if (BigOps.InKernel(bitsA / 64 + 1, bitsB / 64 + 1, av, bv))
+                    return ctx.Values.Int(BigOps.MultiplyLong(ctx, av, bv));
+            }
             bool big = bitsA > 4096 || bitsB > 4096;
             if (big)
                 ctx.Budget.CheckDeadlineNow();
@@ -292,7 +296,7 @@ namespace Outbridge.PyLite.Runtime.Values
             long bitsA = BitLength(a), bitsB = BitLength(b);
             if (bitsA + bitsB - 1 > ctx.Limits.MaxIntBits)
                 throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "MaxIntBits", ctx.Limits.MaxIntBits, bitsA + bitsB);
-            if ((bitsA / 64 + 1) * (bitsB / 64 + 1) > BigOps.LongWork)
+            if (BigOps.InKernel(bitsA / 64 + 1, bitsB / 64 + 1, a, b))
                 return BigOps.MultiplyLong(ctx, a, b);
             bool big = bitsA > 4096 || bitsB > 4096;
             if (big)
@@ -304,11 +308,6 @@ namespace Outbridge.PyLite.Runtime.Values
         }
 
         // Floor division with remainder (single point for //, %, divmod).
-        internal static BigInteger FloorDiv(BigInteger a, BigInteger b, out BigInteger r)
-        {
-            return FloorDiv(a, b, out r, null);
-        }
-
         // ctx set: a long division runs under BigOps (deadline-bounded).
         internal static BigInteger FloorDiv(BigInteger a, BigInteger b, out BigInteger r, EvalContext ctx)
         {
@@ -388,10 +387,10 @@ namespace Outbridge.PyLite.Runtime.Values
 
             int shift = 55 - (int)diff;
             BigInteger q, r;
-            if (shift >= 0)
-                q = BigInteger.DivRem(A << shift, B, out r);
+            if (shift >= 0)   // through BigOps: a million-bit divide is milliseconds, one step a call
+                q = BigOps.DivRem(ctx, A << shift, B, out r);
             else
-                q = BigInteger.DivRem(A, B << (-shift), out r);
+                q = BigOps.DivRem(ctx, A, B << (-shift), out r);
             if (!r.IsZero)
                 q |= BigInteger.One;   // sticky bit
 
@@ -456,16 +455,16 @@ namespace Outbridge.PyLite.Runtime.Values
                 case PyBinOp.Mul: return ctx.Values.Float(x * y);
                 case PyBinOp.TrueDiv:
                     if (y == 0.0)
-                        throw Raise.ZeroDivision(ctx, "float division by zero");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     return ctx.Values.Float(x / y);
                 case PyBinOp.FloorDiv:
                     if (y == 0.0)
-                        throw Raise.ZeroDivision(ctx, "float divmod()");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     double ignored;
                     return ctx.Values.Float(FloatDivMod(x, y, out ignored));
                 case PyBinOp.Mod:
                     if (y == 0.0)
-                        throw Raise.ZeroDivision(ctx, "float modulo");
+                        throw Raise.ZeroDivision(ctx, "division by zero");
                     double mod;
                     FloatDivMod(x, y, out mod);
                     return ctx.Values.Float(mod);
@@ -502,25 +501,48 @@ namespace Outbridge.PyLite.Runtime.Values
             return floordiv;
         }
 
-        // Port of Objects/floatobject.c::float_pow, with the complex result replaced by ValueError.
+        // Port of Objects/floatobject.c::float_pow, with the complex result replaced by ValueError (no complex).
         private static double PowFloat(double x, double y, EvalContext ctx)
         {
             if (y == 0.0)
                 return 1.0;                 // even for x == nan
+            if (double.IsNaN(x))
+                return x;
+            if (double.IsNaN(y))
+                return x == 1.0 ? 1.0 : y;
+            if (double.IsInfinity(y))
+            {
+                // v**inf: 0 below abs 1, 1 at it, inf above; v**-inf the other way round
+                double ax = Math.Abs(x);
+                if (ax == 1.0)
+                    return 1.0;
+                return (y > 0.0) == (ax > 1.0) ? double.PositiveInfinity : 0.0;
+            }
+            if (double.IsInfinity(x))
+            {
+                bool odd = IsOddIntegral(y);
+                if (y > 0.0)
+                    return odd ? x : Math.Abs(x);
+                return odd ? (x < 0 ? -0.0 : 0.0) : 0.0;
+            }
+            if (x == 0.0)
+            {
+                if (y < 0.0)
+                    throw Raise.ZeroDivision(ctx, "zero to a negative power");
+                return IsOddIntegral(y) ? x : 0.0;
+            }
             if (x == 1.0)
-                return 1.0;                 // even for y == nan
-            if (double.IsNaN(x) || double.IsNaN(y))
-                return double.NaN;
-            if (x == 0.0 && y < 0)
-                throw Raise.ZeroDivision(ctx, "0.0 cannot be raised to a negative power");
+                return 1.0;
             if (x < 0 && !IsIntegral(y))
                 throw Raise.ValueError(ctx, "negative number cannot be raised to a fractional power");
             double r = Math.Pow(x, y);
-            if (double.IsInfinity(r) && !double.IsInfinity(x) && !double.IsInfinity(y))
+            if (double.IsInfinity(r))
                 throw Raise.Overflow(ctx, "(34, 'Numerical result out of range')");
             return r;
         }
 
         private static bool IsIntegral(double y) { return !double.IsInfinity(y) && y == Math.Floor(y); }
+
+        private static bool IsOddIntegral(double y) { return IsIntegral(y) && Math.IEEERemainder(y, 2.0) != 0.0; }
     }
 }

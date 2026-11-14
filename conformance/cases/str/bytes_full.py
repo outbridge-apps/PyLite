@@ -212,8 +212,8 @@ try:
     b'ab\x98'.decode('cp1251')
     assert False
 except UnicodeDecodeError as e:
-    assert str(e) == "'cp1251' codec can't decode byte 0x98 in position 2: character maps to <undefined>"
-    assert (e.encoding, e.start, e.end, e.reason) == ('cp1251', 2, 3, 'character maps to <undefined>')
+    assert str(e) == "'charmap' codec can't decode byte 0x98 in position 2: character maps to <undefined>"
+    assert (e.encoding, e.start, e.end, e.reason) == ('charmap', 2, 3, 'character maps to <undefined>')
 try:
     b'\x81'.decode('cp1252')
     assert False
@@ -223,7 +223,7 @@ try:
     'ш'.encode('cp1252')
     assert False
 except UnicodeEncodeError as e:
-    assert str(e) == "'cp1252' codec can't encode character '\\u0448' in position 0: character maps to <undefined>"
+    assert str(e) == "'charmap' codec can't encode character '\\u0448' in position 0: character maps to <undefined>"
 try:
     b'abc'.decode('utf-16')
     assert False
@@ -296,5 +296,5 @@ try:
     '€'.encode('cp866')
     assert False
 except UnicodeEncodeError as e:
-    assert str(e) == "'cp866' codec can't encode character '\\u20ac' in position 0: character maps to <undefined>"
+    assert str(e) == "'charmap' codec can't encode character '\\u20ac' in position 0: character maps to <undefined>"
 assert '€'.encode('cp866', 'replace') == b'?'

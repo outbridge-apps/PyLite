@@ -19,10 +19,11 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["dataclass"] = BuiltinFunctionValue.Make("dataclass", Dataclass);
             m["field"] = BuiltinFunctionValue.Make("field", Field);
-            m["fields"] = BuiltinFunctionValue.Make("fields", Fields);
+            m["FrozenInstanceError"] = ModuleKit.ExceptionClass(PyExceptionTypes.FrozenInstanceError);
+            m["fields"] = BuiltinFunctionValue.Make("fields", Args.BoundKeywords("fields", 1, Fields, "class_or_instance"));
             m["asdict"] = BuiltinFunctionValue.Make("asdict", AsDict);
             m["astuple"] = BuiltinFunctionValue.Make("astuple", AsTuple);
-            m["is_dataclass"] = BuiltinFunctionValue.Make("is_dataclass", IsDataclass);
+            m["is_dataclass"] = BuiltinFunctionValue.Make("is_dataclass", Args.BoundKeywords("is_dataclass", 1, IsDataclass, "obj"));
             m["replace"] = BuiltinFunctionValue.Make("replace", Replace);
             m["make_dataclass"] = BuiltinFunctionValue.Make("make_dataclass", MakeDataclass);
             m["InitVar"] = new TypingFormValue("InitVar");   // the annotation head the class body looks for
@@ -47,7 +48,7 @@ namespace Outbridge.PyLite.Modules
             r.RejectUnknown();
             if (order && !eq)
                 throw Raise.ValueError(ctx, "eq must be true if order is true");
-            return BuiltinFunctionValue.Make("dataclass", Args.Positional("dataclass", 1, 1, (s2, a2, k2, c2) =>
+            return ctx.Values.Closure("dataclass", Args.Positional("dataclass", 1, 1, (s2, a2, k2, c2) =>
             {
                 if (a2.Length != 1 || a2[0].Kind != ValueKind.RecordClass)
                     throw Raise.TypeError(c2, "dataclass() should be applied to a class defined in this dialect");
@@ -213,9 +214,9 @@ namespace Outbridge.PyLite.Modules
                 }
                 annotations[f] = own[f];
             }
-            ctx.Values.PreCharge(64 + 16L * allSlots.Count);
+            RecordClassValue.ChargeTables(ctx, allSlots.Count, annotations.Count);
             var cls = new RecordClassValue(nameV.Value, baseCls, allSlots, slotIndex, methods, false, null,
-                annotations, null, SharedIdentitySource.Next());
+                annotations, null, ctx.Values.NextIdentitySeq());
 
             bool eq = KwBool(ctx, kw, "eq", true);
             bool order = KwBool(ctx, kw, "order", false);
@@ -257,6 +258,7 @@ namespace Outbridge.PyLite.Modules
             bool init = r.Bool("init", true), repr = r.Bool("repr", true), compare = r.Bool("compare", true);
             bool kwOnly = r.Bool("kw_only", false);
             r.RejectUnknown();
+            ctx.Values.ChargeObject(4);
             return new FieldSpecValue(hasDef, hasDef ? def : null, hasFac ? factory : null,
                 init, repr, compare, kwOnly, hash, metadata);
         }
@@ -301,13 +303,18 @@ namespace Outbridge.PyLite.Modules
             for (int j = 0; j < kw.Count; j++)
             {
                 string name = kw.NameAt(j);
-                int idx = Array.IndexOf(ds.FieldNames, name);
+                int idx = ds.IndexOf(name);
                 if (idx < 0)
                     throw KwReader.UnexpectedError(ctx, "__init__", name);
                 if (!ds.Fields[idx].Init)
                     throw Raise.ValueError(ctx, "field " + name
                         + " is declared with init=False, it cannot be specified with replace()");
             }
+            ctx.Budget.ChargeLinear(kw.Count + ds.FieldNames.Length);
+            // KwArgs.TryGet walks its names: fields x keywords was 8 s and a leaked runner at 40,000 of each.
+            var given = new Dictionary<string, ScriptValue>(kw.Count, StringComparer.Ordinal);
+            for (int j = 0; j < kw.Count; j++)
+                given[kw.NameAt(j)] = kw.ValueAt(j);
             var names = new List<string>();
             var values = new List<ScriptValue>();
             for (int i = 0; i < ds.FieldNames.Length; i++)
@@ -316,7 +323,7 @@ namespace Outbridge.PyLite.Modules
                     continue;
                 string name = ds.FieldNames[i];
                 ScriptValue v;
-                if (!kw.TryGet(name, out v))
+                if (!given.TryGetValue(name, out v))
                 {
                     if (ds.Fields[i].Kind == FieldKind.InitVar)
                     {
@@ -349,10 +356,13 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue FieldsOf(RecordInstanceValue inst, EvalContext ctx, bool asDict, int depth)
         {
             if (depth >= ctx.Limits.MaxDataDepth)
-                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded while converting a dataclass");
+                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded");
             if (depth > 0)
                 StackGuard.ProbeData(ctx);
             RecordClassValue cls = inst.Class;
+            // Steps per node: a DAG 40 levels deep is 2**40 nodes along its paths (CPython walks every one
+            // too), and the walk charged memory but no step, so its deadline went unseen.
+            ctx.Budget.ChargeLinear(cls.AllSlots.Count);
             DictValue d = asDict ? ctx.Values.Dict(cls.AllSlots.Count) : null;
             List<ScriptValue> items = asDict ? null : new List<ScriptValue>(cls.AllSlots.Count);
             if (!asDict)
@@ -362,15 +372,58 @@ namespace Outbridge.PyLite.Modules
                 if (!IsField(cls, i))
                     continue;
                 ScriptValue v = inst.Slots[i];
-                RecordInstanceValue nested = v as RecordInstanceValue;
-                if (nested != null && nested.Class.Dataclass != null)
-                    v = FieldsOf(nested, ctx, asDict, depth + 1);
+                if (v != null)
+                    v = ConvertValue(v, ctx, asDict, depth + 1);
                 if (asDict)
                     d.SetItem(ctx.Values.Str(cls.AllSlots[i]), v ?? ctx.Values.None, ctx);
                 else
                     items.Add(v ?? ctx.Values.None);
             }
             return asDict ? (ScriptValue)d : ctx.Values.Tuple(items.ToArray());
+        }
+
+        // CPython's _asdict_inner: a dataclass converts, a list, tuple or dict is rebuilt with its type, anything else
+        // is a deep copy, so the result shares nothing mutable with the instance.
+        private static ScriptValue ConvertValue(ScriptValue v, EvalContext ctx, bool asDict, int depth)
+        {
+            RecordInstanceValue rec = v as RecordInstanceValue;
+            if (rec != null && rec.Class.Dataclass != null)
+                return FieldsOf(rec, ctx, asDict, depth);
+            if (!(v is TupleValue || v is ListValue || v is DictValue))
+                return CopyModule.DeepCopy(ctx, v);
+            if (depth >= ctx.Limits.MaxDataDepth)
+                throw Raise.RecursionError(ctx, "maximum recursion depth exceeded");
+            StackGuard.ProbeData(ctx);
+            TupleValue tuple = v as TupleValue;
+            if (tuple != null)
+            {
+                ctx.Budget.ChargeLinear(tuple.Items.Length);
+                ctx.Values.PreCharge(24 + 8L * tuple.Items.Length);
+                var items = new ScriptValue[tuple.Items.Length];
+                for (int i = 0; i < items.Length; i++)
+                    items[i] = ConvertValue(tuple.Items[i], ctx, asDict, depth + 1);
+                NamedTupleValue nt = v as NamedTupleValue;
+                return nt != null ? new NamedTupleValue(nt.NtInfo, items) : (ScriptValue)ctx.Values.Tuple(items);
+            }
+            ListValue list = v as ListValue;
+            if (list != null)
+            {
+                ctx.Budget.ChargeLinear(list.Items.Count);
+                ListValue copy = ctx.Values.List(list.Items.Count);
+                for (int i = 0; i < list.Items.Count; i++)
+                    copy.Add(ConvertValue(list.Items[i], ctx, asDict, depth + 1), ctx);
+                return copy;
+            }
+            DictValue dict = (DictValue)v;
+            DictValue result = CopyModule.NewSameDict(ctx, dict);
+            for (int p = dict.Table.WalkStart(ctx); p < dict.Table.EntriesUsed; p++)
+            {
+                long h;
+                ScriptValue k, item;
+                if (dict.Table.TryGetEntryAt(p, out h, out k, out item))
+                    result.SetItem(ConvertValue(k, ctx, asDict, depth + 1), ConvertValue(item, ctx, asDict, depth + 1), ctx);
+            }
+            return result;
         }
 
         // asdict / astuple carry the dataclass FIELDS: a ClassVar or InitVar slot is left out.

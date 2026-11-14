@@ -154,13 +154,19 @@ namespace Outbridge.PyLite.Tests.Evaluator
             Assert.Equal(EngineAbortKind.Steps, ex.Kind);
         }
 
-        // PEP 479: StopIteration raised by the body is a RuntimeError — through the compiled cond too.
-        [Fact]
-        public void Pep479SurvivesCompiledPaths()
+        // A StopIteration raised by a list comprehension's body propagates (PEP 709 inlines it; PEP 479 is
+        // for generators), through the compiled paths too; a genexp still turns it into a RuntimeError.
+        [Theory]
+        [InlineData("r = [boom(x) for x in range(3)]", "StopIteration")]
+        [InlineData("r = [x for x in range(3) if boom(x)]", "StopIteration")]
+        [InlineData("r = {x: boom(x) for x in range(3)}", "StopIteration")]
+        [InlineData("r = [boom(x) for x in [1, 2] for y in [3]]", "StopIteration")]
+        [InlineData("r = list(boom(x) for x in range(3))", "RuntimeError")]
+        public void StopIterationFromTheBodyAsCPython(string comp, string expected)
         {
             var ex = Assert.Throws<ScriptException>(() => Ev.Run(
-                "def boom(x):\n    raise StopIteration()\nr = [boom(x) for x in range(3)]\n"));
-            Assert.Equal("RuntimeError", ex.Value.ExcType.Name);
+                "def boom(x):\n    raise StopIteration()\n" + comp + "\n"));
+            Assert.Equal(expected, ex.Value.ExcType.Name);
         }
 
         // The compiled path skips EvalExpr's per-node budget/deadline sub-charges, so the wall-clock

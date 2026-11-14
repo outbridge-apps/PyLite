@@ -37,7 +37,7 @@ namespace Outbridge.PyLite.Tests.Syntax
         public void MatchShapes(string src, string expected) => Assert.Equal(expected, AstDump.OfModule(src));
 
         [Fact] public void ClassPatternShape() => Assert.Equal("[(Match x (case (cls Point 0 y=b) [(Pass)]))]", AstDump.OfModule("match x:\n    case Point(0, y=b):\n        pass\n"));
-        [Fact] public void EmptyMatchRejected() => Assert.Equal("expected 'case' block", Err("match x:\n    pass\n"));
+        [Fact] public void EmptyMatchRejected() => Assert.Equal("invalid syntax", Err("match x:\n    pass\n"));
         [Fact] public void MatchAsIdentifierAssign() => Assert.Equal("[(Assign [match] 5)]", AstDump.OfModule("match = 5\n"));
         [Fact] public void MatchAsIdentifierCall() => Assert.Equal("[(Expr (Call (Attr match group) 0))]", AstDump.OfModule("match.group(0)\n"));
 

@@ -250,8 +250,6 @@ namespace Outbridge.PyLite.Modules.Support
             return true;
         }
 
-        private static bool IsDigit(char c) { return c >= '0' && c <= '9'; }
-
         private static bool IsHex(char c)
         {
             return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
@@ -281,6 +279,7 @@ namespace Outbridge.PyLite.Modules.Support
             int lineno = 1;
             int lineStart = -1;
             int limit = pos < s.Length ? pos : s.Length;
+            ctx.Budget.ChargeLinear(limit);   // a 16M-char doc was scanned per construction on one step
             for (int k = 0; k < limit; k++)
             {
                 if (s[k] == '\n')

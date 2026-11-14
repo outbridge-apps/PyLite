@@ -87,11 +87,14 @@ namespace Outbridge.PyLite.Tests.Modules
             Assert.Equal("True", Body("r = (uuid1() != uuid1())"));
         }
 
+        // uuid4 drew from the run's random state, so random.seed(42) repeated it in every run that seeded;
+        // CPython's comes from os.urandom.
         [Fact]
-        public void Uuid4ReproducibleWithSeed()
+        public void Uuid4IgnoresRandomSeed()
         {
-            string src = "import random, uuid\nrandom.seed(42)\na = uuid.uuid4()\nrandom.seed(42)\nb = uuid.uuid4()\nr = (a == b)\n";
-            Assert.Equal("True", Ev.Run(src).Repr("r"));
+            string src = "import random, uuid\nrandom.seed(42)\na = uuid.uuid4()\nx = random.random()\nrandom.seed(42)\n"
+                + "b = uuid.uuid4()\ny = random.random()\nr = (a == b, x == y, a.version, b.version)\n";
+            Assert.Equal("(False, True, 4, 4)", Ev.Run(src).Repr("r"));
         }
 
         [Fact]

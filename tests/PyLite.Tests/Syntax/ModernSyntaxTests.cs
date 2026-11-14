@@ -566,15 +566,14 @@ namespace Outbridge.PyLite.Tests.Modern
             Assert.Equal("[5, 4, 3, 2, 1]", Ev.Run(src).Repr("r"));
         }
 
-        // PEP 479 (RFC-003 §4): a StopIteration escaping a comprehension/genexp body -> RuntimeError,
-        // not a silent end-of-iteration. Both the eager comprehension and the lazy genexp drive the same
-        // ComprehensionIterator.MoveNext.
+        // PEP 479 (RFC-003 §4): a StopIteration escaping a genexp body -> RuntimeError, not a silent
+        // end-of-iteration. A list comprehension runs inline (PEP 709) and lets it through, as CPython 3.12+.
         [Fact]
         public void StopIterationInComprehensionBodyBecomesRuntimeError()
         {
             var e1 = Assert.Throws<ScriptException>(() => Ev.Run(
                 "def f():\n    raise StopIteration\nr = [f() for _ in range(1)]\n"));
-            Assert.Equal("RuntimeError", e1.Value.ExcType.Name);
+            Assert.Equal("StopIteration", e1.Value.ExcType.Name);
 
             var e2 = Assert.Throws<ScriptException>(() => Ev.Run(
                 "def f():\n    raise StopIteration\nr = list(f() for _ in range(1))\n"));

@@ -26,18 +26,30 @@ namespace Outbridge.PyLite.Syntax
             if (_cur.Kind == TokenKind.Star)
             {
                 Token s = Take();
-                return new StarredNode(Src(s), ParseBitOr());
+                return new StarredNode(Src(s), GuardedBitOr());
             }
             return ParseBitOr();
         }
 
         // test | '*' expr, for display elements.
-        private ExprNode ParseTestOrStar()
+        // A comprehension's element: a starred one reached the evaluator, which has no reading for it.
+        private ExprNode CompElement(ExprNode e)
+        {
+            if (e is StarredNode)
+                throw ErrorAtSrc(e.Src, "iterable unpacking cannot be used in comprehension");
+            return e;
+        }
+
+        // alone: the first element of a display, where a bare star before its closer is CPython's "Invalid star expression"
+        private ExprNode ParseTestOrStar(bool alone = false)
         {
             if (_cur.Kind == TokenKind.Star)
             {
                 Token s = Take();
-                return new StarredNode(Src(s), ParseBitOr());
+                TokenKind k = _cur.Kind;
+                if (alone && (k == TokenKind.RightParen || k == TokenKind.RightBracket || k == TokenKind.RightBrace))
+                    throw Error("Invalid star expression");   // (*), [*], {*}
+                return new StarredNode(Src(s), GuardedBitOr());
             }
             return ParseTest();
         }
@@ -46,9 +58,10 @@ namespace Outbridge.PyLite.Syntax
         private IReadOnlyList<CompClause> ParseCompClauses()
         {
             var clauses = new List<CompClause>();
-            Token f = Expect(TokenKind.KwFor, "'for'");
+            Token f = Expect(TokenKind.KwFor);
             ExprNode target = ParseTargetList();
-            Expect(TokenKind.KwIn, "'in'");
+            ValidateAssignTarget(target);   // as a for statement's: [0 for 1 in x] reached the evaluator
+            Expect(TokenKind.KwIn);
             // The iterable/guard use ParseOrTest, which is BELOW ParseTest's EnterExpr — so a comprehension
             // whose iterable is itself a display ([x for x in [x for x in ...]]) recursed the parser without
             // counting depth (parse-time StackOverflow). Guard each here so deep nesting is a clean SyntaxError.
@@ -61,7 +74,8 @@ namespace Outbridge.PyLite.Syntax
                 {
                     Token f2 = Take();
                     ExprNode t2 = ParseTargetList();
-                    Expect(TokenKind.KwIn, "'in'");
+                    ValidateAssignTarget(t2);
+                    Expect(TokenKind.KwIn);
                     ExprNode it2 = GuardedOrTest();
                     clauses.Add(new CompClause(Src(f2), true, t2, it2, null));
                 }
@@ -84,7 +98,24 @@ namespace Outbridge.PyLite.Syntax
             EnterExpr();
             try
             {
-                return ParseOrTest();
+                ExprNode e = ParseOrTest();
+                _disj = null;   // a clause takes a disjunction: CPython's comma hint is for a full expression
+                return e;
+            }
+            finally
+            {
+                LeaveExpr();
+            }
+        }
+
+        // The same guard for a starred element, which goes below ParseTest too: `[*[*[*...]]]` and its
+        // tuple, set and for-target forms recurse through here.
+        private ExprNode GuardedBitOr()
+        {
+            EnterExpr();
+            try
+            {
+                return ParseBitOr();
             }
             finally
             {

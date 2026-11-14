@@ -33,6 +33,20 @@ namespace Outbridge.PyLite.Modules
             return PyOps.Truth(PyOps.RichCompare(PyCmpOp.Lt, a, b, ctx), ctx);
         }
 
+        // CPython checks the heap's size after every comparison: a __lt__ (or the __bool__ of what it returned)
+        // that grows or shrinks the list ends the sift with this error, not on an index past its end.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static void CheckSize(EvalContext ctx, List<ScriptValue> h, int size)
+        {
+            if (h.Count != size)
+                ThrowChanged(ctx);   // out of line: a method that throws is not inlined
+        }
+
+        private static void ThrowChanged(EvalContext ctx)
+        {
+            throw Raise.RuntimeError(ctx, "list changed size during iteration");
+        }
+
         private static ListValue Heap(EvalContext ctx, ScriptValue[] a, string name, int expected)
         {
             Args.Exactly(ctx, a, name, expected);
@@ -91,6 +105,8 @@ namespace Outbridge.PyLite.Modules
             ScriptValue item = a[1];
             if (h.Count == 0 || !Lt(ctx, h[0], item))
                 return item;
+            if (h.Count == 0)
+                throw Raise.IndexError(ctx, "index out of range");   // the comparison emptied the heap (CPython)
             ScriptValue top = h[0];
             h[0] = item;
             SiftUp(ctx, h, 0);
@@ -101,11 +117,14 @@ namespace Outbridge.PyLite.Modules
         private static void SiftDown(EvalContext ctx, List<ScriptValue> h, int startpos, int pos)
         {
             ScriptValue item = h[pos];
+            int size = h.Count;
             while (pos > startpos)
             {
                 ctx.Budget.Step();
                 int parent = (pos - 1) >> 1;
-                if (!Lt(ctx, item, h[parent]))
+                bool lt = Lt(ctx, item, h[parent]);
+                CheckSize(ctx, h, size);
+                if (!lt)
                     break;
                 h[pos] = h[parent];
                 pos = parent;
@@ -125,8 +144,13 @@ namespace Outbridge.PyLite.Modules
             {
                 ctx.Budget.Step();
                 int right = child + 1;
-                if (right < end && !Lt(ctx, h[child], h[right]))
-                    child = right;
+                if (right < end)
+                {
+                    bool lt = Lt(ctx, h[child], h[right]);
+                    CheckSize(ctx, h, end);
+                    if (!lt)
+                        child = right;
+                }
                 h[pos] = h[child];
                 pos = child;
                 child = 2 * pos + 1;
@@ -187,17 +211,18 @@ namespace Outbridge.PyLite.Modules
             for (int i = 0; i < a.Length; i++)
                 its[i] = PyOps.GetIterator(a[i], ctx);
             ctx.Values.PreCharge(48 + 32L * a.Length);
-            return ctx.Values.Iterator(new MergeIterator(its, key, reverse), "heapq.merge");
+            return ctx.Values.EngineIterator(new MergeIterator(its, key, reverse), "heapq.merge");
         }
 
         private sealed class MergeIterator : ScriptIteratorBase
         {
-            private readonly IScriptIterator[] _its;
-            private readonly ScriptValue[] _head;   // the front item of each input; null once exhausted
-            private readonly ScriptValue[] _key;    // its key (the item itself without key=)
+            private IScriptIterator[] _its;
+            private ScriptValue[] _head;   // the front item of each input; null once exhausted
+            private ScriptValue[] _key;    // its key (the item itself without key=)
             private readonly ScriptValue _keyFn;
             private readonly bool _reverse;
             private bool _primed;
+            private int _dead;   // exhausted inputs still in the arrays
 
             internal MergeIterator(IScriptIterator[] its, ScriptValue keyFn, bool reverse)
             {
@@ -217,6 +242,8 @@ namespace Outbridge.PyLite.Modules
                     _key[i] = _keyFn == null ? v : ctx.CallHook1(_keyFn, v);
                     return;
                 }
+                if (_its[i] != null)
+                    _dead++;
                 _its[i] = null;
                 _head[i] = null;
                 _key[i] = null;
@@ -229,6 +256,7 @@ namespace Outbridge.PyLite.Modules
                     _primed = true;
                     for (int i = 0; i < _its.Length; i++)
                         Advance(ctx, i);
+                    Compact(ctx);   // 4M inputs that were empty all along: the scan below is over the live ones
                 }
                 int best = -1;
                 for (int i = 0; i < _its.Length; i++)
@@ -247,7 +275,36 @@ namespace Outbridge.PyLite.Modules
                 }
                 value = _head[best];
                 Advance(ctx, best);
+                if (_dead > 16 && 2 * _dead > _its.Length)
+                    Compact(ctx);
                 return true;
+            }
+
+            // Drops the exhausted inputs, keeping the live ones in input order (ties go to the earlier input):
+            // each step scanned every slot, dead ones uncharged.
+            private void Compact(EvalContext ctx)
+            {
+                if (_dead == 0)
+                    return;
+                ctx.Budget.ChargeLinear(_its.Length);
+                int live = _its.Length - _dead;
+                var its = new IScriptIterator[live];
+                var head = new ScriptValue[live];
+                var key = new ScriptValue[live];
+                int j = 0;
+                for (int i = 0; i < _its.Length; i++)
+                {
+                    if (_its[i] == null)
+                        continue;
+                    its[j] = _its[i];
+                    head[j] = _head[i];
+                    key[j] = _key[i];
+                    j++;
+                }
+                _its = its;
+                _head = head;
+                _key = key;
+                _dead = 0;
             }
         }
     }

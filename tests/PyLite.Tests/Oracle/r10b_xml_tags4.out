@@ -1,0 +1,77 @@
+nodes itertext=[' note ', 'T0', 'php echo', 'T1', 'v']
+nodes text method=b' note T0php echoT1v'
+nodes comment itertext=[' note ']
+nodes pi itertext=['php echo']
+nodes dot=1
+nodes self=1
+nodes findtext='v'
+nodes pos=['x']
+nodes pos star!TypeError
+nodes desc pos=1
+nested itertext=['c0', 'kt', 'ktail', 'ctail']
+nested text method=b'c0ktktailctail'
+nested tostring=b'<r><!--c0-->ctail</r>'
+nested iter=3
+nested find k=1
+star1 bslash!TypeError
+last bslash!TypeError
+itertext bslash=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bbrace=2
+last bbrace=2
+itertext bbrace=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bstar!TypeError
+last bstar!TypeError
+itertext bstar=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bdot!TypeError
+last bdot!TypeError
+itertext bdot=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bat!TypeError
+last bat!TypeError
+itertext bat=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bempty=2
+last bempty=2
+itertext bempty=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 dict=1
+last dict=1
+itertext dict=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 set!TypeError
+last set!TypeError
+itertext set=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 frozenset!TypeError
+last frozenset!TypeError
+itertext frozenset=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 nohash!TypeError
+last nohash!TypeError
+itertext nohash=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 plain!TypeError
+last plain!TypeError
+itertext plain=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 def!TypeError
+last def!TypeError
+itertext def=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 len!TypeError
+last len!TypeError
+itertext len=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 type!TypeError
+last type!TypeError
+itertext type=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 cls!TypeError
+last cls!TypeError
+itertext cls=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 tuplelist!TypeError
+last tuplelist!TypeError
+itertext tuplelist=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 range!TypeError
+last range!TypeError
+itertext range=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 ellipsis!TypeError
+last ellipsis!TypeError
+itertext ellipsis=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+star1 bigint!TypeError
+last bigint!TypeError
+itertext bigint=['a', 'b', 'c', 'e', 'f', 'g', 'h']
+lazy=['z', 'TE']
+root pos=(0, 1)
+text method int=b'abcefgh'
+text method None=b'abcefgh'
+lcm=[1, 0, 12, 3541774862152233910272, 1180591620717411303426, 7, 0, 2361183241434822606848, 64163973786449923525626460687564800000000000000000000, 7, 7, 1180591620717411303424, 1180591620717411303424, 0, 1267650600228229401496703205376]

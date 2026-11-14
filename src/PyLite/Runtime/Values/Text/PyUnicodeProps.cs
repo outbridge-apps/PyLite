@@ -18,8 +18,59 @@ namespace Outbridge.PyLite.Runtime.Values
 
         internal static int Combining(int cp)
         {
+            if (cp < 0x300)
+                return 0;   // no mark below the combining diacritics
+            if (cp < 0x10000)
+            {
+                byte[] page = (_cccPages ?? (_cccPages = BuildCccPages()))[cp >> 8];
+                return page == null ? 0 : page[cp & 0xFF];
+            }
             int i = RangeIndex(CccStart, CccEnd, cp);
             return i < 0 ? 0 : CccValue[i];
+        }
+
+        // The BMP's classes in 256-char pages, null where all are 0 (normalization asks for every character;
+        // the range search cost more than the rest of the pass). A lost race only builds twice.
+        private static byte[][] _cccPages;
+
+        private static byte[][] BuildCccPages()
+        {
+            var pages = new byte[256][];
+            for (int i = 0; i < CccStart.Length; i++)
+            {
+                for (int cp = CccStart[i]; cp <= CccEnd[i] && cp < 0x10000; cp++)
+                {
+                    byte[] page = pages[cp >> 8] ?? (pages[cp >> 8] = new byte[256]);
+                    page[cp & 0xFF] = (byte)CccValue[i];
+                }
+            }
+            return pages;
+        }
+
+        // Where cp's decomposition is in DecompCp, or -1: a page lookup in the BMP, a search above it.
+        private static int DecompIndex(int cp)
+        {
+            if (cp >= 0x10000)
+            {
+                int i = Array.BinarySearch(DecompCp, cp);
+                return i < 0 ? -1 : i;
+            }
+            ushort[] page = (_decompPages ?? (_decompPages = BuildDecompPages()))[cp >> 8];
+            return page == null ? -1 : page[cp & 0xFF] - 1;
+        }
+
+        private static ushort[][] _decompPages;   // index + 1 into DecompCp, 0 for none
+
+        private static ushort[][] BuildDecompPages()
+        {
+            var pages = new ushort[256][];
+            for (int i = 0; i < DecompCp.Length && DecompCp[i] < 0x10000; i++)
+            {
+                int cp = DecompCp[i];
+                ushort[] page = pages[cp >> 8] ?? (pages[cp >> 8] = new ushort[256]);
+                page[cp & 0xFF] = (ushort)(i + 1);
+            }
+            return pages;
         }
 
         // True when cp can be the SECOND element of a canonical composition, i.e. when splitting a string
@@ -33,12 +84,26 @@ namespace Outbridge.PyLite.Runtime.Values
             if (seconds == null)
             {
                 seconds = BuildCompositionSeconds();
+                _secondBits = BmpBits(seconds);
                 _compositionSeconds = seconds;
             }
-            return seconds.Contains(cp);
+            ulong[] bits = _secondBits;
+            return cp < 0x10000 && bits != null ? ((bits[cp >> 6] >> (cp & 63)) & 1) != 0 : seconds.Contains(cp);
         }
 
         private static volatile System.Collections.Generic.HashSet<int> _compositionSeconds;
+        private static volatile ulong[] _secondBits;   // the BMP part of the set, one bit a code point: read per starter by Compose
+
+        private static ulong[] BmpBits(System.Collections.Generic.HashSet<int> set)
+        {
+            var bits = new ulong[0x10000 / 64];
+            foreach (int cp in set)
+            {
+                if (cp < 0x10000)
+                    bits[cp >> 6] |= 1UL << (cp & 63);
+            }
+            return bits;
+        }
 
         // The starters that end a two-character canonical decomposition (71 of them in Unicode 16.0:
         // Indic vowel signs, Tibetan and Balinese pieces). Built once from the decomposition table.
@@ -85,10 +150,129 @@ namespace Outbridge.PyLite.Runtime.Values
             return RangeIndex(MirrorStart, MirrorEnd, cp) >= 0;
         }
 
+        // cp has a decomposition (a compatibility one only when compat), found without building it.
+        internal static bool HasDecomposition(int cp, bool compat)
+        {
+            int i = DecompIndex(cp);
+            return i >= 0 && (compat || DecompText[DecompOffset[i]] != '<');
+        }
+
+        internal static bool HasCompatDecomposition(int cp)
+        {
+            int i = DecompIndex(cp);
+            return i >= 0 && DecompText[DecompOffset[i]] == '<';
+        }
+
+        // One level of cp's decomposition as code points, or null when it has none (a compatibility one only
+        // when compat). Hangul syllables are decomposed by the caller. The array is shared: never write to it.
+        internal static int[] DecompositionOf(int cp, bool compat)
+        {
+            int i = DecompIndex(cp);
+            if (i < 0 || (!compat && DecompText[DecompOffset[i]] == '<'))
+                return null;
+            int[][] cache = _decompositions;
+            if (cache == null)
+                _decompositions = cache = new int[DecompCp.Length][];   // a lost race only parses twice
+            return cache[i] ?? (cache[i] = ParseDecomposition(i));
+        }
+
+        private static int[][] _decompositions;
+
+        // cp's decomposition applied until nothing in it decomposes, or null when it has none; cached per form
+        // family, so normalizing copies it instead of walking it. Shared: never write to it.
+        internal static int[] FullDecompositionOf(int cp, bool compat)
+        {
+            int i = DecompIndex(cp);
+            if (i < 0 || (!compat && DecompText[DecompOffset[i]] == '<'))
+                return null;
+            int[][] cache = compat ? _fullCompat : _fullCanonical;
+            if (cache == null)
+            {
+                cache = new int[DecompCp.Length][];
+                if (compat)
+                    _fullCompat = cache;
+                else
+                    _fullCanonical = cache;
+            }
+            return cache[i] ?? (cache[i] = Expand(cp, compat));
+        }
+
+        private static int[][] _fullCanonical, _fullCompat;
+
+        // An explicit stack: decompositions nest a few levels at most, but no recursion runs over data
+        private static int[] Expand(int cp, bool compat)
+        {
+            var result = new System.Collections.Generic.List<int>(4);
+            var stack = new System.Collections.Generic.Stack<int>();
+            stack.Push(cp);
+            while (stack.Count > 0)
+            {
+                int c = stack.Pop();
+                int[] d = DecompositionOf(c, compat);
+                if (d == null)
+                {
+                    result.Add(c);
+                    continue;
+                }
+                for (int k = d.Length - 1; k >= 0; k--)
+                    stack.Push(d[k]);
+            }
+            return result.ToArray();
+        }
+
+        private static int[] ParseDecomposition(int i)
+        {
+            int start = DecompOffset[i], end = DecompOffset[i + 1];
+            if (DecompText[start] == '<')
+                start = DecompText.IndexOf('>', start) + 2;   // "<tag> 0031 2044 0032"
+            var cps = new System.Collections.Generic.List<int>(4);
+            int value = 0;
+            for (int k = start; k <= end; k++)
+            {
+                if (k == end || DecompText[k] == ' ')
+                {
+                    cps.Add(value);
+                    value = 0;
+                    continue;
+                }
+                value = value * 16 + Modules.Support.Hex.Nibble(DecompText[k]);
+            }
+            return cps.ToArray();
+        }
+
+        // The canonical composition of a pair, or -1: every two-character canonical decomposition but the
+        // excluded ones and the non-starters (UAX #15's Full_Composition_Exclusion; singletons never pair).
+        internal static int ComposePair(int first, int second)
+        {
+            System.Collections.Generic.Dictionary<long, int> pairs = _pairs;
+            if (pairs == null)
+            {
+                pairs = BuildPairs();
+                _pairs = pairs;
+            }
+            int composite;
+            return pairs.TryGetValue(((long)first << 21) | (uint)second, out composite) ? composite : -1;
+        }
+
+        private static volatile System.Collections.Generic.Dictionary<long, int> _pairs;
+
+        private static System.Collections.Generic.Dictionary<long, int> BuildPairs()
+        {
+            var pairs = new System.Collections.Generic.Dictionary<long, int>();
+            foreach (int cp in DecompCp)
+            {
+                int[] d = DecompositionOf(cp, false);
+                if (d == null || d.Length != 2 || PyUnicodeClass.IsExcludedFromComposition(cp) || Combining(cp) != 0 || Combining(d[0]) != 0)
+                    continue;
+                pairs[((long)d[0] << 21) | (uint)d[1]] = cp;
+            }
+            return pairs;
+        }
+
         // The UnicodeData decomposition field verbatim ("0041 0300", "<fraction> 0031 2044 0032"), "" if none.
         internal static string Decomposition(int cp)
         {
-            int i = Array.BinarySearch(DecompCp, cp);
+            int i = DecompIndex(cp);
             if (i < 0)
                 return "";
             return DecompText.Substring(DecompOffset[i], DecompOffset[i + 1] - DecompOffset[i]);

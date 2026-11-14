@@ -108,7 +108,7 @@ namespace Outbridge.PyLite.Modules
                 var textOnly = new StringBuilder();
                 ElementXPath.AppendText(ctx, root, textOnly);
                 if (root.Tail.Kind != ValueKind.None)
-                    textOnly.Append(((StrValue)root.Tail).Value);
+                    textOnly.Append(SerialStr(ctx, root.Tail));
                 return Encode(ctx, textOnly.ToString(), enc, asBytes, codec, asciiOnly, false, null);
             }
 
@@ -127,47 +127,54 @@ namespace Outbridge.PyLite.Modules
                 {
                     // A comment or a processing instruction: its tag is the factory, its text is written
                     // verbatim (CPython escapes neither), and it has no attributes or children.
+                    if (e.Tag.Kind == ValueKind.None)
+                    {
+                        // Tag None: only what it holds is written.
+                        if (PyOps.Truth(e.Text, ctx))
+                            AppendText(ctx, sb, SerialStr(ctx, e.Text));
+                        stack.Push(new DumpFrame(e, true));
+                        for (int i = e.Children.Count - 1; i >= 0; i--)
+                            stack.Push(new DumpFrame((ElementValue)e.Children[i], false));
+                        continue;
+                    }
                     if (ElementXPath.TagText(e.Tag) == null)
                     {
-                        string body = e.Text.Kind == ValueKind.None ? "" : ((StrValue)e.Text).Value;
-                        if (ReferenceEquals(e.Tag, ProcessingInstructionFn))
-                            sb.Append("<?").Append(body).Append("?>");
+                        bool isPi = ReferenceEquals(e.Tag, ProcessingInstructionFn);
+                        sb.Append(isPi ? "<?" : "<!--");
+                        if (method == SerializeMethod.Html)   // "<!--%s-->" % _escape_cdata(text); xml writes it as it is
+                            AppendText(ctx, sb, SerialStr(ctx, e.Text));
                         else
-                            sb.Append("<!--").Append(body).Append("-->");
-                        AppendTail(sb, e);
+                            sb.Append(e.Text.Str(ctx));
+                        sb.Append(isPi ? "?>" : "-->");
+                        AppendTail(ctx, sb, e);
                         continue;
                     }
                     sb.Append('<').Append(QName(ctx, e.Tag, nsmap));
                     if (!rootDone)
                     {
-                        AppendXmlnsDeclarations(sb, nsmap);
+                        AppendXmlnsDeclarations(ctx, sb, nsmap);
                         rootDone = true;
                     }
-                    AppendAttrs(ctx, sb, e, nsmap);
-                    bool hasText = e.Text.Kind != ValueKind.None;
-                    string plain = ElementXPath.TagText(e.Tag);
                     bool html = method == SerializeMethod.Html;
-                    if (html && HtmlVoid.Contains(LocalName(plain)))
-                    {
-                        sb.Append('>');            // <br>, never closed and never self-closed
-                        AppendTail(sb, e);
-                        continue;
-                    }
+                    AppendAttrs(ctx, sb, e, nsmap, html);
+                    bool hasText = PyOps.Truth(e.Text, ctx);
+                    string written = QName(ctx, e.Tag, nsmap);   // the HTML rules key on it, prefix included
                     if (e.Children.Count == 0 && !hasText && shortEmpty && !html)
+
                     {
                         sb.Append(" />");
-                        AppendTail(sb, e);
+                        AppendTail(ctx, sb, e);
                     }
                     else
                     {
                         sb.Append('>');
                         if (hasText)
                         {
-                            string body = ((StrValue)e.Text).Value;
-                            if (html && HtmlRaw.Contains(LocalName(plain)))
+                            string body = SerialStr(ctx, e.Text);
+                            if (html && HtmlRaw.Contains(written))
                                 sb.Append(body);
                             else
-                                AppendText(sb, body);
+                                AppendText(ctx, sb, body);
                         }
                         stack.Push(new DumpFrame(e, true));
                         for (int i = e.Children.Count - 1; i >= 0; i--)
@@ -176,20 +183,17 @@ namespace Outbridge.PyLite.Modules
                 }
                 else
                 {
-                    sb.Append("</").Append(QName(ctx, e.Tag, nsmap)).Append('>');
-                    AppendTail(sb, e);
+                    if (e.Tag.Kind != ValueKind.None)
+                    {
+                        string closing = QName(ctx, e.Tag, nsmap);
+                        if (method != SerializeMethod.Html || !HtmlVoid.Contains(closing))
+                            sb.Append("</").Append(closing).Append('>');
+                    }
+                    AppendTail(ctx, sb, e);
+
                 }
             }
             return Encode(ctx, sb.ToString(), enc, asBytes, codec, asciiOnly, declare, "utf-8");
-        }
-
-        // The tag without its {uri}, which is what the HTML rules key on.
-        private static string LocalName(string tag)
-        {
-            if (tag == null)
-                return "";
-            int close = tag.IndexOf('}');
-            return close >= 0 ? tag.Substring(close + 1) : tag;
         }
 
         private static ScriptValue Encode(EvalContext ctx, string body, string enc, bool asBytes, string codec,
@@ -203,6 +207,12 @@ namespace Outbridge.PyLite.Modules
                 var ascii = new StringBuilder(text.Length);
                 for (int i = 0; i < text.Length; i++)
                 {
+                    if ((i & 4094) == 4094)   // i steps by 1 or 2 (a surrogate pair): one of the two is hit
+                    {
+                        ctx.Budget.Step();
+                        if (ascii.Length > ctx.Limits.MaxStrChars)
+                            ctx.Values.CheckStrLen(ascii.Length);   // a char reference is up to 8 chars of one
+                    }
                     char ch = text[i];
                     if (ch < 128)
                         ascii.Append(ch);
@@ -218,93 +228,127 @@ namespace Outbridge.PyLite.Modules
             return ctx.Values.Bytes(BytesCodec.Encode(ctx, text, codec, "xmlcharrefreplace"));
         }
 
-        private static void AppendAttrs(EvalContext ctx, StringBuilder sb, ElementValue e, Dictionary<string, string> nsmap)
+        private static void AppendAttrs(EvalContext ctx, StringBuilder sb, ElementValue e, Dictionary<string, string> nsmap, bool html)
         {
-            var t = e.Attrib.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            DictValue attrib = e.AttribOrNull;
+            if (attrib == null)
+                return;
+            var t = attrib.Table;
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
                 if (!t.TryGetEntryAt(p, out h, out k, out v))
                     continue;
                 sb.Append(' ').Append(QName(ctx, k, nsmap)).Append("=\"");
-                AppendAttr(sb, v.Str(ctx));
+                if (html)
+                    AppendHtmlAttr(ctx, sb, SerialStr(ctx, v));
+                else
+                    AppendAttr(ctx, sb, SerialStr(ctx, v));
                 sb.Append('"');
             }
         }
 
-        private static void AppendTail(StringBuilder sb, ElementValue e)
+        private static void AppendTail
+(EvalContext ctx, StringBuilder sb, ElementValue e)
         {
-            if (e.Tail.Kind != ValueKind.None)
-                AppendText(sb, ((StrValue)e.Tail).Value);
+            if (PyOps.Truth(e.Tail, ctx))
+                AppendText(ctx, sb, SerialStr(ctx, e.Tail));
+        }
+
+        // A text, tail, tag or attribute name the script set to a non-str: CPython's TypeError, not a cast fault.
+        private static string SerialStr(EvalContext ctx, ScriptValue v)
+        {
+            StrValue s = v as StrValue;
+            if (s == null)
+                throw Raise.TypeError(ctx, "cannot serialize " + v.Repr(ctx) + " (type " + v.PyTypeName + ")");
+            return s.Value;
         }
 
         // Collect all namespace URIs (document order DFS), assign registered or ns0/ns1 prefixes.
         private static Dictionary<string, string> BuildNamespaceMap(EvalContext ctx, ElementValue root)
         {
-            var uris = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
             var stack = new Stack<ElementValue>();
             stack.Push(root);
             var order = new List<ElementValue>();
             while (stack.Count > 0)
             {
+                ctx.Budget.StepTreeNode();   // a tree that contains itself (a.append(a)) has no end: capped below
                 ElementValue e = stack.Pop();
                 order.Add(e);
+                ctx.Values.EnsureCollectionSize((long)order.Count + stack.Count + e.Children.Count);
                 for (int i = e.Children.Count - 1; i >= 0; i--)
                     stack.Push((ElementValue)e.Children[i]);
             }
+            var nsmap = new Dictionary<string, string>(StringComparer.Ordinal);
+            int declared = 0;
+            Dictionary<string, string> registered = ctx.XmlUriToPrefix ?? WellKnownPrefixes;
             foreach (ElementValue e in order)
             {
                 string tagText = ElementXPath.TagText(e.Tag);
                 if (tagText != null)
-                    CollectUri(uris, seen, tagText);
-                var t = e.Attrib.Table;
-                for (int p = 0; p < t.EntriesUsed; p++)
+                    AddUri(ctx, nsmap, registered, ref declared, tagText);
+                else if (e.Tag.Kind != ValueKind.None && !ReferenceEquals(e.Tag, CommentFn) && !ReferenceEquals(e.Tag, ProcessingInstructionFn))
+                    SerialStr(ctx, e.Tag);   // e.tag = 5: CPython's _namespaces refuses it before writing
+                DictValue attrib = e.AttribOrNull;
+                if (attrib == null)
+                    continue;
+                var t = attrib.Table;
+                ctx.Budget.StepTreeNodes(t.EntriesUsed);   // 2,000 attributes on 2M shared copies walked 87 s on no step
+                for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
                 {
                     long h;
                     ScriptValue k, v;
                     if (t.TryGetEntryAt(p, out h, out k, out v))
-                        CollectUri(uris, seen, ((StrValue)k).Value);
+                        AddUri(ctx, nsmap, registered, ref declared, SerialStr(ctx, k));
                 }
-            }
-            var nsmap = new Dictionary<string, string>(StringComparer.Ordinal);
-            int counter = 0;
-            Dictionary<string, string> registered = ctx.XmlUriToPrefix;
-            foreach (string uri in uris)
-            {
-                string prefix;
-                if (registered != null && registered.TryGetValue(uri, out prefix))
-                    nsmap[uri] = prefix;
-                else
-                    nsmap[uri] = "ns" + counter++;
             }
             return nsmap;
         }
 
-        private static void CollectUri(List<string> uris, HashSet<string> seen, string tag)
+        // _namespaces.add_qname: a prefix in the map, or ns<how many are declared so far>. The xml prefix is never declared.
+        private static void AddUri(EvalContext ctx, Dictionary<string, string> nsmap, Dictionary<string, string> registered, ref int declared, string tag)
         {
-            if (tag.Length > 0 && tag[0] == '{')
-            {
-                int end = tag.IndexOf('}');
-                if (end > 0)
-                {
-                    string uri = tag.Substring(1, end - 1);
-                    if (seen.Add(uri))
-                        uris.Add(uri);
-                }
-            }
+            if (tag.Length == 0 || tag[0] != '{')
+                return;
+            // Scanned, then the uri copied and hashed, per element: a 4M-char tag on 600 elements leaked the runner.
+            // By the character, not a step a name: that was 2.4 times the steps of a namespaced tree (review 12, row 19).
+            ctx.Budget.ChargeChars(tag.Length);
+            int end = tag.IndexOf('}');
+            if (end <= 0)
+                return;
+            string uri = tag.Substring(1, end - 1), prefix;
+            if (nsmap.ContainsKey(uri))
+                return;
+            if (!registered.TryGetValue(uri, out prefix))
+                prefix = "ns" + declared.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            nsmap[uri] = prefix;
+            if (prefix != "xml")
+                declared++;
         }
 
-        private static void AppendXmlnsDeclarations(StringBuilder sb, Dictionary<string, string> nsmap)
+        private static readonly Dictionary<string, string> WellKnownPrefixes = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["http://www.w3.org/XML/1998/namespace"] = "xml",
+            ["http://www.w3.org/1999/xhtml"] = "html",
+            ["http://www.w3.org/1999/02/22-rdf-syntax-ns#"] = "rdf",
+            ["http://schemas.xmlsoap.org/wsdl/"] = "wsdl",
+            ["http://www.w3.org/2001/XMLSchema"] = "xs",
+            ["http://www.w3.org/2001/XMLSchema-instance"] = "xsi",
+            ["http://purl.org/dc/elements/1.1/"] = "dc",
+        };
+
+        private static void AppendXmlnsDeclarations(EvalContext ctx, StringBuilder sb, Dictionary<string, string> nsmap)
         {
             // Emit on the root, sorted by prefix for determinism.
             var items = new List<KeyValuePair<string, string>>(nsmap);
             items.Sort((x, y) => string.CompareOrdinal(x.Value, y.Value));
             foreach (KeyValuePair<string, string> kv in items)
             {
-                sb.Append(" xmlns:").Append(kv.Value).Append("=\"");
-                AppendAttr(sb, kv.Key);
+                if (kv.Value == "xml")
+                    continue;
+                sb.Append(kv.Value.Length == 0 ? " xmlns" : " xmlns:").Append(kv.Value).Append("=\"");
+                AppendAttr(ctx, sb, kv.Key);
                 sb.Append('"');
             }
         }
@@ -312,16 +356,17 @@ namespace Outbridge.PyLite.Modules
         // Clark {uri}local -> prefix:local; plain name stays as-is.
         private static string QName(EvalContext ctx, ScriptValue tag, Dictionary<string, string> nsmap)
         {
-            string t = ((StrValue)tag).Value;
+            string t = SerialStr(ctx, tag);
             if (t.Length > 0 && t[0] == '{')
             {
+                ctx.Budget.ChargeChars(t.Length);   // three per element, each scanning for the brace and copying the uri and the local name
                 int end = t.IndexOf('}');
                 if (end > 0)
                 {
                     string uri = t.Substring(1, end - 1);
                     string local = t.Substring(end + 1);
                     string prefix;
-                    if (nsmap.TryGetValue(uri, out prefix))
+                    if (nsmap.TryGetValue(uri, out prefix) && prefix.Length > 0)
                         return prefix + ":" + local;
                     return local;
                 }
@@ -329,15 +374,17 @@ namespace Outbridge.PyLite.Modules
             return t;
         }
 
-        // Escaped straight into the document (P17): no builder and string per text, and a text with nothing
+        // Escaped straight into the document: no builder and string per text, and a text with nothing
         // to escape is appended whole.
-        private static void AppendText(StringBuilder sb, string s)
+        private static void AppendText(EvalContext ctx, StringBuilder sb, string s)
         {
             if (s.IndexOfAny(TextSpecials) < 0)
             {
+                ctx.Values.CheckStrLen((long)sb.Length + s.Length);
                 sb.Append(s);
                 return;
             }
+            CheckEscaped(ctx, sb, s, false);
             foreach (char ch in s)
             {
                 switch (ch)
@@ -350,13 +397,15 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
-        private static void AppendAttr(StringBuilder sb, string s)
+        private static void AppendAttr(EvalContext ctx, StringBuilder sb, string s)
         {
             if (s.IndexOfAny(AttrSpecials) < 0)
             {
+                ctx.Values.CheckStrLen((long)sb.Length + s.Length);
                 sb.Append(s);
                 return;
             }
+            CheckEscaped(ctx, sb, s, true);
             foreach (char ch in s)
             {
                 switch (ch)
@@ -373,18 +422,75 @@ namespace Outbridge.PyLite.Modules
             }
         }
 
+        // _escape_attrib_html: a < and the line ends stay as they are.
+        private static void AppendHtmlAttr(EvalContext ctx, StringBuilder sb, string s)
+        {
+            CheckEscaped(ctx, sb, s, true);
+            foreach (char ch in s)
+            {
+                switch (ch)
+                {
+                    case '&': sb.Append("&amp;"); break;
+                    case '>': sb.Append("&gt;"); break;
+                    case '"': sb.Append("&quot;"); break;
+                    default: sb.Append(ch); break;
+                }
+            }
+        }
+
+        // The escaped length, measured before the append: a 15M-char attribute of quotes became 90M chars
+        // before the document's length was next checked.
+        // The escaped length is counted only when the worst case (every char escaped) could pass the cap.
+        private static void CheckEscaped(EvalContext ctx, StringBuilder sb, string s, bool attr)
+        {
+            if (sb.Length + (attr ? 6L : 5L) * s.Length > ctx.Limits.MaxStrChars)
+                ctx.Values.CheckStrLen(sb.Length + EscapedLength(s, attr));
+        }
+
+        private static long EscapedLength(string s, bool attr)
+        {
+            long n = s.Length;
+            foreach (char ch in s)
+            {
+                if (ch == '&')
+                    n += 4;
+                else if (ch == '<' || ch == '>')
+                    n += 3;
+                else if (attr && ch == '"')
+                    n += 5;
+                else if (attr && (ch == '\n' || ch == '\t' || ch == '\r'))
+                    n += 4;
+            }
+            return n;
+        }
+
         private static readonly char[] TextSpecials = { '&', '<', '>' };
         private static readonly char[] AttrSpecials = { '&', '<', '>', '"', '\n', '\t', '\r' };
+
+        // re.match(r"ns\d+$", prefix)
+        private static bool IsGeneratedPrefix(string prefix)
+        {
+            int end = prefix.EndsWith("\n", StringComparison.Ordinal) ? prefix.Length - 1 : prefix.Length;
+            if (end < 3 || !prefix.StartsWith("ns", StringComparison.Ordinal))
+                return false;
+            for (int i = 2; i < end; i++)
+            {
+                if (!char.IsDigit(prefix[i]))
+                    return false;
+            }
+            return true;
+        }
 
         private static ScriptValue RegisterNamespace(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             Args.Exactly(ctx, args, "register_namespace", 2);
             string prefix = AsStr(ctx, args[0]);
             string uri = AsStr(ctx, args[1]);
-            if (prefix.StartsWith("xml", StringComparison.Ordinal))
+            if (IsGeneratedPrefix(prefix))
                 throw Raise.ValueError(ctx, "Prefix format reserved for internal use");
             if (ctx.XmlUriToPrefix == null)
-                ctx.XmlUriToPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+                ctx.XmlUriToPrefix = new Dictionary<string, string>(WellKnownPrefixes, StringComparer.Ordinal);
+
             // Overwrite this uri's prefix; drop any other uri already mapped to this prefix (_namespace_map parity).
             var toRemove = new List<string>();
             foreach (KeyValuePair<string, string> kv in ctx.XmlUriToPrefix)

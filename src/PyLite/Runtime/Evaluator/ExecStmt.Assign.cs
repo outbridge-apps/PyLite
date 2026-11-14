@@ -11,7 +11,19 @@ namespace Outbridge.PyLite.Runtime.Evaluator
     {
         private ExecSignal ExecAssign(AssignNode n, Environment env, EvalContext ctx)
         {
-            ScriptValue v = EvalExpr(n.Value, env, ctx);
+            ScriptValue v;
+            if (n.Value.QuietValue)
+            {
+                ExceptionValue raised;
+                v = ValueOrRaised(n.Value, env, ctx, out raised);
+                if (raised != null)
+                    return ExecSignal.Raise(raised);
+            }
+            else
+            {
+                v = EvalExpr(n.Value, env, ctx);
+            }
+            ctx.Budget.ChargeParts(n.Targets.Count);
             for (int i = 0; i < n.Targets.Count; i++)
             {
                 AssignTo(n.Targets[i], v, env, ctx);
@@ -21,7 +33,7 @@ namespace Outbridge.PyLite.Runtime.Evaluator
 
         internal void AssignTo(ExprNode target, ScriptValue value, Environment env, EvalContext ctx)
         {
-            switch (target.NodeKind)   // P2: jump table (see EvalExpr)
+            switch (target.NodeKind)   // jump table (see EvalExpr)
             {
                 case NodeKind.Name:
                     SetName((NameNode)target, value, env);
@@ -40,7 +52,10 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     return;
                 case NodeKind.Attribute:
                     AttributeNode at = (AttributeNode)target;
-                    StoreAttrValue(EvalExpr(at.Value, env, ctx), at.Attr, value, ctx);
+                    ScriptValue tobj = EvalExpr(at.Value, env, ctx);
+                    if (tobj.Kind == ValueKind.RecordInstance && TryStoreField(at, (RecordInstanceValue)tobj, value))
+                        return;
+                    StoreAttrValue(tobj, at.Attr, value, ctx);
                     return;
                 default:
                     throw EngineBug("cannot assign to " + target.GetType().Name);
@@ -144,11 +159,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
         private ExecSignal ExecAugAssign(AugAssignNode n, Environment env, EvalContext ctx)
         {
             PyBinOp op = MapBin(n.Op);
+            ExceptionValue raised;
             switch (n.Target)
             {
                 case NameNode nm:
                     ScriptValue cur = EvalName(nm, env, ctx);
-                    ScriptValue rhs = EvalExpr(n.Value, env, ctx);
+                    ScriptValue rhs = StatementValue(n.Value, env, ctx, out raised);
+                    if (raised != null)
+                        return ExecSignal.Raise(raised);
                     ScriptValue result = InplaceOp(op, cur, rhs, ctx);
                     SetName(nm, result, env);   // list += rebinds the SAME (mutated) object
                     return ExecSignal.Normal;
@@ -156,22 +174,25 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     ScriptValue obj = EvalExpr(ix.Value, env, ctx);   // evaluated once
                     ScriptValue idx = EvalSubscript(ix.Index, env, ctx);
                     ScriptValue got = GetItemByKind(obj, idx, ctx);
-                    ScriptValue res = InplaceOp(op, got, EvalExpr(n.Value, env, ctx), ctx);
-                    SetItemByKind(obj, idx, res, ctx);
+                    ScriptValue irhs = StatementValue(n.Value, env, ctx, out raised);
+                    if (raised != null)
+                        return ExecSignal.Raise(raised);
+                    SetItemByKind(obj, idx, InplaceOp(op, got, irhs, ctx), ctx);
                     return ExecSignal.Normal;
                 case AttributeNode at:
                     ScriptValue aobj = EvalExpr(at.Value, env, ctx);   // evaluated once
-                    if (aobj.Kind == ValueKind.RecordInstance)
-                    {
-                        RecordInstanceValue ri = (RecordInstanceValue)aobj;
-                        ScriptValue cur2 = ri.GetAttribute(at.Attr, ctx);
-                        ri.SetAttribute(at.Attr, InplaceOp(op, cur2, EvalExpr(n.Value, env, ctx), ctx), ctx);
-                        return ExecSignal.Normal;
-                    }
-                    // Any other object: read, combine, store back; SetAttr refuses what the type does not let a
-                    // script write, with CPython's wording.
-                    ScriptValue cur3 = PyOps.GetAttr(aobj, at.Attr, ctx);
-                    PyOps.SetAttr(aobj, at.Attr, InplaceOp(op, cur3, EvalExpr(n.Value, env, ctx), ctx), ctx);
+                    // Read, combine, store back: a record directly, any other object through GetAttr and SetAttr,
+                    // which refuses what the type does not let a script write, with CPython's wording.
+                    RecordInstanceValue ri = aobj.Kind == ValueKind.RecordInstance ? (RecordInstanceValue)aobj : null;
+                    ScriptValue acur = ri != null ? ri.GetAttribute(at.Attr, ctx) : PyOps.GetAttr(aobj, at.Attr, ctx);
+                    ScriptValue arhs = StatementValue(n.Value, env, ctx, out raised);
+                    if (raised != null)
+                        return ExecSignal.Raise(raised);
+                    ScriptValue ares = InplaceOp(op, acur, arhs, ctx);
+                    if (ri != null)
+                        ri.SetAttribute(at.Attr, ares, ctx);
+                    else
+                        PyOps.SetAttr(aobj, at.Attr, ares, ctx);
                     return ExecSignal.Normal;
                 default:
                     throw EngineBug("cannot augment " + n.Target.GetType().Name);
@@ -196,6 +217,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     return lst;
                 }
             }
+            CounterValue counter = cur as CounterValue;
+            if (counter != null && (op == PyBinOp.Add || op == PyBinOp.Sub || op == PyBinOp.BitOr || op == PyBinOp.BitAnd))
+                return counter.InPlace(op, rhs, ctx);
             // PEP 584: d |= other updates the SAME dict in place (accepts a mapping or an
             // iterable of key/value pairs, like dict.update; right wins).
             if (op == PyBinOp.BitOr && cur is DictValue dcur)
@@ -203,6 +227,9 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                 DictMethods.Merge(ctx, dcur, rhs);
                 return dcur;
             }
+            ChainMapValue chain = cur as ChainMapValue;
+            if (chain != null && op == PyBinOp.BitOr)
+                return chain.InPlaceOr(rhs, ctx);
             DequeValue dq = cur as DequeValue;   // d += iterable extends, d *= n repeats, both in place
             if (dq != null && op == PyBinOp.Add)
             {
@@ -293,6 +320,14 @@ namespace Outbridge.PyLite.Runtime.Evaluator
                     ScriptValue obj = EvalExpr(ix.Value, env, ctx);
                     ScriptValue idx = EvalSubscript(ix.Index, env, ctx);
                     DelItemByKind(obj, idx, ctx);
+                    return;
+                case TupleNode tuple:   // del (a, b), del [a, [b]]: one by one, left to right
+                    foreach (ExprNode e in tuple.Elts)
+                        DelOne(e, env, ctx);
+                    return;
+                case ListNode list:
+                    foreach (ExprNode e in list.Elts)
+                        DelOne(e, env, ctx);
                     return;
                 default:
                     throw ReadOnlyAttr((AttributeNode)target, env, ctx);

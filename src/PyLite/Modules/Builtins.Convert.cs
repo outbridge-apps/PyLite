@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
@@ -16,7 +15,7 @@ namespace Outbridge.PyLite.Modules
         {
             var intStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["from_bytes"] = BuiltinFunctionValue.Make("from_bytes", (s, args, kw, c) => IntMethods.FromBytes(c, args, kw)),
+                ["from_bytes"] = BuiltinFunctionValue.Make("from_bytes", Args.LeadKeywords("from_bytes", (s, args, kw, c) => IntMethods.FromBytes(c, args, kw), 1, "bytes", "byteorder", "signed")),
             };
             var bytesStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
@@ -31,11 +30,16 @@ namespace Outbridge.PyLite.Modules
             {
                 ["fromhex"] = BuiltinFunctionValue.Make("fromhex", Args.Positional("fromhex", 1, 1, (s, args, kw, c) => FloatMethods.FromHex(c, args))),
             };
-            AddType(d, "int", (self, args, kw, c) => IntBuiltin(c, args, kw), intStatics, IntValue.IntType);
-            AddType(d, "float", (self, args, kw, c) => FloatBuiltin(c, args, kw), floatStatics, FloatValue.FloatType);
+            AddQuietType(d, "int", IntOrError, intStatics, IntValue.IntType);
+            AddQuietType(d, "float", FloatOrError, floatStatics, FloatValue.FloatType);
             AddType(d, "str", (self, args, kw, c) => StrBuiltin(c, args, kw), strStatics, StrValue.StrType);
-            // bool inherits int's classmethod in CPython, and it answers with an int there too
-            AddType(d, "bool", (self, args, kw, c) => BoolBuiltin(c, args, kw), intStatics);
+            // bool inherits int's classmethod: cls(result), so bool.from_bytes answers a bool
+            var boolStatics = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
+            {
+                ["from_bytes"] = BuiltinFunctionValue.Make("from_bytes", Args.LeadKeywords("from_bytes", (s, args, kw, c) =>
+                    c.Values.Bool(IntMethods.FromBytes(c, args, kw).IsTruthy(c)), 1, "bytes", "byteorder", "signed")),
+            };
+            AddType(d, "bool", (self, args, kw, c) => BoolBuiltin(c, args, kw), boolStatics);
             AddType(d, "bytes", (self, args, kw, c) => BytesBuiltin(c, StrMethods.WithKw(c, args, kw, "bytes", "source", "encoding", "errors")),
                 bytesStatics, BytesValue.BytesType);
         }
@@ -78,20 +82,46 @@ namespace Outbridge.PyLite.Modules
             StrValue y = args[1] as StrValue;
             if (x == null || y == null)
                 throw Raise.TypeError(c, "maketrans arguments must be strings");
-            int[] xs = CodePoints(x.Value), ys = CodePoints(y.Value);   // lengths in code points, as CPython counts
-            if (xs.Length != ys.Length)
+            // Lengths in code points, as CPython counts; walked in place: arrays of them were 260 MB uncharged.
+            c.Budget.ChargeLinear(x.Value.Length + y.Value.Length);
+            if (CountCodePoints(x.Value) != CountCodePoints(y.Value))
                 throw Raise.ValueError(c, "the first two maketrans arguments must have equal length");
-            for (int i = 0; i < xs.Length; i++)
-                table.SetItem(c.Values.Int(xs[i]), c.Values.Int(ys[i]), c);
+            for (int i = 0, j = 0; i < x.Value.Length; )
+            {
+                c.Budget.Step();
+                int from = NextCodePoint(x.Value, ref i), to = NextCodePoint(y.Value, ref j);
+                table.SetItem(c.Values.Int(from), c.Values.Int(to), c);
+            }
             if (args.Length == 3)
             {
                 StrValue z = args[2] as StrValue;
                 if (z == null)
                     throw Raise.TypeError(c, "maketrans arguments must be strings");
-                foreach (int cp in CodePoints(z.Value))
-                    table.SetItem(c.Values.Int(cp), c.Values.None, c);
+                for (int i = 0; i < z.Value.Length; )
+                {
+                    c.Budget.Step();
+                    table.SetItem(c.Values.Int(NextCodePoint(z.Value, ref i)), c.Values.None, c);
+                }
             }
             return table;
+        }
+
+        private static int NextCodePoint(string s, ref int i)
+        {
+            if (i + 1 < s.Length && char.IsHighSurrogate(s[i]) && char.IsLowSurrogate(s[i + 1]))
+            {
+                i += 2;
+                return char.ConvertToUtf32(s[i - 2], s[i - 1]);
+            }
+            return s[i++];
+        }
+
+        private static int CountCodePoints(string s)
+        {
+            int n = 0;
+            for (int i = 0; i < s.Length; n++)
+                NextCodePoint(s, ref i);
+            return n;
         }
 
         private static int[] CodePoints(string s)
@@ -110,27 +140,36 @@ namespace Outbridge.PyLite.Modules
             return cps.ToArray();
         }
 
-        // bytes.fromhex('41 42') -> b'AB'  (ASCII spaces between byte pairs are ignored, CPython parity).
+        // bytes.fromhex('41 42') -> b'AB': ASCII whitespace between the pairs is skipped, not inside one.
         private static ScriptValue BytesFromHex(EvalContext c, ScriptValue[] args)
         {
             StrValue s = args.Length >= 1 ? args[0] as StrValue : null;
             if (s == null)
-                throw Raise.TypeError(c, "fromhex() argument must be str");
+                throw Raise.TypeError(c, "fromhex() argument must be str or bytes-like, not " + (args.Length >= 1 ? args[0].PyTypeName : "NoneType"));
             string hex = s.Value;
             c.Budget.ChargeLinear(hex.Length);
+            for (int k = 0; k < hex.Length; k++)
+            {
+                if (hex[k] >= 128)
+                    throw Raise.ValueError(c, "non-hexadecimal number found in fromhex() arg at position " + k);
+            }
             var outB = new List<byte>();
             int i = 0;
             while (i < hex.Length)
             {
-                if (hex[i] == ' ')
+                if (hex[i] == ' ' || (hex[i] >= '\t' && hex[i] <= '\r'))
                 {
                     i++;
                     continue;
                 }
                 int hi = Support.Hex.Nibble(hex[i]);
-                int lo = i + 1 < hex.Length ? Support.Hex.Nibble(hex[i + 1]) : -1;
-                if (hi < 0 || lo < 0)
+                if (hi < 0)
                     throw Raise.ValueError(c, "non-hexadecimal number found in fromhex() arg at position " + i);
+                if (i + 1 >= hex.Length)
+                    throw Raise.ValueError(c, "fromhex() arg must contain an even number of hexadecimal digits");
+                int lo = Support.Hex.Nibble(hex[i + 1]);
+                if (lo < 0)
+                    throw Raise.ValueError(c, "non-hexadecimal number found in fromhex() arg at position " + (i + 1));
                 outB.Add((byte)(hi * 16 + lo));
                 i += 2;
             }
@@ -164,11 +203,26 @@ namespace Outbridge.PyLite.Modules
                         n > long.MaxValue ? long.MaxValue : (long)n);   // report clamped: (long)10**100 would overflow
                 return c.Values.Bytes(new byte[(int)n]);
             }
-            return c.Values.Bytes(Support.Iter.ToByteArray(c, src));
+            IScriptIterator it = PyOps.TryGetIterator(src, c);   // once: __iter__ may be one-shot
+            if (it == null)
+                throw Raise.TypeError(c, "cannot convert '" + src.PyTypeName + "' object to bytes");
+            return c.Values.Bytes(Support.Iter.ToByteArray(c, it));
         }
 
-        private static ScriptValue IntBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
+        // int(x) for a module whose CPython source says int(arg): the builtin's conversions and errors.
+        internal static BigInteger IntOf(EvalContext c, ScriptValue x)
         {
+            ScriptException error;
+            ScriptValue v = IntOrError(new[] { x }, KwArgs.Empty, c, out error);
+            if (error != null)
+                throw error;
+            return NumericOps.AsBigInteger(v);
+        }
+
+        // int(); a malformed literal's ValueError comes back in `error`
+        private static ScriptValue IntOrError(ScriptValue[] args, KwArgs kw, EvalContext c, out ScriptException error)
+        {
+            error = null;
             Args.AtMost(c, args, "int", 2);
             ScriptValue xArg = args.Length >= 1 ? args[0] : null;
             ScriptValue baseArg = args.Length >= 2 ? args[1] : null;
@@ -191,10 +245,10 @@ namespace Outbridge.PyLite.Modules
 
             if (baseArg != null)
             {
-                StrValue s = xArg as StrValue;
-                if (s == null)
+                string text = TextOf(xArg);
+                if (text == null)
                     throw Raise.TypeError(c, "int() can't convert non-string with explicit base");
-                return c.Values.Int(IntParser.Parse(c, s.Value, BaseToInt(c, baseArg)));
+                return IntOfText(c, text, BaseToInt(c, baseArg), out error);
             }
 
             IntValue iv = xArg as IntValue;
@@ -206,9 +260,9 @@ namespace Outbridge.PyLite.Modules
             FloatValue fv = xArg as FloatValue;
             if (fv != null)
                 return c.Values.Int(IntFromFloat(c, fv.Value));
-            StrValue sv = xArg as StrValue;
-            if (sv != null)
-                return c.Values.Int(IntParser.Parse(c, sv.Value, 10));
+            string digits = TextOf(xArg);
+            if (digits != null)
+                return IntOfText(c, digits, 10, out error);
             FractionValue fr = xArg as FractionValue;   // __int__ truncates toward zero
             if (fr != null)
                 return c.Values.Int(BigOps.Divide(c, fr.Num, fr.Den));
@@ -216,6 +270,23 @@ namespace Outbridge.PyLite.Modules
             if (dv != null)
                 return c.Values.Int(new BigInteger(Math.Truncate(dv.Value)));
             throw Raise.TypeError(c, "int() argument must be a string, a bytes-like object or a real number, not '" + xArg.PyTypeName + "'");
+        }
+
+        private static ScriptValue IntOfText(EvalContext c, string text, int numBase, out ScriptException error)
+        {
+            BigInteger value;
+            error = IntParser.ParseOrError(c, text, numBase, out value);
+            return error == null ? c.Values.Int(value) : null;
+        }
+
+        // a str, or bytes read as ASCII (int(b'12'), float(b'1.5')); null for anything else
+        private static string TextOf(ScriptValue v)
+        {
+            StrValue s = v as StrValue;
+            if (s != null)
+                return s.Value;
+            BytesValue b = v as BytesValue;
+            return b != null ? System.Text.Encoding.GetEncoding(28591).GetString(b.Data) : null;
         }
 
         private static int BaseToInt(EvalContext c, ScriptValue baseArg)
@@ -243,8 +314,10 @@ namespace Outbridge.PyLite.Modules
             return neg ? -r : r;
         }
 
-        private static ScriptValue FloatBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
+        // float(); a malformed literal's ValueError comes back in `error`
+        private static ScriptValue FloatOrError(ScriptValue[] args, KwArgs kw, EvalContext c, out ScriptException error)
         {
+            error = null;
             if (kw.Count > 0)
                 throw Raise.TypeError(c, "float() takes no keyword arguments");
             Args.Unpack(c, args, "float", 0, 1);
@@ -256,38 +329,62 @@ namespace Outbridge.PyLite.Modules
                 return x;
             IntValue iv = x as IntValue;
             if (iv != null)
-                return c.Values.Float(IntToDouble(c, iv.Value));
+                return c.Values.Float(NumericOps.ToDoubleChecked(iv.Value, c));
             BoolValue bv = x as BoolValue;
             if (bv != null)
                 return c.Values.Float(bv.Value ? 1.0 : 0.0);
-            StrValue sv = x as StrValue;
-            if (sv != null)
-                return c.Values.Float(ParseFloat(c, sv.Value));
+            string text = TextOf(x);
+            if (text != null)
+            {
+                double d;
+                error = ParseFloatOrError(c, text, out d);
+                return error == null ? c.Values.Float(d) : null;
+            }
             FractionValue fr = x as FractionValue;   // the other numeric-tower members' __float__
             if (fr != null)
                 return c.Values.Float(fr.AsDouble(c));
             DecimalValue dv = x as DecimalValue;
             if (dv != null)
-                return c.Values.Float((double)dv.Value);
+                return c.Values.Float(NearestDouble.FromDecimal(dv.Value));
             throw Raise.TypeError(c, "float() argument must be a string or a real number, not '" + x.PyTypeName + "'");
         }
 
-        private static double IntToDouble(EvalContext c, BigInteger v)
+        // _PyUnicode_TransformDecimalAndSpaceToASCII: any Unicode decimal digit reads as its ASCII twin
+        internal static string AsciiDigits(string s)
         {
-            double d = (double)v;
-            if (double.IsInfinity(d))
-                throw Raise.Overflow(c, "long int too large to convert to float");
-            return d;
+            char[] chars = null;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] < 0x80)
+                    continue;
+                int d = PyUnicode.DecimalDigitValue(s[i]);
+                if (d < 0)
+                    continue;
+                if (chars == null)
+                    chars = s.ToCharArray();
+                chars[i] = (char)('0' + d);
+            }
+            return chars == null ? s : new string(chars);
         }
 
         internal static double ParseFloat(EvalContext c, string original)
         {
+            double d;
+            ScriptException error = ParseFloatOrError(c, original, out d);
+            if (error != null)
+                throw error;
+            return d;
+        }
+
+        private static ScriptException ParseFloatOrError(EvalContext c, string original, out double value)
+        {
+            value = 0.0;
             int start = 0, end = original.Length;
             while (start < end && PyUnicode.IsPythonSpace(original[start]))
                 start++;
             while (end > start && PyUnicode.IsPythonSpace(original[end - 1]))
                 end--;
-            string s = original.Substring(start, end - start);
+            string s = AsciiDigits(original.Substring(start, end - start));
 
             int sign = 1;
             int i = 0;
@@ -299,26 +396,21 @@ namespace Outbridge.PyLite.Modules
             }
             string rest = s.Substring(i);
             if (rest.Equals("inf", StringComparison.OrdinalIgnoreCase) || rest.Equals("infinity", StringComparison.OrdinalIgnoreCase))
-                return sign > 0 ? double.PositiveInfinity : double.NegativeInfinity;
+            {
+                value = sign > 0 ? double.PositiveInfinity : double.NegativeInfinity;
+                return null;
+            }
             if (rest.Equals("nan", StringComparison.OrdinalIgnoreCase))
-                return double.NaN;
+            {
+                value = sign > 0 ? NumericOps.PyNaN : -NumericOps.PyNaN;
+                return null;
+            }
 
-            if (!IsAsciiFloat(rest))
-                throw Raise.ValueError(c, "could not convert string to float: " + c.Values.Str(Truncate200(original)).Repr(c));
-            try
-            {
-                // The sign is applied after parsing: net472's double.Parse("-0.0") answers +0.0.
-                double d = double.Parse(rest.Replace("_", ""), NumberStyles.Float, CultureInfo.InvariantCulture);
-                return sign < 0 ? -d : d;
-            }
-            catch (OverflowException)
-            {
-                return sign > 0 ? double.PositiveInfinity : double.NegativeInfinity;   // float('1e400') == inf
-            }
-            catch (FormatException)
-            {
-                throw Raise.ValueError(c, "could not convert string to float: " + c.Values.Str(Truncate200(original)).Repr(c));
-            }
+            double d;
+            if (!IsAsciiFloat(rest) || !NearestDouble.TryParse(rest.Replace("_", ""), out d))
+                return Raise.ValueError(c, "could not convert string to float: " + c.Values.Str(Truncate200(original)).Repr(c));
+            value = sign < 0 ? -d : d;   // float('1e400') is inf, as in CPython
+            return null;
         }
 
         // Accept only the ASCII float grammar: digits/./e with an optional exponent sign; '_' and hex are rejected.
@@ -362,7 +454,7 @@ namespace Outbridge.PyLite.Modules
             return digits;
         }
 
-        private static readonly string[] StrNames = { "object", "encoding", "errors" };   // built once (P8)
+        private static readonly string[] StrNames = { "object", "encoding", "errors" };   // built once
 
         private static ScriptValue StrBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {

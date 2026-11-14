@@ -16,11 +16,12 @@ namespace Outbridge.PyLite.Tests.Modules
         // ---- imports and subscription are inert ----
         [InlineData("import typing\nr = True", "True")]
         [InlineData("from typing import Optional, List, Dict, Any, Union\nr = True", "True")]
-        [InlineData("from typing import Optional\nr = repr(Optional[int])", "'typing.Optional'")]
-        [InlineData("from typing import Dict\nx = Dict[str, int]\nr = repr(x)", "'typing.Dict'")]
-        [InlineData("from typing import Callable\nr = repr(Callable[[int], str])", "'typing.Callable'")]
-        [InlineData("from typing import Union\nr = repr(Union[int, str, None])", "'typing.Union'")]
-        [InlineData("from typing import Literal\nr = repr(Literal['a', 'b'])", "'typing.Literal'")]
+        // a subscription keeps its arguments (review 6, t1-02; CPython 3.14's reprs)
+        [InlineData("from typing import Optional\nr = repr(Optional[int])", "'int | None'")]
+        [InlineData("from typing import Dict\nx = Dict[str, int]\nr = repr(x)", "'typing.Dict[str, int]'")]
+        [InlineData("from typing import Callable\nr = repr(Callable[[int], str])", "'typing.Callable[[int], str]'")]
+        [InlineData("from typing import Union\nr = repr(Union[int, str, None])", "'int | str | None'")]
+        [InlineData("from typing import Literal\nr = repr(Literal['a', 'b'])", "\"typing.Literal['a', 'b']\"")]
         [InlineData("import typing\nr = typing.TYPE_CHECKING", "False")]
         // ---- runtime helpers ----
         [InlineData("from typing import cast\nr = cast(int, '5')", "'5'")]
@@ -69,9 +70,60 @@ namespace Outbridge.PyLite.Tests.Modules
         }
 
         [Fact]
-        public void SubscriptionReturnsSameForm()
+        public void SubscriptionKeepsItsArguments()
         {
-            Assert.Equal("True", Body("from typing import Optional\nr = (Optional[int] is Optional)\n"));
+            // CPython 3.14: a new alias; Optional and Union are the `X | Y` union
+            Assert.Equal("(False, True, True, False)", Body("from typing import Optional, Union, List\n"
+                + "r = (Optional[int] is Optional, Optional[int] == Union[int, None], List[int] == List[int], List[int] == List[str])\n"));
+        }
+
+        // Round 4 review: Callable's parameter list printed a C# frame a nesting level (400,000 levels ended the process) into
+        // an uncharged builder (30 strings of 4 M characters took 570 MB past a 256 MB budget).
+        [Fact]
+        public void CallableReprIsBoundedAndCharged()
+        {
+            var engine = new Outbridge.PyLite.Hosting.ScriptEngine(new Outbridge.PyLite.Hosting.EngineOptions { DefaultLimits = Outbridge.PyLite.Tests.TestEngines.Unhurried });   // the limits, not the clock
+            var deep = engine.Run("import typing\nx = []\nfor i in range(400000):\n    x = [x]\nrepr(typing.Callable[x, int])\n",
+                new Outbridge.PyLite.Hosting.RunRequest());
+            Assert.Equal("RecursionError", deep.Error?.PythonType);
+            var wide = engine.Run("import typing\ns = 'x' * 4000000\nrepr(typing.Callable[[s] * 30, int])\n",
+                new Outbridge.PyLite.Hosting.RunRequest());
+            Assert.Equal("MaxStrChars", wide.Error?.LimitName);   // at the 4th item now: the process peak went 663 -> 129 MB
+        }
+
+        // Round 4 review: `|` with a typing object raised TypeError; a union compared by its members' order. CPython 3.14.2.
+        [Theory]
+        [InlineData("List[int] | None", "typing.List[int] | None")]
+        [InlineData("List | None", "typing.List | None")]
+        [InlineData("Any | None", "typing.Any | None")]
+        [InlineData("int | List[int]", "int | typing.List[int]")]
+        [InlineData("None | List[int]", "None | typing.List[int]")]
+        [InlineData("(int | str) | List[int]", "int | str | typing.List[int]")]
+        [InlineData("List[int] | List[int]", "typing.List[int]")]
+        [InlineData("List[int] | 'x'", "typing.List[int] | ForwardRef('x')")]
+        [InlineData("(List[int] | None) | int", "typing.List[int] | None | int")]
+        [InlineData("Union[List[int], None] == Union[None, List[int]]", "True")]
+        [InlineData("hash(Union[List[int], None]) == hash(Union[None, List[int]])", "True")]
+        [InlineData("Optional[List[int]] == (List[int] | None)", "True")]
+        public void TypingObjectsJoinWithBar(string expr, string expected)
+        {
+            Assert.Equal(expected, Body("from typing import List, Any, Optional, Union\nr = " + expr + "\n"));
+        }
+
+        // Round 4 review: Literal compares a set of (value, type), as CPython 3.14.2: Literal[1] is no Literal[True].
+        [Theory]
+        [InlineData("Literal[1] == Literal[True]", "False")]
+        [InlineData("Literal[0] == Literal[False]", "False")]
+        [InlineData("Literal[1, 2] == Literal[2, 1]", "True")]
+        [InlineData("Literal[1, 1] == Literal[1]", "True")]
+        [InlineData("hash(Literal[1, 2]) == hash(Literal[2, 1])", "True")]
+        [InlineData("Literal[1] | Literal[True]", "typing.Literal[1] | typing.Literal[True]")]
+        [InlineData("(Literal[1] | None) == (Literal[True] | None)", "False")]
+        [InlineData("Literal[1] | Literal[1]", "typing.Literal[1]")]
+        [InlineData("{Literal[1, 2]: 'x'}[Literal[2, 1]]", "'x'")]
+        public void LiteralsCompareByValueAndType(string expr, string expected)
+        {
+            Assert.Equal(expected, Body("from typing import Literal\nr = " + expr + "\n"));
         }
 
         [Fact]

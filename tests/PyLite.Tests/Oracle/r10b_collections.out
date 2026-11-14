@@ -1,0 +1,198 @@
+a2_copy_dict=('dict', False)
+a2_deep_dict=('dict', False)
+a2_copy_od=('OrderedDict', True)
+a2_deep_od=('OrderedDict', False)
+a2_copy_dd=('defaultdict', True)
+a2_deep_dd=('defaultdict', False)
+el_none!TypeError:Element() argument 2 must be dict, not None
+el_none_kw!TypeError:attrib must be dict, not NoneType
+el_list!TypeError:Element() argument 2 must be dict, not list
+el_od='dict'
+sub_none!TypeError:SubElement() argument 3 must be dict, not None
+sub_list!TypeError:SubElement() argument 3 must be dict, not list
+mk_none!TypeError:makeelement() argument 2 must be dict, not None
+el_kw={'x': '1', 'y': '2'}
+find p:b none=None
+find p:b empty!SyntaxError:prefix 'p' not found in prefix map
+find p:b p='{u}b'
+find p:b other!SyntaxError:prefix 'p' not found in prefix map
+findall p:b=0
+findtext p:b='dflt'
+iterfind p:b!SyntaxError:prefix 'p' not found in prefix map
+find ./p:b none!SyntaxError:prefix 'p' not found in prefix map
+find ./p:b empty!SyntaxError:prefix 'p' not found in prefix map
+find ./p:b p='{u}b'
+find ./p:b other!SyntaxError:prefix 'p' not found in prefix map
+findall ./p:b!SyntaxError:prefix 'p' not found in prefix map
+findtext ./p:b!SyntaxError:prefix 'p' not found in prefix map
+iterfind ./p:b!SyntaxError:prefix 'p' not found in prefix map
+find c/p:b none!SyntaxError:prefix 'p' not found in prefix map
+find c/p:b empty!SyntaxError:prefix 'p' not found in prefix map
+find c/p:b p='{u}b'
+find c/p:b other!SyntaxError:prefix 'p' not found in prefix map
+findall c/p:b!SyntaxError:prefix 'p' not found in prefix map
+findtext c/p:b!SyntaxError:prefix 'p' not found in prefix map
+iterfind c/p:b!SyntaxError:prefix 'p' not found in prefix map
+find .//p:b none!SyntaxError:prefix 'p' not found in prefix map
+find .//p:b empty!SyntaxError:prefix 'p' not found in prefix map
+find .//p:b p='{u}b'
+find .//p:b other!SyntaxError:prefix 'p' not found in prefix map
+findall .//p:b!SyntaxError:prefix 'p' not found in prefix map
+findtext .//p:b!SyntaxError:prefix 'p' not found in prefix map
+iterfind .//p:b!SyntaxError:prefix 'p' not found in prefix map
+find q:b none=None
+find q:b empty!SyntaxError:prefix 'q' not found in prefix map
+find q:b p!SyntaxError:prefix 'q' not found in prefix map
+find q:b other!SyntaxError:prefix 'q' not found in prefix map
+findall q:b=0
+findtext q:b='dflt'
+iterfind q:b!SyntaxError:prefix 'q' not found in prefix map
+find p:b[1] none!SyntaxError:prefix 'p' not found in prefix map
+find p:b[1] empty!SyntaxError:prefix 'p' not found in prefix map
+find p:b[1] p='{u}b'
+find p:b[1] other!SyntaxError:prefix 'p' not found in prefix map
+findall p:b[1]!SyntaxError:prefix 'p' not found in prefix map
+findtext p:b[1]!SyntaxError:prefix 'p' not found in prefix map
+iterfind p:b[1]!SyntaxError:prefix 'p' not found in prefix map
+find {u}b none='{u}b'
+find {u}b empty='{u}b'
+find {u}b p='{u}b'
+find {u}b other='{u}b'
+findall {u}b=1
+findtext {u}b=''
+iterfind {u}b=1
+find b none='b'
+find b empty='b'
+find b p='b'
+find b other='b'
+findall b=1
+findtext b=''
+iterfind b=1
+find :b none=None
+find :b empty!KeyError:':'
+find :b p!KeyError:':'
+find :b other!KeyError:':'
+findall :b=0
+findtext :b='dflt'
+iterfind :b!KeyError:':'
+find p: none=None
+find p: empty!SyntaxError:prefix 'p' not found in prefix map
+find p: p=None
+find p: other!SyntaxError:prefix 'p' not found in prefix map
+findall p:=0
+findtext p:='dflt'
+iterfind p:!SyntaxError:prefix 'p' not found in prefix map
+find x/q:z none!SyntaxError:prefix 'q' not found in prefix map
+find x/q:z empty!SyntaxError:prefix 'q' not found in prefix map
+find x/q:z p!SyntaxError:prefix 'q' not found in prefix map
+find x/q:z other!SyntaxError:prefix 'q' not found in prefix map
+findall x/q:z!SyntaxError:prefix 'q' not found in prefix map
+findtext x/q:z!SyntaxError:prefix 'q' not found in prefix map
+iterfind x/q:z!SyntaxError:prefix 'q' not found in prefix map
+iterfind lazy!SyntaxError:prefix 'q' not found in prefix map
+gz mtime 0='00000000'
+gz mtime 1='01000000'
+gz mtime -1!error:'L' format requires 0 <= number <= 4294967295
+gz mtime 4294967295='ffffffff'
+gz mtime 4294967296!error:'L' format requires 0 <= number <= 4294967295
+gz mtime 1099511627776!error:'L' format requires 0 <= number <= 4294967295
+gz mtime -2147483648!error:'L' format requires 0 <= number <= 4294967295
+gz mtime 1.5='01000000'
+gz mtime 'x'!ValueError:invalid literal for int() with base 10: 'x'
+gz mtime True='01000000'
+gz mtime 18446744073709551616!error:'L' format requires 0 <= number <= 4294967295
+gz lvl='05000000'
+batched 18446744073709551616!OverflowError:Python int too large to convert to C ssize_t
+deque maxlen 18446744073709551616!OverflowError:Python int too large to convert to C ssize_t
+rotate 18446744073709551616!OverflowError:Python int too large to convert to C ssize_t
+rotate -18446744073709551616!OverflowError:Python int too large to convert to C ssize_t
+batched -1!ValueError:n must be at least one
+deque maxlen -1!ValueError:maxlen must be non-negative
+rotate -1=[2, 3, 1]
+rotate --1=[3, 1, 2]
+batched 0!ValueError:n must be at least one
+deque maxlen 0=0
+rotate 0=[1, 2, 3]
+rotate -0=[1, 2, 3]
+batched 1.0!TypeError:'float' object cannot be interpreted as an integer
+deque maxlen 1.0!TypeError:an integer is required
+rotate 1.0!TypeError:'float' object cannot be interpreted as an integer
+rotate -1.0!TypeError:'float' object cannot be interpreted as an integer
+batched 'x'!TypeError:'str' object cannot be interpreted as an integer
+deque maxlen 'x'!TypeError:an integer is required
+rotate 'x'!TypeError:'str' object cannot be interpreted as an integer
+rotate -'x'!TypeError:'str' object cannot be interpreted as an integer
+elements 2.0!TypeError:'float' object cannot be interpreted as an integer
+elements 2.5!TypeError:'float' object cannot be interpreted as an integer
+elements -1.0!TypeError:'float' object cannot be interpreted as an integer
+elements 0.0!TypeError:'float' object cannot be interpreted as an integer
+elements True=1
+elements 3=3
+elements '2'!TypeError:'str' object cannot be interpreted as an integer
+elements None!TypeError:'NoneType' object cannot be interpreted as an integer
+elements [1]!TypeError:'list' object cannot be interpreted as an integer
+elements 1000.0!TypeError:'float' object cannot be interpreted as an integer
+kw_str=Counter({'a': 'x'})
+kw_none=Counter({'a': None})
+kw_mixed=Counter({'a': 1, 'b': 'x'})
+map_str=Counter({'a': 'x'})
+map_mixed=Counter({'a': 1, 'b': 'x'})
+map_list_vals=Counter({'a': [1]})
+map_none=Counter({'a': None})
+map_then_kw!TypeError:can only concatenate str (not "int") to str
+map_then_kw2=Counter({'a': 'xy'})
+update_nonempty_str!TypeError:can only concatenate str (not "int") to str
+update_nonempty_str2!TypeError:can only concatenate str (not "int") to str
+update_empty_str=Counter({'b': 'x'})
+update_kw_str=Counter({'b': 'x'})
+sub_str!TypeError:unsupported operand type(s) for -: 'int' and 'str'
+str_most_common=[('b', 'y'), ('a', 'x')]
+str_total!TypeError:unsupported operand type(s) for +: 'int' and 'str'
+str_total2!TypeError:unsupported operand type(s) for +: 'int' and 'str'
+str_elements!TypeError:'str' object cannot be interpreted as an integer
+str_add!TypeError:can only concatenate str (not "int") to str
+str_pos!TypeError:'>' not supported between instances of 'str' and 'int'
+str_eq=True
+str_getitem='x'
+str_copy=Counter({'a': 'x'})
+str_from_counter=Counter({'a': 'x'})
+none_repr="Counter({'a': None, 'b': None})"
+mixed_repr="Counter({'a': 1, 'b': 'x'})"
+list_repr="Counter({'a': [1], 'b': [0]})"
+fromdict_float=Counter({'b': 2, 'a': 1.5})
+iter_str=Counter({'a': 2, 'b': 1, 'c': 1})
+iter_pairs=Counter({('a', 'x'): 1})
+cm_or=ChainMap({'a': 1, 'b': 2})
+cm_or_type='ChainMap'
+cm_or_maps=[{'a': 1, 'b': 2, 'c': 9}, {'c': 3}]
+cm_ror=ChainMap({'b': 2, 'a': 1})
+cm_ror_type='ChainMap'
+cm_ror_maps=[{'b': 2, 'c': 3, 'a': 1}]
+cm_ior2=([{'a': 1, 'b': 2}, {'z': 0}], True)
+cm_or_cm=[{'a': 1, 'c': 5, 'b': 2}, {'c': 3}]
+cm_or_list!TypeError:unsupported operand type(s) for |: 'ChainMap' and 'list'
+cm_or_int!TypeError:unsupported operand type(s) for |: 'ChainMap' and 'int'
+cm_ror_list!TypeError:unsupported operand type(s) for |: 'list' and 'ChainMap'
+cm_ror_od=[{'b': 2, 'a': 1}]
+cm_or_od=[{'a': 1, 'b': 2}]
+cm_or_counter=[{'a': 1, 'b': 2}]
+cm_ror_counter='ChainMap'
+cm_or_fresh=[False, {'a': 1}]
+reversed_mut!RuntimeError:deque mutated during iteration
+reversed_mut_append!RuntimeError:deque mutated during iteration
+reversed_mut_rot!RuntimeError:deque mutated during iteration
+reversed_mut_rot0!RuntimeError:deque mutated during iteration
+reversed_mut_rot5!RuntimeError:deque mutated during iteration
+reversed_mut_clear!RuntimeError:deque mutated during iteration
+reversed_mut_poppush!RuntimeError:deque mutated during iteration
+reversed_mut_ext0=3
+reversed_mut_rev=1
+reversed_mut_done=[]
+reversed_mut_appendleft!RuntimeError:deque mutated during iteration
+reversed_mut_remove!RuntimeError:deque mutated during iteration
+reversed_mut_insert!RuntimeError:deque mutated during iteration
+reversed_mut_maxlen!RuntimeError:deque mutated during iteration
+iter_mut!RuntimeError:deque mutated during iteration
+reversed_list_mut=3
+reversed_mut_then_stop!RuntimeError:deque mutated during iteration
+reversed_after_err=[]

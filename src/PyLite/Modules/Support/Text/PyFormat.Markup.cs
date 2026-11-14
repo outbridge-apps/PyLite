@@ -61,6 +61,7 @@ namespace Outbridge.PyLite.Modules.Support
                     else
                     {
                         ParseField(ctx, t, ref pos, args, kwargs, st, sb);
+                        ctx.Values.CheckStrLen(sb.Length);   // a field repeated 400 times built 1.5 GB before the final check
                     }
                 }
                 else
@@ -123,7 +124,7 @@ namespace Outbridge.PyLite.Modules.Support
             else if (conv == 'r')
                 value = ctx.Values.Str(value.Repr(ctx));
             else if (conv == 'a')
-                value = ctx.Values.Str(AsciiEscape(value.Repr(ctx)));
+                value = ctx.Values.Str(AsciiEscape(ctx, value.Repr(ctx)));
 
             string resolvedSpec = spec.IndexOf('{') >= 0 ? ResolveNestedSpec(ctx, spec, args, kwargs, st) : spec;
             ScriptValue rendered = FormatValue(ctx, value, resolvedSpec);
@@ -245,7 +246,10 @@ namespace Outbridge.PyLite.Modules.Support
                     if (j >= n || spec[j] != '}')
                         throw Raise.ValueError(ctx, "Max string recursion exceeded");
                     ScriptValue v = ResolveField(ctx, spec.Substring(start, j - start), args, kwargs, st);
-                    sb.Append(v.Str(ctx));
+                    string text = v.Str(ctx);
+                    ctx.Values.ChargeBuilderGrow(sb, text.Length);
+                    ctx.Values.PreCharge(2L * text.Length);   // the ToString below holds a second copy
+                    sb.Append(text);
                     i = j + 1;
                 }
                 else if (c == '}' && i + 1 < n && spec[i + 1] == '}')

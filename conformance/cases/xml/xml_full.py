@@ -263,7 +263,8 @@ ET.SubElement(doc, 'x').text = 'v'
 assert doc[0].tag is ET.Comment and doc[1].tag is ET.ProcessingInstruction
 assert ET.tostring(doc, encoding='unicode') == '<r><!-- note --><?php echo?><x>v</x></r>'
 assert [e.tag for e in doc.findall('x')] == ['x']     # neither one answers a tag filter
-assert len(list(doc.iter())) == 4 and ''.join(doc.itertext()) == 'v'
+assert len(list(doc.iter())) == 4
+assert list(doc.itertext()) == [' note ', 'php echo', 'v']   # the C iterator reads no tag: their text is text
 assert ET.tostring(ET.Comment('a<b'), encoding='unicode') == '<!--a<b-->'
 assert ET.tostring(ET.ProcessingInstruction('t'), encoding='unicode') == '<?t?>'
 assert ''.join(ET.tostringlist(doc, encoding='unicode')) == ET.tostring(doc, encoding='unicode')
@@ -318,9 +319,9 @@ assert _R.find('.//n/..').get('k') == 'a'
 assert [e.get('k') for e in _R.findall('.//n/..')] == ['a', 'b', None]
 assert _R.find('..') is None and _R.find('i/..').tag == 'r'
 
-# [@a!='v'] is elem.get(a) != v, so an element WITHOUT the attribute is selected; [tag!='text'] needs
-# such a child to exist, which is CPython's asymmetry between the two forms
-assert [e.get('k') for e in _R.findall("i[@k!='a']")] == ['b', None]
+# [@a!='v'] needs the attribute, with another value (CPython's select_negated); [tag!='text'] needs
+# such a child to exist
+assert [e.get('k') for e in _R.findall("i[@k!='a']")] == ['b']
 assert [e.get('k') for e in _R.findall("i[n!='x']")] == ['b', None]
 assert _R.findall("i[q!='x']") == []
 

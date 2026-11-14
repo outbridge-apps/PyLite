@@ -66,7 +66,7 @@ namespace Outbridge.PyLite.Modules
             private static Dictionary<string, SlotDescriptor> BuildSlots()
             {
                 var d = new Dictionary<string, SlotDescriptor>(StringComparer.Ordinal);
-                d["sniff"] = SlotDescriptor.MakeMethod("sniff", (self, a, kw, c) => SniffFn(c, a, kw));
+                d["sniff"] = SlotDescriptor.MakeMethod("sniff", Args.LeadKeywords("sniff", (self, a, kw, c) => SniffFn(c, a, kw), 1, "sample", "delimiters"));
                 d["has_header"] = SlotDescriptor.MakeMethod("has_header", Args.Positional("has_header", 1, 1, (self, a, kw, c) => HasHeaderFn(c, a)));
                 return d;
             }
@@ -117,12 +117,13 @@ namespace Outbridge.PyLite.Modules
             };
         }
 
-        private static readonly Regex[] QuotePatterns =
+        // .*? between the quotes makes a failing search quadratic in the sample, hence the timeout.
+        private static readonly TimedRegex[] QuotePatterns =
         {
-            new Regex("(?<delim>[^\\w\\n\"'])(?<space> ?)(?<quote>[\"']).*?\\k<quote>\\k<delim>", RegexOptions.Singleline | RegexOptions.Multiline),
-            new Regex("(?:^|\\n)(?<quote>[\"']).*?\\k<quote>(?<delim>[^\\w\\n\"'])(?<space> ?)", RegexOptions.Singleline | RegexOptions.Multiline),
-            new Regex("(?<delim>[^\\w\\n\"'])(?<space> ?)(?<quote>[\"']).*?\\k<quote>(?:$|\\n)", RegexOptions.Singleline | RegexOptions.Multiline),
-            new Regex("(?:^|\\n)(?<quote>[\"']).*?\\k<quote>(?:$|\\n)", RegexOptions.Singleline | RegexOptions.Multiline),
+            new TimedRegex("(?<delim>[^\\w\\n\"'])(?<space> ?)(?<quote>[\"']).*?\\k<quote>\\k<delim>", RegexOptions.Singleline | RegexOptions.Multiline),
+            new TimedRegex("(?:^|\\n)(?<quote>[\"']).*?\\k<quote>(?<delim>[^\\w\\n\"'])(?<space> ?)", RegexOptions.Singleline | RegexOptions.Multiline),
+            new TimedRegex("(?<delim>[^\\w\\n\"'])(?<space> ?)(?<quote>[\"']).*?\\k<quote>(?:$|\\n)", RegexOptions.Singleline | RegexOptions.Multiline),
+            new TimedRegex("(?:^|\\n)(?<quote>[\"']).*?\\k<quote>(?:$|\\n)", RegexOptions.Singleline | RegexOptions.Multiline),
         };
 
         // Lib/csv.py _guess_quote_and_delimiter: quoted fields give the quote away, and the character
@@ -144,32 +145,41 @@ namespace Outbridge.PyLite.Modules
             doublequote = false;
             delimiter = '\0';
             skipinitialspace = false;
-            MatchCollection matches = null;
-            foreach (Regex re in QuotePatterns)
-            {
-                matches = re.Matches(data);
-                if (matches.Count > 0)
-                    break;
-            }
-            if (matches == null || matches.Count == 0)
-                return;
             var quotes = new Counter();
             var delims = new Counter();
             int spaces = 0;
-            foreach (Match m in matches)
+            bool any = false;
+            try
             {
-                Group q = m.Groups["quote"];
-                if (q.Success && q.Value.Length > 0)
-                    quotes.Add(q.Value[0]);
-                Group d = m.Groups["delim"];
-                if (!d.Success)
-                    continue;
-                if (d.Value.Length > 0 && (delimiters == null || delimiters.IndexOf(d.Value[0]) >= 0))
-                    delims.Add(d.Value[0]);
-                Group sp = m.Groups["space"];
-                if (sp.Success && sp.Value.Length > 0)
-                    spaces++;
+                // The first pattern with any match decides; Match/NextMatch pulls one at a time (a MatchCollection keeps them all).
+                foreach (TimedRegex re in QuotePatterns)
+                {
+                    for (Match m = re.For(ctx).Match(data); m.Success; m = m.NextMatch())
+                    {
+                        ctx.Budget.Step();
+                        any = true;
+                        Group q = m.Groups["quote"];
+                        if (q.Success && q.Length > 0)
+                            quotes.Add(q.Value[0]);
+                        Group d = m.Groups["delim"];
+                        if (!d.Success)
+                            continue;
+                        if (d.Length > 0 && (delimiters == null || delimiters.IndexOf(d.Value[0]) >= 0))
+                            delims.Add(d.Value[0]);
+                        Group sp = m.Groups["space"];
+                        if (sp.Success && sp.Length > 0)
+                            spaces++;
+                    }
+                    if (any)
+                        break;
+                }
             }
+            catch (RegexMatchTimeoutException)
+            {
+                throw TimedRegex.Abort(ctx);
+            }
+            if (!any)
+                return;
             quotechar = quotes.Max();
             if (delims.Count > 0)
             {
@@ -183,7 +193,14 @@ namespace Outbridge.PyLite.Modules
                 + "[^" + Regex.Escape(delimiter == '\0' ? "" : delimiter.ToString()) + "\\n]*" + Regex.Escape(quotechar.ToString())
                 + "[^" + Regex.Escape(delimiter == '\0' ? "" : delimiter.ToString()) + "\\n]*" + Regex.Escape(quotechar.ToString())
                 + "\\W*((" + Regex.Escape(delimiter == '\0' ? "" : delimiter.ToString()) + ")|$)";
-            doublequote = Regex.IsMatch(data, dq, RegexOptions.Multiline);
+            try
+            {
+                doublequote = Regex.IsMatch(data, dq, RegexOptions.Multiline, TimedRegex.Timeout(ctx));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw TimedRegex.Abort(ctx);
+            }
         }
 
         // Insertion-ordered counts, so max() breaks ties the way a dict-backed max(key=get) does.
@@ -231,12 +248,19 @@ namespace Outbridge.PyLite.Modules
         {
             delimiter = '\0';
             skipinitialspace = false;
+            // line by line, each kept one charged: a split of 'a\n' * 6M built 6M strings, 423 MB charged as 22
             var lines = new List<string>();
-            foreach (string line in data.Split('\n'))
+            for (int i = 0; i <= data.Length; )
             {
+                int nl = data.IndexOf('\n', i);
+                int lineEnd = nl < 0 ? data.Length : nl;
                 ctx.Budget.Step();
-                if (line.Length > 0)
-                    lines.Add(line);
+                if (lineEnd > i)
+                {
+                    ctx.Values.PreCharge(32 + 2L * (lineEnd - i));
+                    lines.Add(data.Substring(i, lineEnd - i));
+                }
+                i = lineEnd + 1;
             }
             if (lines.Count == 0)
                 return;

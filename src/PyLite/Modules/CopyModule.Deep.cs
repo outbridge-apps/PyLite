@@ -30,6 +30,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue DeepCopyFn(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
+            args = StrMethods.WithKw(ctx, args, kw, "deepcopy", "x", "memo");
             Args.Between(ctx, args, "deepcopy", 1, 2);
             if (args.Length == 1 || args[1].Kind == ValueKind.None)
                 return DeepCopy(ctx, args[0]);
@@ -73,11 +74,20 @@ namespace Outbridge.PyLite.Modules
                 case ValueKind.Tuple:
                 case ValueKind.RecordInstance:
                     return false;
+                case ValueKind.Iterator:
+                    return false;
                 case ValueKind.Opaque:
-                    return !(v is DequeValue);
+                    return !(v is DequeValue) && !(v is IScriptCopyable) && !IsLeafCopied(v);
                 default:
                     return true;
             }
+        }
+
+        // An opaque with no children that deepcopy still does not hand back as itself.
+        private static bool IsLeafCopied(ScriptValue v)
+        {
+            IScriptUncopyable u = v as IScriptUncopyable;
+            return v is ContextValue || (u != null && u.PickleName != null);
         }
 
         internal static ScriptValue DeepCopy(EvalContext ctx, ScriptValue root)
@@ -129,6 +139,11 @@ namespace Outbridge.PyLite.Modules
         {
             if (IsAtomic(source) || memo.ContainsKey(source))
                 return;
+            if (source.Kind == ValueKind.Iterator || IsLeafCopied(source))
+            {
+                memo[source] = LeafCopy(ctx, source, true);
+                return;
+            }
 
             if (source.Kind == ValueKind.Tuple)
             {
@@ -153,15 +168,17 @@ namespace Outbridge.PyLite.Modules
                 ctx.Values.PreCharge(24 + 8L * ri.Slots.Length);
                 clone = new RecordInstanceValue(ri.Class, new ScriptValue[ri.Slots.Length]);
             }
+            else if (source is IScriptCopyable)
+                clone = ((IScriptCopyable)source).EmptyClone(ctx);
             else
                 clone = new DequeValue(((DequeValue)source).MaxLenRaw);
 
             memo[source] = clone;
             stack.Push(new WorkItem { Source = source, Phase = Phase.Fill, Clone = clone });
-            PushChildren(source, stack);
+            PushChildren(source, stack, ctx);
         }
 
-        private static void PushChildren(ScriptValue source, Stack<WorkItem> stack)
+        private static void PushChildren(ScriptValue source, Stack<WorkItem> stack, EvalContext ctx)
         {
             if (source.Kind == ValueKind.List)
             {
@@ -172,6 +189,7 @@ namespace Outbridge.PyLite.Modules
             else if (source.Kind == ValueKind.Set)
             {
                 var t = ((SetValue)source).Table;
+                t.ChargeWalk(ctx);
                 for (int p = t.EntriesUsed - 1; p >= 0; p--)
                 {
                     long h;
@@ -183,6 +201,7 @@ namespace Outbridge.PyLite.Modules
             else if (source.Kind == ValueKind.Dict)
             {
                 var t = ((DictValue)source).Table;
+                t.ChargeWalk(ctx);
                 for (int p = t.EntriesUsed - 1; p >= 0; p--)
                 {
                     long h;
@@ -200,6 +219,12 @@ namespace Outbridge.PyLite.Modules
                 for (int i = slots.Length - 1; i >= 0; i--)
                     if (slots[i] != null)
                         PushChild(stack, slots[i]);
+            }
+            else if (source is IScriptCopyable)
+            {
+                IReadOnlyList<ScriptValue> children = ((IScriptCopyable)source).DeepChildren();
+                for (int i = children.Count - 1; i >= 0; i--)
+                    PushChild(stack, children[i]);
             }
             else // deque
             {
@@ -223,7 +248,7 @@ namespace Outbridge.PyLite.Modules
             {
                 var t = ((SetValue)source).Table;
                 SetValue dst = (SetValue)clone;
-                for (int p = 0; p < t.EntriesUsed; p++)
+                for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
                 {
                     long h;
                     ScriptValue k, v;
@@ -235,7 +260,7 @@ namespace Outbridge.PyLite.Modules
             {
                 var t = ((DictValue)source).Table;
                 DictValue dst = (DictValue)clone;
-                for (int p = 0; p < t.EntriesUsed; p++)
+                for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
                 {
                     long h;
                     ScriptValue k, v;
@@ -250,6 +275,10 @@ namespace Outbridge.PyLite.Modules
                 for (int i = 0; i < slots.Length; i++)
                     if (slots[i] != null)
                         dst.InitSlot(i, Resolve(slots[i], memo));
+            }
+            else if (source is IScriptCopyable)
+            {
+                ((IScriptCopyable)source).FillClone(ctx, clone, child => Resolve(child, memo));
             }
             else // deque
             {
@@ -275,7 +304,10 @@ namespace Outbridge.PyLite.Modules
             if (allSame)
                 result = source;   // identity optimization: unchanged tuple stays itself
             else if (source is NamedTupleValue)
+            {
+                ctx.Values.PreCharge(24 + 8L * resolved.Length);   // as ctx.Values.Tuple charges a plain one
                 result = new NamedTupleValue(((NamedTupleValue)source).NtInfo, resolved);
+            }
             else
                 result = ctx.Values.Tuple(resolved);
             memo[source] = result;

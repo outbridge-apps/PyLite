@@ -48,19 +48,19 @@ namespace Outbridge.PyLite.Modules
             // next one.
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["quote"] = BuiltinFunctionValue.Make("quote", (s, a, kw, c) => QuoteFn(c, a, kw, "quote", false)),
-                ["quote_plus"] = BuiltinFunctionValue.Make("quote_plus", (s, a, kw, c) => QuoteFn(c, a, kw, "quote_plus", true)),
-                ["unquote"] = BuiltinFunctionValue.Make("unquote", (s, a, kw, c) => UnquoteFn(c, a, kw, "unquote", false)),
-                ["unquote_plus"] = BuiltinFunctionValue.Make("unquote_plus", (s, a, kw, c) => UnquoteFn(c, a, kw, "unquote_plus", true)),
-                ["urlencode"] = BuiltinFunctionValue.Make("urlencode", UrlEncode),
-                ["parse_qs"] = BuiltinFunctionValue.Make("parse_qs", (s, a, kw, c) => ParseQs(c, a, kw, true)),
-                ["parse_qsl"] = BuiltinFunctionValue.Make("parse_qsl", (s, a, kw, c) => ParseQs(c, a, kw, false)),
-                ["urlsplit"] = BuiltinFunctionValue.Make("urlsplit", (s, a, kw, c) => SplitFn(c, a, kw, false)),
-                ["urlparse"] = BuiltinFunctionValue.Make("urlparse", (s, a, kw, c) => SplitFn(c, a, kw, true)),
+                ["quote"] = BuiltinFunctionValue.Make("quote", Args.LeadKeywords("quote", (s, a, kw, c) => QuoteFn(c, a, kw, "quote", false), 1, "string", "safe", "encoding", "errors")),
+                ["quote_plus"] = BuiltinFunctionValue.Make("quote_plus", Args.LeadKeywords("quote_plus", (s, a, kw, c) => QuoteFn(c, a, kw, "quote_plus", true), 1, "string", "safe", "encoding", "errors")),
+                ["unquote"] = BuiltinFunctionValue.Make("unquote", Args.LeadKeywords("unquote", (s, a, kw, c) => UnquoteFn(c, a, kw, "unquote", false), 1, "string", "encoding", "errors")),
+                ["unquote_plus"] = BuiltinFunctionValue.Make("unquote_plus", Args.LeadKeywords("unquote_plus", (s, a, kw, c) => UnquoteFn(c, a, kw, "unquote_plus", true), 1, "string", "encoding", "errors")),
+                ["urlencode"] = BuiltinFunctionValue.Make("urlencode", Args.LeadKeywords("urlencode", UrlEncode, 1, "query", "doseq", "safe", "encoding", "errors", "quote_via")),
+                ["parse_qs"] = BuiltinFunctionValue.Make("parse_qs", Args.LeadKeywords("parse_qs", (s, a, kw, c) => ParseQs(c, a, kw, true), 1, "qs", "keep_blank_values", "strict_parsing", "encoding", "errors", "max_num_fields", "separator")),
+                ["parse_qsl"] = BuiltinFunctionValue.Make("parse_qsl", Args.LeadKeywords("parse_qsl", (s, a, kw, c) => ParseQs(c, a, kw, false), 1, "qs", "keep_blank_values", "strict_parsing", "encoding", "errors", "max_num_fields", "separator")),
+                ["urlsplit"] = BuiltinFunctionValue.Make("urlsplit", Args.LeadKeywords("urlsplit", (s, a, kw, c) => SplitFn(c, a, kw, false), 1, "url", "scheme", "allow_fragments")),
+                ["urlparse"] = BuiltinFunctionValue.Make("urlparse", Args.LeadKeywords("urlparse", (s, a, kw, c) => SplitFn(c, a, kw, true), 1, "url", "scheme", "allow_fragments")),
                 ["urlunsplit"] = BuiltinFunctionValue.Make("urlunsplit", Args.Positional("urlunsplit", 1, 1, (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunsplit", 5)))),
                 ["urlunparse"] = BuiltinFunctionValue.Make("urlunparse", Args.Positional("urlunparse", 1, 1, (s, a, kw, c) => c.Values.Str(UnsplitFn(c, a, "urlunparse", 6)))),
-                ["urljoin"] = BuiltinFunctionValue.Make("urljoin", UrlJoin),
-                ["urldefrag"] = BuiltinFunctionValue.Make("urldefrag", UrlDefrag),
+                ["urljoin"] = BuiltinFunctionValue.Make("urljoin", Args.LeadKeywords("urljoin", UrlJoin, 2, "base", "url", "allow_fragments")),
+                ["urldefrag"] = BuiltinFunctionValue.Make("urldefrag", Args.BoundKeywords("urldefrag", 1, UrlDefrag, "url")),
                 ["unwrap"] = BuiltinFunctionValue.Make("unwrap", Unwrap),
                 // CPython caches parse results and hands out a way to drop them; nothing is cached here,
                 // so the call is a no-op that exists to keep the surface callable.
@@ -84,11 +84,11 @@ namespace Outbridge.PyLite.Modules
         private static ScriptValue Unwrap(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             Args.Exactly(ctx, a, kw, "unwrap", 1);
-            string url = StrArg(ctx, a[0], "unwrap", "url").Trim();
+            string url = PyUnicode.Strip(StrArg(ctx, a[0], "unwrap", "url"));
             if (url.Length >= 2 && url[0] == '<' && url[url.Length - 1] == '>')
-                url = url.Substring(1, url.Length - 2).Trim();
+                url = PyUnicode.Strip(url.Substring(1, url.Length - 2));
             if (url.StartsWith("URL:", StringComparison.Ordinal))
-                url = url.Substring(4).Trim();
+                url = PyUnicode.Strip(url.Substring(4));
             return ctx.Values.Str(url);
         }
 
@@ -148,7 +148,7 @@ namespace Outbridge.PyLite.Modules
             {
                 ["_fields"] = NamedTupleValue.FieldsTuple(info, ctx),
             };
-            return ctx.Values.Type(info.TypeName, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), info.InstanceType, statics);
+            return ctx.Values.EngineType(info.InstanceType.Name, (s, a, k, c) => NamedTupleValue.Construct(info, a, k, c), info.InstanceType, statics);
         }
 
         private static NamedTupleValue Result(EvalContext ctx, NamedTupleInfo info, params string[] parts)
@@ -377,6 +377,8 @@ namespace Outbridge.PyLite.Modules
                 StrValue s = item as StrValue;
                 if (s == null)
                     throw Raise.TypeError(ctx, fn + "() components must be str, not " + item.PyTypeName);
+                if (parts.Count == arity)   // an endless iterator stops here
+                    throw Raise.ValueError(ctx, fn + "() takes a " + arity + "-item sequence (more given)");
                 parts.Add(s.Value);
             }
             if (parts.Count != arity)
@@ -448,6 +450,7 @@ namespace Outbridge.PyLite.Modules
                 return ctx.Values.Str(Unsplit(ctx, scheme, netloc, path, parameters, query, fragment));
             }
 
+            ctx.Values.PreCharge(32L * (bpath.Length + path.Length));   // a segment string and three list slots per "../": 15M chars made 450 MB
             var baseParts = new List<string>(bpath.Split('/'));
             if (baseParts[baseParts.Count - 1].Length != 0)
                 baseParts.RemoveAt(baseParts.Count - 1);
@@ -517,7 +520,7 @@ namespace Outbridge.PyLite.Modules
         }
 
         // a table, not a scan of safe per byte: safe is script-sized, and CPython caches the same way;
-        // urlencode builds it once for every key and value it quotes (P17)
+        // urlencode builds it once for every key and value it quotes
         private static bool[] SafeTable(string safe, bool plus)
         {
             var ok = new bool[128];
@@ -547,7 +550,22 @@ namespace Outbridge.PyLite.Modules
                 data = BytesCodec.Encode(ctx, s, BytesCodec.Normalize(ctx, ctx.Values.Str(enc)), errors);
             }
             ctx.Budget.ChargeLinear(data.Length);   // the quoting pass; the codec charged its own
-            var sb = new StringBuilder(data.Length + 8);
+            int capacity = data.Length + 8;
+            if (3L * data.Length > ctx.Limits.MaxStrChars)
+            {
+                // the worst case could pass the cap, so the exact length comes first (8M CJK chars became
+                // 72M chars before the cap refused them); the cap only, as the caller's str charges the result
+                ctx.Budget.ChargeLinear(data.Length);
+                long len = data.Length;
+                foreach (byte b in data)
+                {
+                    if (!(b < 128 && ok[b]))
+                        len += 2;
+                }
+                ctx.Values.CheckStrLen(len);
+                capacity = (int)len;
+            }
+            var sb = new StringBuilder(capacity);
             foreach (byte b in data)
             {
                 if (b < 128 && ok[b])
@@ -555,7 +573,6 @@ namespace Outbridge.PyLite.Modules
                 else
                     sb.Append('%').Append(Hex.Digit(b >> 4, upper: true)).Append(Hex.Digit(b & 0xF, upper: true));
             }
-            ctx.Values.EnsureStrLen(sb.Length);
             return sb.ToString();
         }
 
@@ -645,7 +662,7 @@ namespace Outbridge.PyLite.Modules
             if (d != null)
             {
                 var t = d.Table;
-                for (int p = 0; p < t.EntriesUsed; p++)
+                for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
                 {
                     long h;
                     ScriptValue k, val;
@@ -661,6 +678,11 @@ namespace Outbridge.PyLite.Modules
                 ScriptValue item;
                 while (it.MoveNext(ctx, out item))
                 {
+                    if (pairs.Count == pairs.Capacity)   // urlencode(repeat(('a', 'b'))) grew this without a charge
+                    {
+                        ctx.Values.EnsureCollectionSize(pairs.Count + 1L);
+                        ctx.Values.PreCharge(16L * System.Math.Max(4, pairs.Count));
+                    }
                     TupleValue pair = item as TupleValue;
                     ListValue lpair = item as ListValue;
                     if (pair != null && pair.Items.Length == 2)
@@ -680,18 +702,18 @@ namespace Outbridge.PyLite.Modules
                 ScriptValue val = kv.Value;
                 if (!doseq || val is StrValue || val is BytesValue)
                 {
-                    AppendPair(sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
+                    AppendPair(ctx, sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
                     continue;
                 }
                 IScriptIterator it = TryIter(ctx, val);
                 if (it == null)
                 {
-                    AppendPair(sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
+                    AppendPair(ctx, sb, k, QuoteValue(ctx, val, ok, encArg, errArg, plus));
                     continue;
                 }
                 ScriptValue elem;
                 while (it.MoveNext(ctx, out elem))
-                    AppendPair(sb, k, QuoteValue(ctx, elem, ok, encArg, errArg, plus));
+                    AppendPair(ctx, sb, k, QuoteValue(ctx, elem, ok, encArg, errArg, plus));
             }
             ctx.Values.EnsureStrLen(sb.Length);
             return ctx.Values.Str(sb.ToString());
@@ -702,11 +724,12 @@ namespace Outbridge.PyLite.Modules
             return PyOps.TryGetIterator(v, ctx);
         }
 
-        private static void AppendPair(StringBuilder sb, string k, string v)
+        private static void AppendPair(EvalContext ctx, StringBuilder sb, string k, string v)
         {
             if (sb.Length > 0)
                 sb.Append('&');
             sb.Append(k).Append('=').Append(v);
+            ctx.Values.CheckStrLen(sb.Length);   // doseq repeats the key per element: capped as it grows
         }
 
         private static string QuoteValue(EvalContext ctx, ScriptValue v, bool[] ok, ScriptValue enc, ScriptValue err, bool plus)
@@ -740,64 +763,86 @@ namespace Outbridge.PyLite.Modules
             bool strict = strictV != null && strictV.IsTruthy(ctx);
             string enc = encV == null || encV.Kind == ValueKind.None ? "utf-8" : StrArg(ctx, encV, fn, "encoding");
             string errors = errV == null || errV.Kind == ValueKind.None ? "replace" : StrArg(ctx, errV, fn, "errors");
-            string sep = sepV == null || sepV.Kind == ValueKind.None ? "&" : StrArg(ctx, sepV, fn, "separator");
+            if (sepV != null && sepV.Kind != ValueKind.Str && !(sepV is BytesValue))
+                throw Raise.ValueError(ctx, "Separator must be of type string or bytes.");   // None too
+            string sep = sepV == null ? "&" : StrArg(ctx, sepV, fn, "separator");
             if (sep.Length == 0)
                 throw Raise.ValueError(ctx, "Separator must be of type string or bytes.");
             bool hasMax = maxV != null && maxV.Kind != ValueKind.None;   // a negative limit is exceeded by any field
             int maxFields = hasMax ? Coerce.ToInt32(ctx, maxV, "max_num_fields") : 0;
 
-            string[] fields = qs.Split(new[] { sep }, StringSplitOptions.None);
-            if (hasMax && fields.Length > maxFields && qs.Length > 0)
+            if (hasMax && qs.Length > 0 && CountFields(ctx, qs, sep) > maxFields)
                 throw Raise.ValueError(ctx, "Max number of fields exceeded");
-            var pairs = new List<KeyValuePair<string, string>>();
-            foreach (string field in fields)
+            // Field by field through the bounded search into the result, each pair charged as it is made:
+            // the list of all fields (parse_qs('a&' * 8M): 8M strings) and of the pairs were never charged.
+            ListValue list = asDict ? null : ctx.Values.List(4);
+            DictValue dict = asDict ? ctx.Values.Dict(4) : null;
+            int start = 0;
+            while (true)
             {
-                if (field.Length == 0 && !strict)
-                    continue;
-                int eq = field.IndexOf('=');
-                string name, value;
-                if (eq >= 0)
-                {
-                    name = field.Substring(0, eq);
-                    value = field.Substring(eq + 1);
-                }
-                else
-                {
-                    if (strict)
-                        throw Raise.ValueError(ctx, "bad query field: " + ctx.Values.Str(field).Repr(ctx));
-                    if (!keepBlank)
-                        continue;
-                    name = field;
-                    value = "";
-                }
-                if (value.Length == 0 && !keepBlank)
-                    continue;
-                name = Unquote(ctx, name.Replace('+', ' '), enc, errors);
-                value = Unquote(ctx, value.Replace('+', ' '), enc, errors);
-                pairs.Add(new KeyValuePair<string, string>(name, value));
+                int at = PySearch.IndexOf(ctx, qs, sep, start, qs.Length - start);
+                ctx.Budget.Step();
+                AddQsField(ctx, qs.Substring(start, (at < 0 ? qs.Length : at) - start), keepBlank, strict, enc, errors, list, dict);
+                if (at < 0)
+                    break;
+                start = at + sep.Length;
             }
-            if (!asDict)
+            return asDict ? (ScriptValue)dict : list;
+        }
+
+        // 1 + qs.count(sep): CPython counts the fields before it parses any.
+        private static long CountFields(EvalContext ctx, string qs, string sep)
+        {
+            long n = 1;
+            int start = 0, at;
+            while ((at = PySearch.IndexOf(ctx, qs, sep, start, qs.Length - start)) >= 0)
             {
-                ListValue list = ctx.Values.List(pairs.Count);
-                foreach (KeyValuePair<string, string> p in pairs)
-                    list.Add(ctx.Values.Tuple(new ScriptValue[] { ctx.Values.Str(p.Key), ctx.Values.Str(p.Value) }), ctx);
-                return list;
+                ctx.Budget.Step();
+                n++;
+                start = at + sep.Length;
             }
-            DictValue result = ctx.Values.Dict(pairs.Count);
-            foreach (KeyValuePair<string, string> p in pairs)
+            return n;
+        }
+
+        private static void AddQsField(EvalContext ctx, string field, bool keepBlank, bool strict, string enc, string errors,
+            ListValue list, DictValue dict)
+        {
+            if (field.Length == 0 && !strict)
+                return;
+            int eq = field.IndexOf('=');
+            string name, value;
+            if (eq >= 0)
             {
-                StrValue key = ctx.Values.Str(p.Key);
-                ScriptValue existing;
-                if (result.TryGet(key, ctx, out existing))
-                    ((ListValue)existing).Add(ctx.Values.Str(p.Value), ctx);
-                else
-                {
-                    ListValue l = ctx.Values.List(1);
-                    l.Add(ctx.Values.Str(p.Value), ctx);
-                    result.SetItem(key, l, ctx);
-                }
+                name = field.Substring(0, eq);
+                value = field.Substring(eq + 1);
             }
-            return result;
+            else
+            {
+                if (strict)
+                    throw Raise.ValueError(ctx, "bad query field: " + ctx.Values.Str(field).Repr(ctx));
+                if (!keepBlank)
+                    return;
+                name = field;
+                value = "";
+            }
+            if (value.Length == 0 && !keepBlank)
+                return;
+            StrValue key = ctx.Values.Str(Unquote(ctx, name.Replace('+', ' '), enc, errors));
+            StrValue val = ctx.Values.Str(Unquote(ctx, value.Replace('+', ' '), enc, errors));
+            if (list != null)
+            {
+                list.Add(ctx.Values.Tuple(new ScriptValue[] { key, val }), ctx);
+                return;
+            }
+            ScriptValue existing;
+            if (dict.TryGet(key, ctx, out existing))
+                ((ListValue)existing).Add(val, ctx);
+            else
+            {
+                ListValue l = ctx.Values.List(1);
+                l.Add(val, ctx);
+                dict.SetItem(key, l, ctx);
+            }
         }
     }
 }

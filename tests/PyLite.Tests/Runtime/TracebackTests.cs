@@ -273,7 +273,7 @@ namespace Outbridge.PyLite.Tests.Runtime
                 "Traceback (most recent call last):\n" +
                 "  File \"<script>\", line 6, in <module>\n" +
                 "  File \"<script>\", line 3, in f\n" +
-                "ZeroDivisionError: integer division or modulo by zero", err.ScriptTraceback);
+                "ZeroDivisionError: division by zero", err.ScriptTraceback);
         }
 
         // `raise e` re-arms the frame, so the re-raise site and the original raise site both show.
@@ -286,7 +286,7 @@ namespace Outbridge.PyLite.Tests.Runtime
                 "  File \"<script>\", line 6, in <module>\n" +
                 "  File \"<script>\", line 5, in f\n" +
                 "  File \"<script>\", line 3, in f\n" +
-                "ZeroDivisionError: integer division or modulo by zero", err.ScriptTraceback);
+                "ZeroDivisionError: division by zero", err.ScriptTraceback);
         }
     }
 }

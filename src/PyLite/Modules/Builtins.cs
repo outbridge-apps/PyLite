@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Values;
 
 namespace Outbridge.PyLite.Modules
@@ -9,9 +10,9 @@ namespace Outbridge.PyLite.Modules
     // registers its names into the default template via a Register* method called from RegisterAll.
     internal static partial class Builtins
     {
-        // Shared type-object cache so `type(x)`, the `int`/`str`/... names and constructors all resolve to
-        // one TypeValue per type name (stable identity for `type(a) == type(b)`).
-        private static readonly ConcurrentDictionary<string, TypeValue> TypeCache =
+        // The builtin type objects by name, so `type(1) is int`. Written only while the builtins template is
+        // built: a name a run could add would outlive the run and change what type() answers in every other.
+        private static readonly ConcurrentDictionary<string, TypeValue> RegisteredTypes =
             new ConcurrentDictionary<string, TypeValue>(StringComparer.Ordinal);
 
         internal static void RegisterAll(Dictionary<string, ScriptValue> d)
@@ -59,6 +60,38 @@ namespace Outbridge.PyLite.Modules
             };
         }
 
+        // The builtins registered with a quiet twin: only a call by one of these names looks for one.
+        internal static bool HasQuietTwin(string name)
+        {
+            return name == "int" || name == "float" || name == "next";
+        }
+
+        // A builtin with a quiet twin: the plain call throws the failure the twin hands back.
+        internal static void AddQuiet(Dictionary<string, ScriptValue> d, string name, QuietBuiltin quiet)
+        {
+            BuiltinFunctionValue fn = BuiltinFunctionValue.Make(name, Throwing(quiet));
+            fn.Quiet = quiet;
+            d[name] = fn;
+        }
+
+        internal static void AddQuietType(Dictionary<string, ScriptValue> d, string name, QuietBuiltin quiet,
+            IReadOnlyDictionary<string, ScriptValue> staticSlots, ScriptTypeInfo describes)
+        {
+            AddType(d, name, Throwing(quiet), staticSlots, describes).Quiet = quiet;
+        }
+
+        private static BuiltinDelegate Throwing(QuietBuiltin quiet)
+        {
+            return (self, args, kw, c) =>
+            {
+                ScriptException error;
+                ScriptValue v = quiet(args, kw, c, out error);
+                if (error != null)
+                    throw error;
+                return v;
+            };
+        }
+
         // Register a type name (int/str/...) as a callable TypeValue and cache it for type().
         internal static TypeValue AddType(Dictionary<string, ScriptValue> d, string name, BuiltinDelegate ctor)
         {
@@ -77,23 +110,24 @@ namespace Outbridge.PyLite.Modules
         {
             TypeValue tv = TypeValue.Make(name, ctor, describes, staticSlots, null);
             d[name] = tv;
-            TypeCache[name] = tv;
+            RegisteredTypes[name] = tv;
             return tv;
         }
 
-        // The TypeValue for a runtime type name; synthesizes (and caches) an opaque one for names that
-        // have no registered constructor (their instances still answer type()).
-        internal static TypeValue TypeObjectFor(string name)
+        // type(v) for a value with no class object of its own: the class this run's module made for it, the
+        // builtin registered under its type's name, else the type's own object. A type a script named never
+        // looks a name up.
+        internal static TypeValue TypeObjectFor(ScriptTypeInfo ti, Runtime.EvalContext ctx)
         {
             TypeValue tv;
-            if (TypeCache.TryGetValue(name, out tv))
-                return tv;
-            if (TypeCache.Count >= MaxCachedTypeNames)
-                return TypeValue.Make(name, null, null, null, null);   // the cache outlives runs: never let it grow without end
-            return TypeCache.GetOrAdd(name, nm => TypeValue.Make(nm, null, null, null, null));
+            if (!ti.IsNamedByScript)
+            {
+                tv = ctx.Values.RunTypeFor(ti);
+                if (tv != null || RegisteredTypes.TryGetValue(ti.Name, out tv))
+                    return tv;
+            }
+            return ti.TypeObject;
         }
-
-        private const int MaxCachedTypeNames = 1024;
 
         // partial Register* declared in the sibling files
         static partial void RegisterConvert(Dictionary<string, ScriptValue> d);

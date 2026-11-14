@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Outbridge.PyLite.Hosting;
+using Outbridge.PyLite.Tests.Infra;
 using Xunit;
 
 namespace Outbridge.PyLite.Tests.Evaluator
@@ -14,7 +15,7 @@ namespace Outbridge.PyLite.Tests.Evaluator
     {
         public static IEnumerable<object[]> Scripts()
         {
-            string root = RepoRoot();
+            string root = RepoPaths.Root();
             var files = new List<string>();
             files.AddRange(Directory.GetFiles(Path.Combine(root, "conformance", "cases"), "*.py", SearchOption.AllDirectories));
             files.AddRange(Directory.GetFiles(Path.Combine(root, "tools", "diff-corpus"), "*.py"));
@@ -26,7 +27,7 @@ namespace Outbridge.PyLite.Tests.Evaluator
         [MemberData(nameof(Scripts))]
         public void TreeWalkAloneGivesTheSameRun(string script)
         {
-            string source = File.ReadAllText(Path.Combine(RepoRoot(), script));
+            string source = File.ReadAllText(Path.Combine(RepoPaths.Root(), script));
             if (source.Split('\n').TakeWhile(l => l.TrimStart().StartsWith("#")).Any(l => l.TrimStart().StartsWith("# skip:")))
                 return;
 
@@ -61,15 +62,6 @@ namespace Outbridge.PyLite.Tests.Evaluator
         private static string Describe(RunResult r)
         {
             return r.Succeeded ? "ok" : (r.Error.PythonType ?? r.Error.Kind.ToString()) + " at " + r.Error.Line + ": " + r.Error.Message;
-        }
-
-        private static string RepoRoot()
-        {
-            string dir = AppDomain.CurrentDomain.BaseDirectory;
-            while (dir != null && !Directory.Exists(Path.Combine(dir, "conformance", "cases")))
-                dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
-            Assert.NotNull(dir);
-            return dir.TrimEnd(Path.DirectorySeparatorChar);
         }
     }
 }

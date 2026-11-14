@@ -18,14 +18,22 @@ namespace Outbridge.PyLite.Syntax
         // Number of str/float/bytes literals; sizes the per-run literal cache (LiteralNode.CacheSlot).
         internal int LiteralCount { get; }
 
+        // The file a traceback names for this program's frames: null for a script ("<script>"), "helpers.py" or
+        // "email/utils.py" for a module the engine or the host loads, so its own line numbers are not taken for the script's.
+        internal string ModuleFile;
+
+        // Number of attribute sites; sizes the per-run record cache (AttributeNode.SiteSlot).
+        internal int SiteCount { get; }
+
         internal ResolvedProgram(ModuleNode module, FunctionInfo moduleInfo, int builtinSlotCount, int globalSlotCount,
-            int literalCount)
+            int literalCount, int siteCount)
         {
             Module = module;
             ModuleInfo = moduleInfo;
             BuiltinSlotCount = builtinSlotCount;
             GlobalSlotCount = globalSlotCount;
             LiteralCount = literalCount;
+            SiteCount = siteCount;
         }
 
         public FunctionInfo GetFunctionInfo(Node scopeNode)

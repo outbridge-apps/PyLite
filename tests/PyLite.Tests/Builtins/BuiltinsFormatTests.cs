@@ -250,7 +250,7 @@ namespace Outbridge.PyLite.Tests.Builtins
         [InlineData("'%s' % (1, 2)", "not all arguments converted during string formatting")]
         [InlineData("'%s %s' % (1,)", "not enough arguments for format string")]
         [InlineData("'%z' % 1", "unsupported format character 'z' (0x7a) at index 1")]
-        [InlineData("'%d' % 'x'", "%d format: a number is required, not str")]
+        [InlineData("'%d' % 'x'", "%d format: a real number is required, not str")]
         [InlineData("'%x' % 1.5", "%x format: an integer is required, not float")]
         [InlineData("'%*d' % ('a', 1)", "* wants int")]
         [InlineData("'abc%' % ()", "incomplete format")]

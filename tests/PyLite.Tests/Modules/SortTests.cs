@@ -228,7 +228,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [Fact]
         public void ALargeSortStopsOnMemoryNotOnAHostException()
         {
-            var lim = ResourceLimits.Default.With(maxAllocBytes: 48 * 1024 * 1024);
+            var lim = TestEngines.Unhurried.With(maxAllocBytes: 48 * 1024 * 1024);
             EngineAbort a = Assert.Throws<EngineAbort>(() => Ev.Run("x = [0] * 2_000_000\nfor j in range(3):\n    y = sorted(x)\n", lim));
             Assert.Equal(EngineAbortKind.Memory, a.Kind);
         }

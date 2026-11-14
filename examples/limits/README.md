@@ -38,5 +38,5 @@ if (!r.Succeeded && r.Error.Kind == ScriptErrorKind.BudgetExceeded)
 The limits of a `RunRequest` can only lower the engine's: each one is clamped to
 `EngineOptions.DefaultLimits` (`ResourceLimits.Default` unless the host sets it), which is itself clamped
 to the engine's hard caps. To allow more than the defaults, raise `EngineOptions.DefaultLimits` when
-creating the engine. [`SECURITY.md`](../../SECURITY.md) lists the hard caps and what each limit
+creating the engine. `SECURITY.md` in the public repository lists the hard caps and what each limit
 guarantees.

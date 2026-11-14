@@ -28,23 +28,40 @@ namespace Outbridge.PyLite.Modules.Support
             StrValue s = encArg as StrValue;
             if (s == null)
                 throw Raise.TypeError(ctx, "encoding must be a string");
-            string e = s.Value.ToLowerInvariant().Replace('_', '-');
+            string known = Canonical(s.Value.ToLowerInvariant().Replace('_', '-'));
+            if (known == null)
+                throw Raise.Make(ctx, PyExceptionTypes.LookupError, "unknown encoding: " + s.Value);
+            return known;
+        }
+
+        // lower: the name lower-cased with `_` as `-`
+        internal static bool IsKnown(string lower) { return Canonical(lower) != null; }
+
+        // e: lower-cased, `_` as `-`. The names are CPython's encodings.aliases for the codecs the dialect has.
+        private static string Canonical(string e)
+        {
             switch (e)
             {
-                case "utf-8": case "utf8": case "u8": return "utf-8";
+                case "utf-8": case "utf8": case "u8": case "utf": case "cp65001": case "utf8-ucs2": case "utf8-ucs4": return "utf-8";
                 case "utf-8-sig": case "utf8-sig": return "utf-8-sig";
-                case "ascii": case "us-ascii": return "ascii";
-                case "latin-1": case "latin1": case "iso-8859-1": case "l1": return "latin-1";
+                case "ascii": case "us-ascii": case "us": case "646": case "ansi-x3.4-1968": case "ansi-x3.4-1986":
+                case "ansi-x3-4-1968": case "cp367": case "ibm367": case "csascii": case "iso646-us": case "iso-646.irv-1991":
+                case "iso-ir-6":
+                    return "ascii";
+                case "latin-1": case "latin1": case "iso-8859-1": case "l1": case "latin": case "8859": case "cp819": case "ibm819":
+                case "csisolatin1": case "iso8859": case "iso8859-1": case "iso-8859-1-1987": case "iso-ir-100":
+                    return "latin-1";
                 case "cp1251": case "windows-1251": return "cp1251";
                 case "cp1252": case "windows-1252": return "cp1252";
                 // the three other Cyrillic pages an integration meets: DOS exports, old mail, ISO feeds
-                case "cp866": case "866": case "ibm866": return "cp866";
+                case "cp866": case "866": case "ibm866": case "csibm866": return "cp866";
                 case "koi8-r": case "koi8r": case "cskoi8r": return "koi8-r";
-                case "iso-8859-5": case "iso8859-5": case "cyrillic": case "csisolatincyrillic": return "iso-8859-5";
+                case "iso-8859-5": case "iso8859-5": case "cyrillic": case "csisolatincyrillic": case "iso-8859-5-1988": case "iso-ir-144":
+                    return "iso-8859-5";
                 case "utf-16": case "utf16": case "u16": return "utf-16";
-                case "utf-16-le": case "utf-16le": case "utf16-le": return "utf-16-le";
-                case "utf-16-be": case "utf-16be": case "utf16-be": return "utf-16-be";
-                default: throw Raise.Make(ctx, PyExceptionTypes.LookupError, "unknown encoding: " + s.Value);
+                case "utf-16-le": case "utf-16le": case "utf16-le": case "unicodelittleunmarked": return "utf-16-le";
+                case "utf-16-be": case "utf-16be": case "utf16-be": case "unicodebigunmarked": return "utf-16-be";
+                default: return null;
             }
         }
 
@@ -56,6 +73,15 @@ namespace Outbridge.PyLite.Modules.Support
         internal static byte[] Encode(EvalContext ctx, string s, string enc, string errors)
         {
             ctx.Budget.ChargeLinear(s.Length);   // every codec is one pass over the text
+            // The wide encodings' size first (strict only: a handler may drop or add bytes): 15M chars were
+            // encoded to 30 MB before the bytes cap refused them. Nothing is counted while 3 bytes a char fit.
+            if (errors == "strict" && 3L * s.Length + 3 > ctx.Limits.MaxStrChars)
+            {
+                if (enc.StartsWith("utf-16", System.StringComparison.Ordinal))
+                    ctx.Values.CheckStrLen(2L * s.Length + (enc == "utf-16" ? 2 : 0));
+                else if (enc == "utf-8" || enc == "utf-8-sig")
+                    ctx.Values.CheckStrLen(Encoding.UTF8.GetByteCount(s) + (enc == "utf-8-sig" ? 3L : 0));
+            }
             switch (enc)
             {
                 case "ascii":
@@ -119,7 +145,21 @@ namespace Outbridge.PyLite.Modules.Support
 
         // One unencodable run s[i..end) resolved per the handler: either replacement TEXT, which the
         // caller re-encodes in the target codec exactly as CPython does, or raw BYTES (surrogateescape).
+        // A step per run, and the replacement's memory charged: namereplace writes ~47 bytes per char, so
+        // the output, not the input, is what grows.
         private static void EncodeFallback(EvalContext ctx, string enc, string s, int i, int end,
+            string reason, string errors, out string text, out byte[] raw)
+        {
+            // strict only scanned the run (up to the whole string): linear; a handler builds output per unit
+            if (errors == "strict")
+                ctx.Budget.ChargeLinear(end - i);
+            else
+                ctx.Budget.Step(end - i);
+            EncodeFallbackCore(ctx, enc, s, i, end, reason, errors, out text, out raw);
+            ctx.Budget.ChargeAllocation(text != null ? 2L * text.Length : raw != null ? raw.Length : 0);
+        }
+
+        private static void EncodeFallbackCore(EvalContext ctx, string enc, string s, int i, int end,
             string reason, string errors, out string text, out byte[] raw)
         {
             text = null;
@@ -132,7 +172,7 @@ namespace Outbridge.PyLite.Modules.Support
                     text = "";
                     return;
                 case "replace":
-                    text = "?";
+                    text = new string('?', CodePoints(s, i, end));
                     return;
                 case "backslashreplace":
                     text = Backslashed(s, i, end);
@@ -153,6 +193,15 @@ namespace Outbridge.PyLite.Modules.Support
 
         // The replacement text for one undecodable run data[i..end).
         private static string DecodeFallback(EvalContext ctx, string enc, byte[] data, int i, int end,
+            string reason, string errors)
+        {
+            ctx.Budget.Step();
+            string text = DecodeFallbackCore(ctx, enc, data, i, end, reason, errors);
+            ctx.Budget.ChargeAllocation(text != null ? 2L * text.Length : 0);
+            return text;
+        }
+
+        private static string DecodeFallbackCore(EvalContext ctx, string enc, byte[] data, int i, int end,
             string reason, string errors)
         {
             switch (errors)
@@ -187,6 +236,31 @@ namespace Outbridge.PyLite.Modules.Support
             if (i + 1 < s.Length && char.IsHighSurrogate(s[i]) && char.IsLowSurrogate(s[i + 1]))
                 return i + 2;
             return i + 1;
+        }
+
+        // The handlers get the run the encoder cannot take, as CPython's do; strict reports all of it, and the others
+        // take it in pieces, so that what they build is charged as it grows and a long run cannot pass the deadline.
+        private const int FallbackPiece = 4096;
+
+        private static int RunEnd(string s, int i, string errors, System.Func<char, bool> fails)
+        {
+            int limit = errors == "strict" ? s.Length : System.Math.Min(s.Length, i + FallbackPiece);
+            int end = i + 1;
+            while (end < limit && fails(s[end]))
+                end++;
+            if (end < s.Length && char.IsLowSurrogate(s[end]) && char.IsHighSurrogate(s[end - 1]))
+                end = end - 1 > i ? end - 1 : end + 1;   // a pair stays whole
+            return end;
+        }
+
+        private static int SurrogateRunEnd(string s, int i, string errors)
+        {
+            int limit = errors == "strict" ? s.Length : System.Math.Min(s.Length, i + FallbackPiece);
+            int end = i + 1;
+            while (end < limit && char.IsSurrogate(s[end])
+                && !(char.IsHighSurrogate(s[end]) && end + 1 < s.Length && char.IsLowSurrogate(s[end + 1])))
+                end++;
+            return end;
         }
 
         private static string Backslashed(string s, int i, int end)
@@ -307,12 +381,13 @@ namespace Outbridge.PyLite.Modules.Support
                 {
                     string text;
                     byte[] raw;
-                    EncodeFallback(ctx, "utf-8", s, i, i + 1, "surrogates not allowed", errors, out text, out raw);
+                    int end = SurrogateRunEnd(s, i, errors);
+                    EncodeFallback(ctx, "utf-8", s, i, end, "surrogates not allowed", errors, out text, out raw);
                     if (raw != null)
                         buf.AddRange(raw);
                     else
                         AppendAscii(buf, text);
-                    i++;
+                    i = end;
                     continue;
                 }
                 AppendUtf8(buf, c);
@@ -457,7 +532,7 @@ namespace Outbridge.PyLite.Modules.Support
                     i++;
                     continue;
                 }
-                int end = FailEnd(s, i);
+                int end = RunEnd(s, i, errors, ch => ch > max);
                 string text;
                 byte[] raw;
                 EncodeFallback(ctx, enc, s, i, end, "ordinal not in range(" + (max + 1) + ")", errors, out text, out raw);
@@ -551,10 +626,10 @@ namespace Outbridge.PyLite.Modules.Support
                     i++;
                     continue;
                 }
-                int end = FailEnd(s, i);
+                int end = RunEnd(s, i, errors, ch => !table.ContainsKey(ch));
                 string text;
                 byte[] raw;
-                EncodeFallback(ctx, enc, s, i, end, "character maps to <undefined>", errors, out text, out raw);
+                EncodeFallback(ctx, "charmap", s, i, end, "character maps to <undefined>", errors, out text, out raw);
                 if (raw != null)
                     buf.AddRange(raw);
                 else
@@ -573,7 +648,7 @@ namespace Outbridge.PyLite.Modules.Support
                 char ch = table[data[i]];
                 if (ch == '￿')
                 {
-                    sb.Append(DecodeFallback(ctx, enc, data, i, i + 1, "character maps to <undefined>", errors));
+                    sb.Append(DecodeFallback(ctx, "charmap", data, i, i + 1, "character maps to <undefined>", errors));
                     continue;
                 }
                 sb.Append(ch);
@@ -682,9 +757,17 @@ namespace Outbridge.PyLite.Modules.Support
                     i += 4;
                     continue;
                 }
+                if (char.IsHighSurrogate(c) && i + 3 >= data.Length)
+                {
+                    // a high surrogate with no whole unit after it: CPython reports the rest of the input
+                    sb.Append(DecodeFallback(ctx, enc, data, i, data.Length, "unexpected end of data", errors));
+                    i = data.Length;
+                    continue;
+                }
                 if (char.IsSurrogate(c))
                 {
-                    sb.Append(DecodeFallback(ctx, enc, data, i, i + 2, "illegal encoding", errors));
+                    string why = char.IsHighSurrogate(c) ? "illegal UTF-16 surrogate" : "illegal encoding";
+                    sb.Append(DecodeFallback(ctx, enc, data, i, i + 2, why, errors));
                     i += 2;
                     continue;
                 }
@@ -725,18 +808,33 @@ namespace Outbridge.PyLite.Modules.Support
 
         private static ScriptException DecodeError(EvalContext ctx, string enc, byte[] data, int start, int end, string reason)
         {
+            // e.object shares the decoded bytes (bytes never change): only the wrapper is charged, as for encode
+            ctx.Values.PreCharge(24);
             ScriptValue[] args =
             {
-                ctx.Values.Str(enc), ctx.Values.Bytes(data), ctx.Values.Int(start), ctx.Values.Int(end), ctx.Values.Str(reason),
+                ctx.Values.Str(enc), data.Length == 0 ? ctx.Values.Bytes(data) : new BytesValue(data), ctx.Values.Int(start),
+                ctx.Values.Int(end), ctx.Values.Str(reason),
             };
             return Raise.Make(ctx, PyExceptionTypes.UnicodeDecodeError, args);
         }
 
+        private static int CodePoints(string s, int i, int end)
+        {
+            int n = 0;
+            for (; i < end; i += FailEnd(s, i) - i)
+                n++;
+            return n;
+        }
+
         private static ScriptException EncodeError(EvalContext ctx, string enc, string s, int start, int end, string reason)
         {
+            // e.object wraps the encoded string itself, not a copy: only the wrapper is charged, so a loop of caught
+            // errors over a 4M-char string no longer charged 8 MB each
+            ctx.Values.PreCharge(24);
             ScriptValue[] args =
             {
-                ctx.Values.Str(enc), ctx.Values.Str(s), ctx.Values.Int(start), ctx.Values.Int(end), ctx.Values.Str(reason),
+                // UTF-16 positions, as the dialect's len and slices count them: e.object[e.start:e.end] is the run
+                ctx.Values.Str(enc), ctx.Values.StrPrecharged(s), ctx.Values.Int(start), ctx.Values.Int(end), ctx.Values.Str(reason),
             };
             return Raise.Make(ctx, PyExceptionTypes.UnicodeEncodeError, args);
         }

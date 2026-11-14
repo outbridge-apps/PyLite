@@ -18,7 +18,7 @@ namespace Outbridge.PyLite.Syntax
             var lexer = new Lexer(source, limits);
             ModuleNode module = Parser.ParseModule(lexer, limits);
             ResolvedProgram resolved = Resolver.Resolve(module, limits);
-            return new CompiledScript(resolved, scriptName, DialectConstants.Version);
+            return new CompiledScript(resolved, scriptName, DialectConstants.Version, lexer.TokenCount);
         }
     }
 }

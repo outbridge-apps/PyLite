@@ -2,7 +2,7 @@ namespace Outbridge.PyLite.Syntax
 {
     internal sealed partial class Lexer
     {
-        private enum FStringMode { Text, Expr, Spec, ExprNested }
+        private enum FStringMode { Text, Expr, Spec }
 
         private struct FStringFrame
         {
@@ -11,6 +11,7 @@ namespace Outbridge.PyLite.Syntax
             public bool Raw;
             public FStringMode Mode;
             public int BraceDepth;
+            public int FieldDepth;   // 0: a field in the text; 1-2: a field in a format spec (CPython allows three levels)
             public int ExprTokenCount;
             public int StartLine, StartCol;
             public int ContentStart;
@@ -29,7 +30,7 @@ namespace Outbridge.PyLite.Syntax
                 if (_fdepth == 0)
                     return false;
                 var m = _fstack[_fdepth - 1].Mode;
-                return m == FStringMode.Expr || m == FStringMode.ExprNested;
+                return m == FStringMode.Expr;
             }
         }
 
@@ -66,7 +67,11 @@ namespace Outbridge.PyLite.Syntax
             while (true)
             {
                 char c = Cur;
-                RequireLiteralChar(c, triple, sl, sc);
+                if (spec && ClosingRun(c, quote, triple) > 0)
+                    throw PySyntaxErrorException.Syntax("f-string: expecting '}', or format specs", _line, CurCol);   // the spec's field is open
+                if (spec && (c == '\0' || (!triple && (c == '\n' || c == '\r'))))
+                    throw PySyntaxErrorException.Syntax("f-string: expecting '}'", _line, CurCol);
+                RequireLiteralChar(c, triple, sl, sc, "f-string");
 
                 int close = spec ? 0 : ClosingRun(c, quote, triple);
                 if (close > 0)
@@ -90,7 +95,9 @@ namespace Outbridge.PyLite.Syntax
 
                     if (_sb.Length > 0)
                         return Emit(TokenKind.FStringMiddle, _sb.ToString(), null, chunkLine, chunkCol);
-                    return OpenField(ti, spec ? FStringMode.ExprNested : FStringMode.Expr);
+                    if (spec && _fstack[ti].FieldDepth == 2)
+                        throw PySyntaxErrorException.Syntax("f-string: expressions nested too deeply", _line, CurCol - 1);
+                    return OpenField(ti, spec);
                 }
 
                 if (c == '}')
@@ -110,7 +117,7 @@ namespace Outbridge.PyLite.Syntax
                         return Emit(TokenKind.FStringMiddle, _sb.ToString(), null, chunkLine, chunkCol);
                     int bl = _line, bc = CurCol;
                     _pos++;
-                    _fstack[ti].Mode = FStringMode.Text;
+                    CloseField(ti);
                     return Emit(TokenKind.RightBrace, null, null, bl, bc);
                 }
 
@@ -134,16 +141,31 @@ namespace Outbridge.PyLite.Syntax
             }
         }
 
-        private Token OpenField(int ti, FStringMode mode)
+        private Token OpenField(int ti, bool inSpec)
         {
             int bl = _line, bc = CurCol;
             _pos++;
-            _fstack[ti].Mode = mode;
+            _fstack[ti].Mode = FStringMode.Expr;
+            _fstack[ti].FieldDepth = inSpec ? _fstack[ti].FieldDepth + 1 : 0;
             _fstack[ti].BraceDepth = 0;
             _fstack[ti].FieldExprStart = _pos;
+            OpenBracket('{', bl, bc);
             Token tok = Emit(TokenKind.LeftBrace, null, null, bl, bc);
             _fstack[ti].ExprTokenCount = 0;
             return tok;
+        }
+
+        // a field ends: back to the format spec it sits in, or to the text
+        private void CloseField(int ti)
+        {
+            if (_fstack[ti].FieldDepth > 0)
+            {
+                _fstack[ti].FieldDepth--;
+                _fstack[ti].Mode = FStringMode.Spec;
+            }
+            else
+                _fstack[ti].Mode = FStringMode.Text;
+            _parenDepth--;   // the field's '{'
         }
 
         // Frame-aware handling of { } ( ) [ ] : ! inside a field; null => not our token, use the normal switch.
@@ -153,41 +175,40 @@ namespace Outbridge.PyLite.Syntax
             int line0 = _line, col0 = CurCol;
             switch (Cur)
             {
-                case '{': _fstack[ti].BraceDepth++; _pos++; return Emit(TokenKind.LeftBrace, null, null, line0, col0);
-                case '(': _fstack[ti].BraceDepth++; _pos++; return Emit(TokenKind.LeftParen, null, null, line0, col0);
-                case '[': _fstack[ti].BraceDepth++; _pos++; return Emit(TokenKind.LeftBracket, null, null, line0, col0);
+                case '{': _fstack[ti].BraceDepth++; OpenBracket('{', line0, col0); _pos++; return Emit(TokenKind.LeftBrace, null, null, line0, col0);
+                case '(': _fstack[ti].BraceDepth++; OpenBracket('(', line0, col0); _pos++; return Emit(TokenKind.LeftParen, null, null, line0, col0);
+                case '[': _fstack[ti].BraceDepth++; OpenBracket('[', line0, col0); _pos++; return Emit(TokenKind.LeftBracket, null, null, line0, col0);
                 case ')':
                     if (_fstack[ti].BraceDepth == 0)
                         throw PySyntaxErrorException.Syntax("f-string: unmatched ')'", line0, col0);
-                    _fstack[ti].BraceDepth--; _pos++; return Emit(TokenKind.RightParen, null, null, line0, col0);
+                    _fstack[ti].BraceDepth--; CloseBracket(')', line0, col0); _pos++; return Emit(TokenKind.RightParen, null, null, line0, col0);
                 case ']':
                     if (_fstack[ti].BraceDepth == 0)
                         throw PySyntaxErrorException.Syntax("f-string: unmatched ']'", line0, col0);
-                    _fstack[ti].BraceDepth--; _pos++; return Emit(TokenKind.RightBracket, null, null, line0, col0);
+                    _fstack[ti].BraceDepth--; CloseBracket(']', line0, col0); _pos++; return Emit(TokenKind.RightBracket, null, null, line0, col0);
                 case '}':
                     if (_fstack[ti].BraceDepth > 0)
                     {
                         _fstack[ti].BraceDepth--;
+                        CloseBracket('}', line0, col0);
                         _pos++;
                         return Emit(TokenKind.RightBrace, null, null, line0, col0);
                     }
                     if (_fstack[ti].ExprTokenCount == 0)
-                        throw PySyntaxErrorException.Syntax("f-string: empty expression not allowed", line0, col0);
-                    _fstack[ti].Mode = _fstack[ti].Mode == FStringMode.ExprNested ? FStringMode.Spec : FStringMode.Text;
+                        throw PySyntaxErrorException.Syntax("f-string: valid expression required before '" + Cur + "'", line0, col0);
+                    CloseField(ti);
                     _pos++; return Emit(TokenKind.RightBrace, null, null, line0, col0);
                 case ':':
                     if (_fstack[ti].BraceDepth > 0)
                         return null;
                     if (_fstack[ti].ExprTokenCount == 0)
-                        throw PySyntaxErrorException.Syntax("f-string: empty expression not allowed", line0, col0);
-                    if (_fstack[ti].Mode == FStringMode.ExprNested)
-                        throw PySyntaxErrorException.Syntax("f-string: expressions nested too deeply", line0, col0);
+                        throw PySyntaxErrorException.Syntax("f-string: valid expression required before '" + Cur + "'", line0, col0);
                     _fstack[ti].Mode = FStringMode.Spec; _pos++; return Emit(TokenKind.Colon, null, null, line0, col0);
                 case '!':
                     if (At(_pos + 1) == '=' || _fstack[ti].BraceDepth > 0)
                         return null;
                     if (_fstack[ti].ExprTokenCount == 0)
-                        throw PySyntaxErrorException.Syntax("f-string: empty expression not allowed", line0, col0);
+                        throw PySyntaxErrorException.Syntax("f-string: valid expression required before '" + Cur + "'", line0, col0);
                     _pos++; return Emit(TokenKind.Bang, null, null, line0, col0);
                 case '=':
                     // Self-documenting '=' (PEP 501): only at top brace level and not part of '=='. The

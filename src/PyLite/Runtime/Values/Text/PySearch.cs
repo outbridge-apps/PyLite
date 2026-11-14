@@ -21,11 +21,23 @@ namespace Outbridge.PyLite.Runtime.Values
                 return start;
             if (count < m)
                 return -1;
+            int r;
             if (m == 1)
-                return s.IndexOf(needle[0], start, count);
-            if ((long)count * m <= Window)
-                return s.IndexOf(needle, start, count, StringComparison.Ordinal);
-            return Kmp(ctx, s, needle, start, start + count, false);
+                r = s.IndexOf(needle[0], start, count);
+            else if ((long)count * m <= Window)
+                r = s.IndexOf(needle, start, count, StringComparison.Ordinal);
+            else
+                return Kmp(ctx, s, needle, start, start + count, false);
+            Scanned(ctx, r < 0 ? count : r - start + m);
+            return r;
+        }
+
+        // A single BCL search charged after the fact by what it scanned, so `x in s` in a loop over a long s
+        // reaches the deadline; a hit near the start costs what it scanned, not the whole string.
+        private static void Scanned(EvalContext ctx, long units)
+        {
+            if (units > BudgetCost.LinearChunkSize)
+                ctx.Budget.ChargeLinear(units);
         }
 
         // Last index in [from, to) where needle occurs entirely inside the window, or -1.
@@ -36,11 +48,15 @@ namespace Outbridge.PyLite.Runtime.Values
                 return to;
             if (to - from < m)
                 return -1;
+            int r;
             if (m == 1)
-                return s.LastIndexOf(needle[0], to - 1, to - from);
-            if ((long)(to - from) * m <= Window)
-                return s.LastIndexOf(needle, to - 1, to - from, StringComparison.Ordinal);
-            return Kmp(ctx, s, needle, from, to, true);
+                r = s.LastIndexOf(needle[0], to - 1, to - from);
+            else if ((long)(to - from) * m <= Window)
+                r = s.LastIndexOf(needle, to - 1, to - from, StringComparison.Ordinal);
+            else
+                return KmpLast(ctx, s, needle, from, to);
+            Scanned(ctx, r < 0 ? to - from : to - r);
+            return r;
         }
 
         internal static int IndexOf(EvalContext ctx, byte[] hay, byte[] needle, int from, int to)
@@ -51,7 +67,11 @@ namespace Outbridge.PyLite.Runtime.Values
             if (to - from < m)
                 return -1;
             if ((long)(to - from) * m <= Window)
-                return Scan(ctx, hay, needle, from, to, false);
+            {
+                int r = Scan(ctx, hay, needle, from, to, false);
+                Scanned(ctx, r < 0 ? to - from : r - from + m);
+                return r;
+            }
             return Kmp(ctx, hay, needle, from, to, false);
         }
 
@@ -63,14 +83,83 @@ namespace Outbridge.PyLite.Runtime.Values
             if (to - from < m)
                 return -1;
             if ((long)(to - from) * m <= Window)
-                return Scan(ctx, hay, needle, from, to, true);
-            return Kmp(ctx, hay, needle, from, to, true);
+            {
+                int r = Scan(ctx, hay, needle, from, to, true);
+                Scanned(ctx, r < 0 ? to - from : to - r);
+                return r;
+            }
+            return KmpLast(ctx, hay, needle, from, to);
         }
 
         // ---- Knuth-Morris-Pratt ----
 
-        // One left-to-right pass: `last` keeps walking to report the final match, which costs the same
-        // linear scan and needs no reversed copy of either side.
+        // The last match, right to left: its cost is what it scans, so rsplit stays linear; walking from the left
+        // to report the final match rescanned the whole rest of the string for every piece.
+        private static int KmpLast(EvalContext ctx, string s, string needle, int from, int to)
+        {
+            int m = needle.Length;
+            int[] fail = ReversedFailure(ctx, needle);
+            int k = 0;
+            for (int i = to - 1; i >= from; i--)
+            {
+                char c = s[i];
+                while (k > 0 && needle[m - 1 - k] != c)
+                    k = fail[k - 1];
+                if (needle[m - 1 - k] == c)
+                    k++;
+                if (k == m)
+                    return i;
+                if ((i & StepMask) == 0)
+                    Pause(ctx);
+            }
+            return -1;
+        }
+
+        private static int KmpLast(EvalContext ctx, byte[] hay, byte[] needle, int from, int to)
+        {
+            int m = needle.Length;
+            int[] fail = ReversedFailure(ctx, needle);
+            int k = 0;
+            for (int i = to - 1; i >= from; i--)
+            {
+                byte c = hay[i];
+                while (k > 0 && needle[m - 1 - k] != c)
+                    k = fail[k - 1];
+                if (needle[m - 1 - k] == c)
+                    k++;
+                if (k == m)
+                    return i;
+                if ((i & StepMask) == 0)
+                    Pause(ctx);
+            }
+            return -1;
+        }
+
+        // The failure table of the reversed needle, kept for the next piece of the same split.
+        private static int[] ReversedFailure(EvalContext ctx, string p)
+        {
+            if (ReferenceEquals(ctx.ReversedNeedle, p))
+                return ctx.ReversedFail;
+            char[] r = p.ToCharArray();
+            Array.Reverse(r);
+            int[] fail = Failure(ctx, new string(r));
+            ctx.ReversedNeedle = p;
+            ctx.ReversedFail = fail;
+            return fail;
+        }
+
+        private static int[] ReversedFailure(EvalContext ctx, byte[] p)
+        {
+            if (ReferenceEquals(ctx.ReversedNeedle, p))
+                return ctx.ReversedFail;
+            var r = (byte[])p.Clone();
+            Array.Reverse(r);
+            int[] fail = Failure(ctx, r);
+            ctx.ReversedNeedle = p;
+            ctx.ReversedFail = fail;
+            return fail;
+        }
+
         private static int Kmp(EvalContext ctx, string s, string needle, int from, int to, bool last)
         {
             int m = needle.Length;

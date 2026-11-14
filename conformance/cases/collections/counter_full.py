@@ -51,11 +51,8 @@ d['k'] += 1
 assert d['k'] == 6
 del d['k']
 assert d['k'] == 0 and 'k' not in d
-try:
-    del d['nothing']
-    assert False
-except KeyError:
-    pass
+del d['nothing']   # no KeyError: Counter.__delitem__ (checked on CPython 3.14.2)
+assert 'nothing' not in d
 d['neg'] = -2
 assert d['neg'] == -2 and 'neg' in d
 

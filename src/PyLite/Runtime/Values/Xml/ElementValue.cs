@@ -9,23 +9,146 @@ namespace Outbridge.PyLite.Runtime.Values
 {
     // xml.etree.ElementTree.Element. Kind==Opaque. THE PARITY TRAP: bool(el) == has
     // children (an element with only text is falsy). Tag uses Clark notation {uri}local for namespaced.
-    internal sealed class ElementValue : ScriptValue
+    internal sealed class ElementValue : ScriptValue, Modules.IScriptCopyable
     {
+        // CPython's __copy__: a new element over the same attrib dict (an empty plain one is not shared: CPython keeps none)
+        // and children.
+        public ScriptValue CopyShallow(EvalContext ctx)
+        {
+            ctx.Values.PreCharge(8L * Children.Count);
+            var e = new ElementValue(Tag, KeepsAttrib ? _attrib : null, ctx) { Text = Text, Tail = Tail };
+            foreach (ScriptValue c in Children)
+                Placing(ctx, c);   // every child is in two lists now
+            e.Children.AddRange(Children);
+            e.Changed(ctx);
+            return e;
+        }
+
+        // A copy keeps the attrib unless it is an empty plain dict (CPython holds none for that one): an
+        // empty OrderedDict or defaultdict the script assigned stays, with its type.
+        private bool KeepsAttrib
+        {
+            get { return _attrib != null && (_attrib.Count > 0 || _attrib.GetType() != typeof(DictValue)); }
+        }
+
+        public ScriptValue EmptyClone(EvalContext ctx)
+        {
+            return new ElementValue(Tag, null, ctx);
+        }
+
+        public IReadOnlyList<ScriptValue> DeepChildren()
+        {
+            var all = new List<ScriptValue>(Children.Count + 4) { Tag, Text, Tail };
+            if (_attrib != null)
+                all.Add(_attrib);
+            all.AddRange(Children);
+            return all;
+        }
+
+        public void FillClone(EvalContext ctx, ScriptValue clone, Func<ScriptValue, ScriptValue> copyOf)
+        {
+            var e = (ElementValue)clone;
+            e.Tag = copyOf(Tag);
+            e.Text = copyOf(Text);
+            e.Tail = copyOf(Tail);
+            e._attrib = KeepsAttrib ? (DictValue)copyOf(_attrib) : null;
+            ctx.Values.PreCharge(8L * Children.Count);
+            foreach (ScriptValue c in Children)
+            {
+                ScriptValue copy = copyOf(c);   // a child twice in the original is one copy twice
+                Placing(ctx, copy);
+                e.Children.Add(copy);
+            }
+            e.Changed(ctx);
+        }
+
         internal static readonly ScriptTypeInfo ElementType = new ScriptTypeInfo("xml.etree.ElementTree.Element", BuildSlots());
 
         internal ScriptValue Tag;                    // StrValue
-        internal DictValue Attrib;                   // live
+        private DictValue _attrib;                   // live; null until asked for, as CPython's `extra` (a dict cost ~290 B)
         internal ScriptValue Text;                   // StrValue or None
         internal ScriptValue Tail;                   // StrValue or None
         internal readonly List<ScriptValue> Children = new List<ScriptValue>();
-        internal int Version;
 
+        // Before one more child: capped by MaxCollectionItems and the list growth charged (extend of
+        // 4M-element lists ten times made 40M children for 30 MB charged).
+        internal void Grow(EvalContext ctx)
+        {
+            if (Children.Count < Children.Capacity)
+                return;
+            ctx.Values.EnsureCollectionSize(Children.Count + 1L);
+            ctx.Values.PreCharge(8L * Math.Max(4, Children.Count));
+            Children.Capacity = (int)Math.Min(Math.Max(4L, 2L * Children.Count), ctx.Limits.MaxCollectionItems);   // doubling must not jump the cap
+        }
+        internal int Version;
+        private int _lists;   // the children-list slots that hold the element now
+
+        // Before the element goes into a children list, and after it leaves one. EvalContext.XmlShared counts the slots
+        // past each element's first: while it is 0 every element is in at most one list, so a search knows a child's
+        // parent without building ElementPath's parent map. A move (out of one list, into another) leaves it 0: a mark
+        // that never cleared turned the fast path off for the rest of the run after one move (review 10, B-1).
+        internal static void Placing(EvalContext ctx, ScriptValue child)
+        {
+            var e = (ElementValue)child;
+            if (++e._lists >= 2)
+                ctx.XmlShared++;
+        }
+
+        internal static void Unplacing(EvalContext ctx, ScriptValue child)
+        {
+            var e = (ElementValue)child;
+            if (e._lists >= 2)
+                ctx.XmlShared--;
+            if (e._lists > 0)
+                e._lists--;
+        }
+
+        internal bool InSeveralLists { get { return _lists >= 2; } }
+
+        // Every change to a children list, here or anywhere in the run (EvalContext.XmlTreeVersion): ElementPath's parent
+        // maps are shared by the run's searches while no list of their subtree has changed since one was built.
+        internal void Changed(EvalContext ctx)
+        {
+            Version++;
+            ctx.XmlTreeVersion++;
+            if (ctx.XmlParentMaps != null)
+                ctx.XmlParentMaps.ListChanged(ctx, this, null);
+        }
+
+        // No children and in no list: appended, it is one entry more in a parent map (AppendedLeaf).
+        internal bool LooseLeaf { get { return _lists == 0 && Children.Count == 0; } }
+
+        // Changed, for a change that only put leaf (a LooseLeaf until then) at the end of the children.
+        internal void AppendedLeaf(EvalContext ctx, ElementValue leaf)
+        {
+            Version++;
+            ctx.XmlTreeVersion++;
+            if (ctx.XmlParentMaps != null)
+                ctx.XmlParentMaps.ListChanged(ctx, this, ReferenceEquals(leaf, this) ? null : leaf);
+        }
+
+        // The element and its children list, as the CLR holds them (an empty attrib-less element measured 112 B).
+        private const long ElementBytes = 112;
+
+        // attrib: null for none (one is made when a script asks for it).
         internal ElementValue(ScriptValue tag, DictValue attrib, EvalContext ctx)
         {
+            ctx.Values.PreCharge(ElementBytes);
             Tag = tag;
-            Attrib = attrib;
+            _attrib = attrib;
             Text = ctx.Values.None;
             Tail = ctx.Values.None;
+        }
+
+        // The attributes to read: null when there are none.
+        internal DictValue AttribOrNull { get { return _attrib; } }
+
+        // The live attrib dict, made on first need.
+        internal DictValue Attrib(EvalContext ctx)
+        {
+            if (_attrib == null)
+                _attrib = ctx.Values.Dict(4);
+            return _attrib;
         }
 
         public override ScriptTypeInfo TypeInfo { get { return ElementType; } }
@@ -54,17 +177,92 @@ namespace Outbridge.PyLite.Runtime.Values
 
         protected internal override bool TrySetItemCore(ScriptValue index, ScriptValue value, EvalContext ctx)
         {
-            int i = NormIndex(ctx, index);
-            Children[i] = value;
-            Version++;
+            SliceValue setSlice = index as SliceValue;
+            if (setSlice != null)
+                return SetSlice(setSlice, value, ctx);
+            int i = NormIndex(ctx, index, "child assignment index out of range");
+            // as append does: a non-Element child made every walker fail with an internal error
+            ScriptValue child = RequireElement(ctx, value);
+            Placing(ctx, child);
+            Unplacing(ctx, Children[i]);
+            Children[i] = child;
+            Changed(ctx);
             return true;
         }
 
         protected internal override bool TryDelItemCore(ScriptValue index, EvalContext ctx)
         {
-            int i = NormIndex(ctx, index);
+            SliceValue delSlice = index as SliceValue;
+            if (delSlice != null)
+                return DelSlice(delSlice, ctx);
+            int i = NormIndex(ctx, index, "child assignment index out of range");
+            ctx.Budget.ChargeLinear(Children.Count - i);   // the later children move down
+            Unplacing(ctx, Children[i]);
             Children.RemoveAt(i);
-            Version++;
+            Changed(ctx);
+            return true;
+        }
+
+        private bool SetSlice(SliceValue slice, ScriptValue value, EvalContext ctx)
+        {
+            if (PyOps.TryGetIterator(value, ctx) == null)
+                throw Raise.TypeError(ctx, "assignment expects an iterable");
+            ScriptValue[] items = Iter.ToArray(ctx, value);
+            SliceIndices ind = slice.Indices(Children.Count, ctx);
+            int start = (int)ind.Start, length = (int)ind.Length, step = ind.StepInt;
+            if (step != 1 && items.Length != length)
+                throw Raise.ValueError(ctx, "attempt to assign sequence of size " + items.Length + " to extended slice of size " + length);
+            foreach (ScriptValue item in items)
+                RequireChild(ctx, item);
+            ctx.Budget.ChargeLinear(Children.Count + items.Length);
+            if (step == 1)
+            {
+                ctx.Values.EnsureCollectionSize((long)Children.Count - length + items.Length);
+                ctx.Values.PreCharge(8L * items.Length);
+                foreach (ScriptValue item in items)   // once nothing can refuse the change: a refused one placed no child
+                    Placing(ctx, item);
+                for (int k = start; k < start + length; k++)
+                    Unplacing(ctx, Children[k]);
+                Children.RemoveRange(start, length);
+                Children.InsertRange(start, items);
+            }
+            else
+            {
+                foreach (ScriptValue item in items)
+                    Placing(ctx, item);
+                for (int k = 0; k < length; k++)
+                {
+                    Unplacing(ctx, Children[start + k * step]);
+                    Children[start + k * step] = items[k];
+                }
+            }
+            Changed(ctx);
+            return true;
+        }
+
+        private bool DelSlice(SliceValue slice, EvalContext ctx)
+        {
+            SliceIndices ind = slice.Indices(Children.Count, ctx);
+            int start = (int)ind.Start, length = (int)ind.Length, step = ind.StepInt;
+            ctx.Budget.ChargeLinear(Children.Count);
+            if (step == 1)
+            {
+                for (int k = start; k < start + length; k++)
+                    Unplacing(ctx, Children[k]);
+                Children.RemoveRange(start, length);
+            }
+            else
+            {
+                var dropped = new HashSet<int>();
+                for (int k = 0; k < length; k++)
+                {
+                    dropped.Add(start + k * step);
+                    Unplacing(ctx, Children[start + k * step]);
+                }
+                int at = 0;
+                Children.RemoveAll(_ => dropped.Contains(at++));
+            }
+            Changed(ctx);
             return true;
         }
 
@@ -79,14 +277,14 @@ namespace Outbridge.PyLite.Runtime.Values
                     DictValue d = value as DictValue;
                     if (d == null)
                         throw Raise.TypeError(ctx, "attrib must be a dict");
-                    Attrib = d;
+                    _attrib = d;
                     return true;
                 default:
                     return false;
             }
         }
 
-        private int NormIndex(EvalContext ctx, ScriptValue index)
+        private int NormIndex(EvalContext ctx, ScriptValue index, string outOfRange = "child index out of range")
         {
             if (index.Kind != ValueKind.Int && index.Kind != ValueKind.Bool)
                 throw Raise.TypeError(ctx, "list indices must be integers or slices, not " + index.PyTypeName);
@@ -94,7 +292,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (i < 0)
                 i += Children.Count;
             if (i < 0 || i >= Children.Count)
-                throw Raise.IndexError(ctx, "child index out of range");
+                throw Raise.IndexError(ctx, outOfRange);
             return (int)i;
         }
 
@@ -103,18 +301,21 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Get_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
-            Args.Between(ctx, a, "get", 1, 2);
+            ScriptValue[] named = Args.Named(ctx, a, kw, "get", "key", "default");
+            if (named.Length == 0 || named[0] == null)
+                throw Raise.TypeError(ctx, "get() missing required argument 'key' (pos 1)");
             ScriptValue v;
-            if (e.Attrib.TryGet(a[0], ctx, out v))
+            if (e._attrib != null && e._attrib.TryGet(named[0], ctx, out v))
                 return v;
-            return a.Length == 2 ? a[1] : ctx.Values.None;
+            return named.Length == 2 && named[1] != null ? named[1] : ctx.Values.None;
+
         }
 
         private static ScriptValue Set_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
             Args.Exactly(ctx, a, "set", 2);
-            e.Attrib.SetItem(Modules.XmlModule.UnQName(a[0]), Modules.XmlModule.UnQName(a[1]), ctx);
+            e.Attrib(ctx).SetItem(Modules.XmlModule.UnQName(a[0]), Modules.XmlModule.UnQName(a[1]), ctx);
             return ctx.Values.None;
         }
 
@@ -125,10 +326,12 @@ namespace Outbridge.PyLite.Runtime.Values
             Args.Exactly(ctx, a, kw, "makeelement", 2);
             DictValue src = a[1] as DictValue;
             if (src == null)
-                throw Raise.TypeError(ctx, "makeelement() argument 'attrib' must be a dict, not " + a[1].PyTypeName);
+                throw Raise.TypeError(ctx, "makeelement() argument 2 must be dict, not " + (a[1].Kind == ValueKind.None ? "None" : a[1].PyTypeName));
+            if (src.Count == 0)
+                return new ElementValue(Modules.XmlModule.UnQName(a[0]), null, ctx);
             DictValue copy = ctx.Values.Dict(src.Count);
             var t = src.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 ctx.Budget.Step();
                 long h;
@@ -142,9 +345,11 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Keys_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
-            ListValue list = ctx.Values.List(e.Attrib.Count);
-            var t = e.Attrib.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            if (e._attrib == null)
+                return ctx.Values.List(0);
+            ListValue list = ctx.Values.List(e._attrib.Count);
+            var t = e._attrib.Table;
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
@@ -157,9 +362,11 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Items_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
-            ListValue list = ctx.Values.List(e.Attrib.Count);
-            var t = e.Attrib.Table;
-            for (int p = 0; p < t.EntriesUsed; p++)
+            if (e._attrib == null)
+                return ctx.Values.List(0);
+            ListValue list = ctx.Values.List(e._attrib.Count);
+            var t = e._attrib.Table;
+            for (int p = t.WalkStart(ctx); p < t.EntriesUsed; p++)
             {
                 long h;
                 ScriptValue k, v;
@@ -172,19 +379,39 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Append_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
-            e.Children.Add(RequireElement(ctx, Args.One(ctx, a, "append")));
-            e.Version++;
+            var child = (ElementValue)RequireElement(ctx, Args.One(ctx, a, "append"));
+            bool leaf = child.LooseLeaf;
+            e.Grow(ctx);
+            Placing(ctx, child);
+            e.Children.Add(child);
+            if (leaf)
+                e.AppendedLeaf(ctx, child);
+            else
+                e.Changed(ctx);
             return ctx.Values.None;
         }
 
         private static ScriptValue Extend_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
-            IScriptIterator it = PyOps.GetIterator(Args.One(ctx, a, "extend"), ctx);
-            ScriptValue v;
-            while (it.MoveNext(ctx, out v))
-                e.Children.Add(RequireElement(ctx, v));
-            e.Version++;
+            ScriptValue elements = Args.One(ctx, a, "extend");
+            if (PyOps.TryGetIterator(elements, ctx) == null)
+                throw Raise.TypeError(ctx, "'elements' must be an iterable");
+            ScriptValue[] items = Iter.ToArray(ctx, elements);   // a copy first: e.extend(e) doubles it, as PySequence_Fast does
+            try
+            {
+                foreach (ScriptValue v in items)
+                {
+                    ScriptValue child = RequireChild(ctx, v);
+                    e.Grow(ctx);
+                    Placing(ctx, child);
+                    e.Children.Add(child);
+                }
+            }
+            finally
+            {
+                e.Changed(ctx);   // a non-element part way raises with the earlier ones added, as CPython
+            }
             return ctx.Values.None;
         }
 
@@ -192,10 +419,14 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             ElementValue e = (ElementValue)self;
             Args.Exactly(ctx, a, "insert", 2);
-            BigInteger idx = NumericOps.AsBigInteger(a[0]);
-            int i = idx < 0 ? 0 : (idx > e.Children.Count ? e.Children.Count : (int)idx);
-            e.Children.Insert(i, RequireElement(ctx, a[1]));
-            e.Version++;
+            // list.insert's rules: an int index (a float was cast unchecked, an engine fault), negative from the end
+            int i = Coerce.ToClampedIndex(Coerce.ToIndex(ctx, a[0], "insert"), e.Children.Count);
+            ScriptValue inserted = RequireElement(ctx, a[1]);
+            e.Grow(ctx);
+            ctx.Budget.ChargeLinear(e.Children.Count - i);   // the later children move up
+            Placing(ctx, inserted);
+            e.Children.Insert(i, inserted);
+            e.Changed(ctx);
             return ctx.Values.None;
         }
 
@@ -203,12 +434,14 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             ElementValue e = (ElementValue)self;
             ScriptValue target = Args.One(ctx, a, "remove");
+            ctx.Budget.ChargeLinear(e.Children.Count);   // the search, then the later children move down
             for (int i = 0; i < e.Children.Count; i++)
             {
                 if (ReferenceEquals(e.Children[i], target))   // remove by identity (ET parity)
                 {
+                    Unplacing(ctx, target);
                     e.Children.RemoveAt(i);
-                    e.Version++;
+                    e.Changed(ctx);
                     return ctx.Values.None;
                 }
             }
@@ -218,12 +451,22 @@ namespace Outbridge.PyLite.Runtime.Values
         private static ScriptValue Clear_(ScriptValue self, ScriptValue[] a, KwArgs kw, EvalContext ctx)
         {
             ElementValue e = (ElementValue)self;
+            ctx.Budget.ChargeLinear(e.Children.Count);
+            foreach (ScriptValue c in e.Children)
+                Unplacing(ctx, c);
             e.Children.Clear();
-            e.Attrib = ctx.Values.Dict(4);
+            e._attrib = null;
             e.Text = ctx.Values.None;
             e.Tail = ctx.Values.None;
-            e.Version++;
+            e.Changed(ctx);
             return ctx.Values.None;
+        }
+
+        private static ScriptValue RequireChild(EvalContext ctx, ScriptValue v)
+        {
+            if (!(v is ElementValue))
+                throw Raise.TypeError(ctx, "expected an Element, not \"" + v.PyTypeName + "\"");
+            return v;
         }
 
         internal static ScriptValue RequireElement(EvalContext ctx, ScriptValue v)
@@ -239,19 +482,19 @@ namespace Outbridge.PyLite.Runtime.Values
             // the receiver passes charged here.
             var s = new Slots(v => ((ElementValue)v).Children.Count);
             s.Property("tag", (self, ctx) => ((ElementValue)self).Tag);
-            s.Property("attrib", (self, ctx) => ((ElementValue)self).Attrib);
+            s.Property("attrib", (self, ctx) => ((ElementValue)self).Attrib(ctx));
             s.Property("text", (self, ctx) => ((ElementValue)self).Text);
             s.Property("tail", (self, ctx) => ((ElementValue)self).Tail);
             s.Method("get", Get_);
-            s.Method("set", Set_);
-            s.Method("keys", Keys_);
-            s.Method("items", Items_);
-            s.Method("append", Append_);
-            s.Method("extend", Extend_);
-            s.Linear("insert", Insert_);
-            s.Linear("remove", Remove_);
-            s.Method("clear", Clear_);
-            s.Method("makeelement", MakeElement_);
+            s.Method("set", 2, 2, Set_);
+            s.Method("keys", 0, 0, Keys_);
+            s.Method("items", 0, 0, Items_);
+            s.Method("append", 1, 1, Append_);
+            s.Method("extend", 1, 1, Extend_);
+            s.Linear("insert", 2, 2, Insert_);
+            s.Linear("remove", 1, 1, Remove_);
+            s.Method("clear", 0, 0, Clear_);
+            s.Method("makeelement", 2, 2, MakeElement_);
             ElementXPath.AddSlots(s.Table);   // find/findall/findtext/iter
             return s.Table;
         }

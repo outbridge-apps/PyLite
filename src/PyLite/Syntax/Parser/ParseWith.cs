@@ -42,7 +42,7 @@ namespace Outbridge.PyLite.Syntax
                 ParseParenthesizedItems(items);
             else
                 ParseWithItems(items);
-            Expect(TokenKind.Colon, "':'");
+            ExpectHeaderColon(false);
 
             // Each item becomes one nested try, so the body really sits items.Count levels deeper.
             int extra = items.Count - 1;
@@ -52,7 +52,7 @@ namespace Outbridge.PyLite.Syntax
             IReadOnlyList<StmtNode> body;
             try
             {
-                body = ParseSuite();
+                body = ParseSuite(kw, "'with' statement");
             }
             finally
             {
@@ -100,6 +100,7 @@ namespace Outbridge.PyLite.Syntax
         private void ParseParenthesizedItems(List<WithItem> items)
         {
             Token open = Take();   // '('
+            NoYieldHere();
             var group = new List<WithItem>();
             bool trailingComma = false, anyAs = false;
             ExprNode generator = null;
@@ -108,20 +109,22 @@ namespace Outbridge.PyLite.Syntax
                 var item = new WithItem { Expr = ParseTest() };
                 if (group.Count == 0 && _cur.Kind == TokenKind.KwFor)
                 {
-                    generator = new ComprehensionNode(Src(open), CompKind.Generator, item.Expr, null, ParseCompClauses());
+                    generator = new ComprehensionNode(Src(open), CompKind.Generator, CompElement(item.Expr), null, ParseCompClauses());
                     break;
                 }
                 if (Match(TokenKind.KwAs))
                 {
                     item.Target = ParseWithTarget();
                     anyAs = true;
+                    if (StartsExpression(_cur.Kind))   // with (a as b c): inside the brackets, a missing comma
+                        throw ErrorAtSrc(item.Target.Src, "invalid syntax. Perhaps you forgot a comma?");
                 }
                 group.Add(item);
                 trailingComma = Match(TokenKind.Comma);
                 if (!trailingComma)
                     break;
             }
-            Expect(TokenKind.RightParen, "')'");
+            ExpectClose(TokenKind.RightParen);   // inside brackets two expressions side by side are a missing comma
 
             if (generator == null && group.Count > 0 && _cur.Kind == TokenKind.Colon)
             {

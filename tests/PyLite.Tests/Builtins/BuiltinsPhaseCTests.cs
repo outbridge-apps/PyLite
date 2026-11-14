@@ -57,7 +57,7 @@ namespace Outbridge.PyLite.Tests.Builtins
         }
 
         [Theory]
-        [InlineData("int('12', 1)", "int() base must be >= 2 and <= 36")]
+        [InlineData("int('12', 1)", "int() base must be >= 2 and <= 36, or 0")]
         [InlineData("int(float('nan'))", "cannot convert float NaN to integer")]
         [InlineData("int(float('inf'))", "cannot convert float infinity to integer")]
         [InlineData("int([1])", "int() argument must be a string, a bytes-like object or a real number, not 'list'")]
@@ -96,8 +96,8 @@ namespace Outbridge.PyLite.Tests.Builtins
 
         [Theory]
         [InlineData("round('a')", "type str doesn't define __round__ method")]
-        [InlineData("divmod(1, 0)", "integer division or modulo by zero")]
-        [InlineData("divmod(1.0, 0.0)", "float divmod()")]
+        [InlineData("divmod(1, 0)", "division by zero")]
+        [InlineData("divmod(1.0, 0.0)", "division by zero")]
         [InlineData("pow(2, -1, 4)", "base is not invertible for the given modulus")]
         [InlineData("pow(2, 3, 0)", "pow() 3rd argument cannot be 0")]
         [InlineData("hex(3.0)", "'float' object cannot be interpreted as an integer")]
@@ -116,9 +116,11 @@ namespace Outbridge.PyLite.Tests.Builtins
         {
             System.Numerics.BigInteger e = (System.Numerics.BigInteger.One << eShift) + eAdd;
             System.Numerics.BigInteger m = (System.Numerics.BigInteger.One << mShift) + mAdd;
-            string expected = System.Numerics.BigInteger.ModPow(b, e, m).ToString();
-            string src = "r = pow(" + b + ", (1 << " + eShift + ") + " + eAdd + ", (1 << " + mShift + ") + " + mAdd + ")\n";
-            Assert.Equal(expected, Ev.Run(src).Repr("r"));
+            // compared in hex: a 20000-bit result has no decimal str past CPython's 4300-digit limit
+            string hex = System.Numerics.BigInteger.ModPow(b, e, m).ToString("x").TrimStart('0');
+            string expected = "'0x" + (hex.Length == 0 ? "0" : hex) + "'";
+            string src = "r = hex(pow(" + b + ", (1 << " + eShift + ") + " + eAdd + ", (1 << " + mShift + ") + " + mAdd + "))\n";
+            Assert.Equal(expected, Ev.Run(src, TestEngines.Unhurried).Repr("r"));
         }
 
         [Fact]

@@ -8,7 +8,7 @@ namespace Outbridge.PyLite.Syntax
 
         public int MaxSourceChars          { get; set; } = 524288; // 512 K UTF-16 units
         public int MaxTokens               { get; set; } = 500000;
-        public int MaxNumericLiteralDigits { get; set; } = 4300;   // digits after the base prefix, all bases
+        public int MaxNumericLiteralDigits { get; set; } = 4300;   // decimal int and float literals; 0x/0o/0b are unbounded, as in CPython
         public int MaxStringLiteralChars   { get; set; } = 524288; // cooked length of one literal/chunk
         public int MaxFStringNesting       { get; set; } = 3;      // frames, outermost = 1
         public int MaxIndentLevels         { get; set; } = 100;    // MAXINDENT
@@ -20,6 +20,9 @@ namespace Outbridge.PyLite.Syntax
         // StackOverflow. Higher than MaxExprDepth: a flat chain costs ~1 downstream frame per level, whereas
         // recursive-descent nesting costs ~15 parser frames per level.
         public int MaxAstDepth             { get; set; } = 1000;
+        // All the distinct private names a module mangles, together: the class name is repeated in each, so a
+        // long one multiplied them past the source's size.
+        public int MaxMangledChars         { get; set; } = 2097152;
 
         // Host bug, not a script bug — called by ScriptEngine.Compile before the lexer is created.
         public void Validate()
@@ -33,6 +36,7 @@ namespace Outbridge.PyLite.Syntax
             Check(MaxExprDepth, 8, nameof(MaxExprDepth));
             Check(MaxStmtDepth, 8, nameof(MaxStmtDepth));
             Check(MaxAstDepth, 16, nameof(MaxAstDepth));
+            Check(MaxMangledChars, 1024, nameof(MaxMangledChars));
         }
 
         private static void Check(int value, int min, string name)

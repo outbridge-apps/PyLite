@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Outbridge.PyLite.Syntax.Ast;
@@ -19,7 +20,50 @@ namespace Outbridge.PyLite.Syntax
 
                 ParseStatement(body);
             }
+            if (_futureImports != null)
+                CheckFutureImports(body);
             return new ModuleNode(new SourceInfo(1, 1), AstList.Freeze(body));
+        }
+
+        // The features CPython 3.14 knows; each is a no-op here (annotations are never evaluated).
+        private static readonly HashSet<string> FutureFeatures = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "nested_scopes", "generators", "division", "absolute_import", "with_statement", "print_function",
+            "unicode_literals", "generator_stop", "annotations",
+        };
+
+        // CPython's future.c and compile.c: only a docstring and other future imports may come before one, anywhere
+        // else it is refused; its names are checked in order.
+        private void CheckFutureImports(List<StmtNode> body)
+        {
+            var prefix = new HashSet<FromImportNode>();
+            int i = body.Count > 0 && IsDocstring(body[0]) ? 1 : 0;
+            for (; i < body.Count; i++)
+            {
+                FromImportNode fi = body[i] as FromImportNode;
+                if (fi == null || fi.Module != "__future__")
+                    break;
+                prefix.Add(fi);
+                foreach (ImportAlias a in fi.Names)
+                {
+                    if (a.DottedName == "braces")
+                        throw ErrorAtSrc(a.Src, "not a chance");
+                    if (a.DottedName == "barry_as_FLUFL")
+                        throw ErrorAtSrc(a.Src, "future feature barry_as_FLUFL is not supported in this dialect");
+                    if (!FutureFeatures.Contains(a.DottedName))
+                        throw ErrorAtSrc(a.Src, "future feature " + a.DottedName + " is not defined");
+                }
+            }
+            foreach (FromImportNode fi in _futureImports)
+                if (!prefix.Contains(fi))
+                    throw ErrorAtSrc(fi.Src, "from __future__ imports must occur at the beginning of the file");
+        }
+
+        private static bool IsDocstring(StmtNode s)
+        {
+            ExprStmtNode e = s as ExprStmtNode;
+            LiteralNode lit = e != null ? e.Value as LiteralNode : null;
+            return lit != null && lit.Kind == LiteralKind.Str;
         }
 
         private void ParseStatement(List<StmtNode> into)
@@ -83,7 +127,7 @@ namespace Outbridge.PyLite.Syntax
             if (_cur.Kind == TokenKind.NewLine)
                 Take();
             else if (_cur.Kind != TokenKind.EndOfFile)
-                throw Error("expected newline");
+                throw Unexpected(false, false);
         }
 
         private StmtNode ParseSmallStmt()
@@ -101,8 +145,8 @@ namespace Outbridge.PyLite.Syntax
                 case TokenKind.KwNonlocal: return ParseNonlocal();
                 case TokenKind.KwAssert: return ParseAssert();
                 case TokenKind.KwRaise: return ParseRaise();
-                case TokenKind.KwYield: throw Forbidden("yield");
-                case TokenKind.KwAwait: throw Forbidden("await");
+                case TokenKind.KwYield:
+                case TokenKind.KwAwait: throw ForbiddenInFunction();
                 default: return ParseExprStmt();
             }
         }
@@ -115,7 +159,7 @@ namespace Outbridge.PyLite.Syntax
         private StmtNode ParseReturn()
         {
             Token kw = Take();
-            ExprNode val = IsStmtEndToken(_cur.Kind) ? null : ParseTestList();
+            ExprNode val = IsStmtEndToken(_cur.Kind) ? null : NotLoneStar(ParseTestListStarExpr());
             return new ReturnNode(Src(kw), val);
         }
 
@@ -143,38 +187,62 @@ namespace Outbridge.PyLite.Syntax
         private StmtNode ParseGlobal()
         {
             Token kw = Take();
-            var names = new List<string> { Expect(TokenKind.Name, "name").Text };
+            var names = new List<string> { Expect(TokenKind.Name).Text };
             while (Match(TokenKind.Comma))
-                names.Add(Expect(TokenKind.Name, "name").Text);
+                names.Add(Expect(TokenKind.Name).Text);
             return new GlobalNode(Src(kw), AstList.Freeze(names));
         }
 
         private StmtNode ParseNonlocal()
         {
             Token kw = Take();
-            var names = new List<string> { Expect(TokenKind.Name, "name").Text };
+            var names = new List<string> { Expect(TokenKind.Name).Text };
             while (Match(TokenKind.Comma))
-                names.Add(Expect(TokenKind.Name, "name").Text);
+                names.Add(Expect(TokenKind.Name).Text);
             return new NonlocalNode(Src(kw), AstList.Freeze(names));
         }
 
+        // CPython's invalid_import* messages
         private StmtNode ParseImport()
         {
             Token kw = Take();
+            if (_cur.Kind == TokenKind.NewLine || _cur.Kind == TokenKind.EndOfFile)
+                throw Error("Expected one or more names after 'import'");
             var aliases = new List<ImportAlias> { ParseDottedAsName() };
             while (Match(TokenKind.Comma))
                 aliases.Add(ParseDottedAsName());
+            if (_cur.Kind == TokenKind.KwFrom)
+                throw ErrorAt(kw, "Did you mean to use 'from ... import ...' instead?");
             return new ImportNode(Src(kw), AstList.Freeze(aliases));
         }
 
         private ImportAlias ParseDottedAsName()
         {
-            Token n0 = Expect(TokenKind.Name, "module name");
+            Token n0 = Expect(TokenKind.Name);
             var sb = new StringBuilder(n0.Text);
             while (Match(TokenKind.Dot))
-                sb.Append('.').Append(Expect(TokenKind.Name, "name").Text);
-            string asName = Match(TokenKind.KwAs) ? Expect(TokenKind.Name, "name").Text : null;
+                sb.Append('.').Append(Expect(TokenKind.Name).Text);
+            string asName = ParseImportTarget();
+            ForbidDebug(asName ?? n0.Text, Src(n0));
             return new ImportAlias(Src(n0), sb.ToString(), asName);
+        }
+
+        private string ParseImportTarget()
+        {
+            if (!Match(TokenKind.KwAs))
+                return null;
+            if (_cur.Kind == TokenKind.Name)
+            {
+                // CPython's invalid_dotted_as_name: a name the statement cannot go on from is an expression
+                TokenKind next = Peek2().Kind;
+                if (next == TokenKind.Comma || next == TokenKind.RightParen || next == TokenKind.NewLine || next == TokenKind.Semicolon
+                    || next == TokenKind.EndOfFile)
+                    return Take().Text;
+            }
+            if (!StartsExpression(_cur.Kind))
+                throw Unexpected(false);
+            ExprNode target = ParseTest();
+            throw ErrorAtSrc(target.Src, "cannot use " + ExprName(target) + " as import target");
         }
 
         private StmtNode ParseFromImport()
@@ -182,13 +250,15 @@ namespace Outbridge.PyLite.Syntax
             Token kw = Take();
             if (_cur.Kind == TokenKind.Dot)
                 throw Forbidden("relative");
-            Token m0 = Expect(TokenKind.Name, "module name");
+            Token m0 = Expect(TokenKind.Name);
             var mod = new StringBuilder(m0.Text);
             while (Match(TokenKind.Dot))
-                mod.Append('.').Append(Expect(TokenKind.Name, "name").Text);
-            Expect(TokenKind.KwImport, "'import'");
+                mod.Append('.').Append(Expect(TokenKind.Name).Text);
+            Expect(TokenKind.KwImport);
             if (_cur.Kind == TokenKind.Star)
                 throw Forbidden("import-star");
+            if (_cur.Kind == TokenKind.NewLine || _cur.Kind == TokenKind.EndOfFile)
+                throw Error("Expected one or more names after 'import'");
 
             var aliases = new List<ImportAlias>();
             bool paren = Match(TokenKind.LeftParen);
@@ -197,17 +267,23 @@ namespace Outbridge.PyLite.Syntax
             {
                 if (paren && _cur.Kind == TokenKind.RightParen)
                     break;
+                if (!paren && (_cur.Kind == TokenKind.NewLine || _cur.Kind == TokenKind.EndOfFile))
+                    throw Error("trailing comma not allowed without surrounding parentheses");
                 aliases.Add(ParseImportAsName());
             }
             if (paren)
-                Expect(TokenKind.RightParen, "')'");
-            return new FromImportNode(Src(kw), mod.ToString(), AstList.Freeze(aliases), false);
+                ExpectClose(TokenKind.RightParen);
+            var node = new FromImportNode(Src(kw), mod.ToString(), AstList.Freeze(aliases), false);
+            if (node.Module == "__future__")
+                (_futureImports ?? (_futureImports = new List<FromImportNode>())).Add(node);
+            return node;
         }
 
         private ImportAlias ParseImportAsName()
         {
-            Token n = Expect(TokenKind.Name, "name");
-            string asName = Match(TokenKind.KwAs) ? Expect(TokenKind.Name, "name").Text : null;
+            Token n = Expect(TokenKind.Name);
+            string asName = ParseImportTarget();
+            ForbidDebug(asName ?? n.Text, Src(n));
             return new ImportAlias(Src(n), n.Text, asName);
         }
     }

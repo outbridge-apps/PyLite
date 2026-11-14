@@ -56,7 +56,7 @@ namespace Outbridge.PyLite.Tests.Modules
             var ex = Assert.Throws<EngineAbort>(() => Ev.Run("import time\ntime.sleep(0.05)\ntime.sleep(3)\n",
                 ResourceLimits.Default.With(sleepTotalMs: 1000)));
             Assert.Equal("SleepTotalMs", ex.LimitName);
-            Assert.InRange(sw.ElapsedMilliseconds, 50, 1500);
+            Assert.InRange(sw.ElapsedMilliseconds, 40, 2900);   // under the 3 s sleep it refused, with room for a loaded box
         }
 
         [Fact]

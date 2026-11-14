@@ -29,6 +29,11 @@
     <None Update="Spec\**\*.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- the CPython oracle corpus: scripts and CPython 3.14's output for them (OracleCorpusTests), and the
+         syntax errors it reports for broken snippets (SyntaxErrorOracleTests) -->
+    <None Update="Oracle\*.py;Oracle\*.out;Oracle\*.tsv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

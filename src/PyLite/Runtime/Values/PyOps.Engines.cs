@@ -67,7 +67,7 @@ namespace Outbridge.PyLite.Runtime.Values
             return true;
         }
 
-        // A tuple without tuple children (P6): the frame engine's arithmetic, steps and leaf depths
+        // A tuple without tuple children: the frame engine's arithmetic, steps and leaf depths
         // (depth + 1) without its stack and frame objects.
         private static long HashFlat(TupleValue t, EvalContext ctx, int depth)
         {
@@ -114,7 +114,7 @@ namespace Outbridge.PyLite.Runtime.Values
             if (depth > ctx.Limits.MaxDataDepth)
                 throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
             bool simple;
-            if (TrySimpleEquals(a, b, out simple))
+            if (TrySimpleEquals(a, b, ctx, out simple))
             {
                 ctx.Budget.Step();   // the one step the engine's loop charges a leaf pair
                 return simple;
@@ -139,10 +139,7 @@ namespace Outbridge.PyLite.Runtime.Values
                 else if (NumericOps.IsNumber(x) && NumericOps.IsNumber(y))
                     result = NumericOps.NumericEquals(x, y);
                 else if (x.Kind == ValueKind.Str && y.Kind == ValueKind.Str)
-                {
-                    string sx = ((StrValue)x).Value, sy = ((StrValue)y).Value;
-                    result = sx.Length == sy.Length && string.Equals(sx, sy, StringComparison.Ordinal);
-                }
+                    result = StrEquals(((StrValue)x).Value, ((StrValue)y).Value, ctx);
                 else if (BothSeq(x, y))
                 {
                     int cx = SeqCount(x), cy = SeqCount(y);
@@ -164,7 +161,14 @@ namespace Outbridge.PyLite.Runtime.Values
                 }
                 else if (x.Kind == ValueKind.Dict && y.Kind == ValueKind.Dict)
                 {
-                    if (((DictValue)x).Count != ((DictValue)y).Count)
+                    if (x is CounterValue && y is CounterValue)
+                    {
+                        if (depth + (stack == null ? 0 : stack.Count) > ctx.Limits.MaxDataDepth)
+                            throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
+                        StackGuard.ProbeData(ctx);
+                        result = CounterValue.EqualCounts((CounterValue)x, (CounterValue)y, ctx, depth + (stack == null ? 0 : stack.Count));
+                    }
+                    else if (((DictValue)x).Count != ((DictValue)y).Count)
                         result = false;
                     else if (((DictValue)x).Count == 0)
                         result = true;
@@ -230,8 +234,8 @@ namespace Outbridge.PyLite.Runtime.Values
             }
         }
 
-        // The pairs the engine settles without a frame or a hook (P6): identity, two machine ints, two strs.
-        private static bool TrySimpleEquals(ScriptValue x, ScriptValue y, out bool equal)
+        // The pairs the engine settles without a frame or a hook: identity, two machine ints, two strs.
+        private static bool TrySimpleEquals(ScriptValue x, ScriptValue y, EvalContext ctx, out bool equal)
         {
             if (ReferenceEquals(x, y))
             {
@@ -240,8 +244,7 @@ namespace Outbridge.PyLite.Runtime.Values
             }
             if (x.Kind == ValueKind.Str && y.Kind == ValueKind.Str)
             {
-                string sx = ((StrValue)x).Value, sy = ((StrValue)y).Value;
-                equal = sx.Length == sy.Length && string.Equals(sx, sy, StringComparison.Ordinal);
+                equal = StrEquals(((StrValue)x).Value, ((StrValue)y).Value, ctx);
                 return true;
             }
             if (x.Kind == ValueKind.Int && y.Kind == ValueKind.Int)
@@ -257,6 +260,47 @@ namespace Outbridge.PyLite.Runtime.Values
             return false;
         }
 
+        // The shape TrySimpleEquals settles, without comparing anything.
+        private static bool IsSimplePair(ScriptValue x, ScriptValue y)
+        {
+            if (ReferenceEquals(x, y) || (x.Kind == ValueKind.Str && y.Kind == ValueKind.Str))
+                return true;
+            return x.Kind == ValueKind.Int && y.Kind == ValueKind.Int && ((IntValue)x).IsSmall && ((IntValue)y).IsSmall;
+        }
+
+        // A long str pair is one native pass: it runs in chunks of LinearChunkSize chars with a step each, so
+        // its work is charged and the deadline seen. Short pairs keep the single call.
+        internal static bool StrEquals(string x, string y, EvalContext ctx)
+        {
+            int n = x.Length;
+            if (n != y.Length)
+                return false;
+            if (n <= BudgetCost.LinearChunkSize)
+                return string.Equals(x, y, StringComparison.Ordinal);
+            for (int i = 0; i < n; i += BudgetCost.LinearChunkSize)
+            {
+                ctx.Budget.Step(BudgetCost.LinearChunk);
+                if (string.CompareOrdinal(x, i, y, i, Math.Min(BudgetCost.LinearChunkSize, n - i)) != 0)
+                    return false;
+            }
+            return true;
+        }
+
+        internal static int StrCompare(string x, string y, EvalContext ctx)
+        {
+            int n = Math.Min(x.Length, y.Length);
+            if (n <= BudgetCost.LinearChunkSize)
+                return string.CompareOrdinal(x, y);
+            for (int i = 0; i < n; i += BudgetCost.LinearChunkSize)
+            {
+                ctx.Budget.Step(BudgetCost.LinearChunk);
+                int c = string.CompareOrdinal(x, i, y, i, Math.Min(BudgetCost.LinearChunkSize, n - i));
+                if (c != 0)
+                    return c;
+            }
+            return x.Length.CompareTo(y.Length);
+        }
+
         // Two equal-length tuples whose pairs are all simple: the engine's steps and frame charge without
         // the stack and the frame. 1 equal, 0 not, -1 not this shape (the engine takes it).
         private static int FlatTupleEquals(TupleValue a, TupleValue b, EvalContext ctx, int depth)
@@ -264,10 +308,9 @@ namespace Outbridge.PyLite.Runtime.Values
             ScriptValue[] xs = a.Items, ys = b.Items;
             if (xs.Length != ys.Length || xs.Length == 0)
                 return -1;
-            bool unused;
             for (int i = 0; i < xs.Length; i++)
             {
-                if (!TrySimpleEquals(xs[i], ys[i], out unused))
+                if (!IsSimplePair(xs[i], ys[i]))
                     return -1;
             }
             ctx.Budget.Step();   // the tuples' own iteration
@@ -278,7 +321,7 @@ namespace Outbridge.PyLite.Runtime.Values
             {
                 ctx.Budget.Step();
                 bool eq;
-                TrySimpleEquals(xs[i], ys[i], out eq);
+                TrySimpleEquals(xs[i], ys[i], ctx, out eq);
                 if (!eq)
                     return 0;
             }
@@ -325,10 +368,12 @@ namespace Outbridge.PyLite.Runtime.Values
         {
             private readonly DictValue _x, _y;
             private int _pos;
-            public DictFrame(DictValue x, DictValue y) { _x = x; _y = y; }
+            public DictFrame(DictValue x, DictValue y) { _x = x; _y = y; _pos = -1; }
 
             public override bool TryNext(EvalContext ctx, int depth, out ScriptValue cx, out ScriptValue cy, ref bool mismatch)
             {
+                if (_pos < 0)
+                    _pos = _x.Table.WalkStart(ctx);
                 while (_pos < _x.Table.EntriesUsed)
                 {
                     long h;
@@ -397,35 +442,54 @@ namespace Outbridge.PyLite.Runtime.Values
                 if (NumericOps.IsNumber(a) && NumericOps.IsNumber(b))
                     return NumericOps.NumericCompareOp(op, a, b);
                 if (a.Kind == ValueKind.Str && b.Kind == ValueKind.Str)
-                    return NumericOps.ApplyCmp(op, string.CompareOrdinal(((StrValue)a).Value, ((StrValue)b).Value));
+                    return NumericOps.ApplyCmp(op, StrCompare(((StrValue)a).Value, ((StrValue)b).Value, ctx));
                 if (BothSeq(a, b))
                 {
-                    int la = SeqCount(a), lb = SeqCount(b), n = Math.Min(la, lb);
-                    int firstUnequal = -1;
-                    for (int i = 0; i < n; i++)
+                    int i = 0;
+                    if (a.Kind == ValueKind.List)   // BothSeq: two lists, or two tuple-likes
                     {
-                        ctx.Budget.Step();
-                        if (!Equals(SeqItem(a, i), SeqItem(b, i), ctx, depth))
+                        // CPython's list_richcompare: the live sizes at every pair and after the loop, since
+                        // an item's __eq__ may shrink either list (a count taken once read past the end).
+                        List<ScriptValue> xa = ((ListValue)a).Items, xb = ((ListValue)b).Items;
+                        for (; i < xa.Count && i < xb.Count; i++)
                         {
-                            firstUnequal = i;
-                            break;
+                            ctx.Budget.Step();
+                            if (!Equals(xa[i], xb[i], ctx, depth))
+                                break;
                         }
+                        if (i >= xa.Count || i >= xb.Count)
+                            return NumericOps.ApplyCmp(op, xa.Count.CompareTo(xb.Count));
+                        a = xa[i];
+                        b = xb[i];
                     }
-
-                    if (firstUnequal >= 0)
+                    else
                     {
-                        a = SeqItem(a, firstUnequal);
-                        b = SeqItem(b, firstUnequal);
-                        depth++;
-                        continue;
+                        ScriptValue[] ta = TupleItems(a), tb = TupleItems(b);   // immutable: one count
+                        int n = Math.Min(ta.Length, tb.Length);
+                        for (; i < n; i++)
+                        {
+                            ctx.Budget.Step();
+                            if (!Equals(ta[i], tb[i], ctx, depth))
+                                break;
+                        }
+                        if (i == n)
+                            return NumericOps.ApplyCmp(op, ta.Length.CompareTo(tb.Length));
+                        a = ta[i];
+                        b = tb[i];
                     }
-
-                    return NumericOps.ApplyCmp(op, la.CompareTo(lb));
+                    depth++;
+                    continue;
                 }
 
                 CounterValue ca = a as CounterValue, cb = b as CounterValue;
                 if (ca != null && cb != null)
-                    return CounterValue.Inclusion(op, ca, cb, ctx);
+                {
+                    // The counts compare through this engine again (a Counter of Counters): a C# frame per level.
+                    if (depth > ctx.Limits.MaxDataDepth)
+                        throw Raise.RecursionError(ctx, "maximum recursion depth exceeded in comparison");
+                    StackGuard.ProbeData(ctx);
+                    return CounterValue.Inclusion(op, ca, cb, ctx, depth);
+                }
 
                 if (SetOps.IsSetLike(a) && SetOps.IsSetLike(b))
                     return SetOps.OrderLike(op, a, b, ctx);   // subset ordering: set, frozenset, dict keys/items
@@ -518,6 +582,12 @@ namespace Outbridge.PyLite.Runtime.Values
                 return ((ListValue)v).Items.Count;
             StructTimeValue st = v as StructTimeValue;
             return st != null ? st.Items.Length : ((TupleValue)v).Items.Length;
+        }
+
+        private static ScriptValue[] TupleItems(ScriptValue v)
+        {
+            StructTimeValue st = v as StructTimeValue;
+            return st != null ? st.Items : ((TupleValue)v).Items;
         }
 
         private static ScriptValue SeqItem(ScriptValue v, int i)

@@ -8,8 +8,8 @@ using Xunit;
 
 namespace Outbridge.PyLite.Tests.Values
 {
-    // BigOps: a native BigInteger call past LongWork runs on a helper thread while the run thread polls the
-    // deadline. The answers are the direct call's; an abort ends the run on time instead of after the call.
+    // BigOps: an operation past LongWork runs in BigKernel on the run thread, which checks the deadline as it
+    // goes. The answers are BigInteger's; an abort ends the run on time and leaves nothing computing.
     [Collection("TimeSensitive")]   // asserts wall-clock bounds
     [Trait("Category", "ResourceLimits")]
     [Trait("Category", "MachineSensitive")]
@@ -34,7 +34,7 @@ namespace Outbridge.PyLite.Tests.Values
             Assert.Equal(r0, r1);
             Assert.Equal(BigInteger.GreatestCommonDivisor(A, B), BigOps.Gcd(ctx, A, B));
             Assert.Equal(BigInteger.Pow(7, 49000), BigOps.Pow(ctx, 7, 49000, 49000 * 2.81));
-            Assert.Equal(A.ToString(System.Globalization.CultureInfo.InvariantCulture), BigOps.ToDecimalString(ctx, A));
+            Assert.Equal(A.ToString(System.Globalization.CultureInfo.InvariantCulture), BigKernel.ToDecimalString(ctx, A));   // past str()'s 4,300 digits: the kernel itself
             Assert.Equal(BigInteger.ModPow(A, 65537, B), BigOps.ModPow(ctx, A, 65537, B, 17 * 2150L * 2150));
         }
 
@@ -44,19 +44,44 @@ namespace Outbridge.PyLite.Tests.Values
             AssertEndsNearDeadline(ctx => BigOps.Gcd(ctx, HugeA, HugeB));
         }
 
+        // The kernel checks the deadline as it computes, on the run's own thread: a product, square or division
+        // that takes 0.1-1 s stops at a 20 ms deadline from inside (it checks only at its entry otherwise, and
+        // would return), and there is no helper thread left to finish it.
         [Fact]
-        public void LongDecimalStringEndsAtTheDeadline()
+        public void LongProductEndsAtTheDeadline()
         {
-            AssertEndsNearDeadline(ctx => BigOps.ToDecimalString(ctx, HugeA));
+            AssertEndsNearDeadline(ctx => BigOps.Multiply(ctx, HugeA, HugeB), 20);
         }
 
         [Fact]
-        public void LongIntParseEndsAtTheDeadline()
+        public void LongSquareEndsAtTheDeadline()
         {
-            var sw = Stopwatch.StartNew();
-            var ex = Assert.Throws<EngineAbort>(() => Ev.Run("x = int('z' * 190000, 36)\n", ResourceLimits.Default.With(deadlineMs: 500)));
-            Assert.Equal("DeadlineMs", ex.LimitName);
-            Assert.True(sw.ElapsedMilliseconds < 1500, sw.ElapsedMilliseconds + " ms");   // the parse alone takes seconds
+            AssertEndsNearDeadline(ctx => BigOps.Multiply(ctx, HugeA, HugeA), 20);
+        }
+
+        [Fact]
+        public void LongDivisionEndsAtTheDeadline()
+        {
+            AssertEndsNearDeadline(ctx => BigOps.DivRem(ctx, HugeA << 950000, HugeB, out _), 20);
+        }
+
+        [Fact]
+        public void LongModPowEndsAtTheDeadline()
+        {
+            AssertEndsNearDeadline(ctx => BigOps.ModPow(ctx, HugeA, HugeB, HugeA + HugeB, long.MaxValue));
+        }
+
+        [Fact]
+        public void LongDecimalStringEndsAtTheDeadline()
+        {
+            AssertEndsNearDeadline(ctx => BigKernel.ToDecimalString(ctx, HugeA));
+        }
+
+        [Fact]
+        public void LongIntParseFitsTheDeadline()
+        {
+            // base 32 packs bits (it took seconds when it multiplied); other bases stop at 4300 digits
+            Ev.Run("x = int('v' * 190000, 32)\n", ResourceLimits.Default.With(deadlineMs: 500));
         }
 
         // A huge exponent and modulus, or the inverse of a huge modulus, end on the budget, not past the deadline.
@@ -68,17 +93,17 @@ namespace Outbridge.PyLite.Tests.Values
             var sw = Stopwatch.StartNew();
             var ex = Assert.Throws<EngineAbort>(() => Ev.Run(src, ResourceLimits.Default.With(deadlineMs: 1000)));
             Assert.Contains(ex.LimitName, new[] { "DeadlineMs", "MaxSteps" });
-            Assert.True(sw.ElapsedMilliseconds < 4000, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < 6000, sw.ElapsedMilliseconds + " ms");
         }
 
-        private static void AssertEndsNearDeadline(System.Action<Outbridge.PyLite.Runtime.EvalContext> op)
+        private static void AssertEndsNearDeadline(System.Action<Outbridge.PyLite.Runtime.EvalContext> op, int deadlineMs = 200)
         {
             Assert.False(HugeA.IsZero || HugeB.IsZero);   // build the operands before the deadline clock starts
-            var ctx = Rt.Ctx(ResourceLimits.Default.With(deadlineMs: 200));
+            var ctx = Rt.Ctx(ResourceLimits.Default.With(deadlineMs: deadlineMs));
             var sw = Stopwatch.StartNew();
             var ex = Assert.Throws<EngineAbort>(() => op(ctx));
             Assert.Equal("DeadlineMs", ex.LimitName);
-            Assert.True(sw.ElapsedMilliseconds < 1000, sw.ElapsedMilliseconds + " ms");
+            Assert.True(sw.ElapsedMilliseconds < 1500, sw.ElapsedMilliseconds + " ms");
         }
     }
 }

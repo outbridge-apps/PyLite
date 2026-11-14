@@ -141,7 +141,8 @@ namespace Outbridge.PyLite.Tests.Builtins
                 double v = BitConverter.Int64BitsToDouble(BitConverter.ToInt64(buf, 0));
                 if (double.IsNaN(v) || double.IsInfinity(v))
                     continue;
-                double parsed = double.Parse(FloatRepr.Repr(v), NumberStyles.Float, CultureInfo.InvariantCulture);
+                double parsed;   // .NET Framework's double.Parse is not correctly rounded: read back as CPython does
+                Assert.True(NearestDouble.TryParse(FloatRepr.Repr(v), out parsed));
                 Assert.Equal(BitConverter.DoubleToInt64Bits(v), BitConverter.DoubleToInt64Bits(parsed));
                 chec0++;
             }

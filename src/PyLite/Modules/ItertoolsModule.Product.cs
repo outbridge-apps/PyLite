@@ -17,6 +17,7 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Tee(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
+            Args.NoKw(ctx, kw, "itertools.tee");
             Args.Unpack(ctx, args, "tee", 1, 2);
             int n = 2;
             if (args.Length == 2)
@@ -28,13 +29,16 @@ namespace Outbridge.PyLite.Modules
             }
             IScriptIterator src = IterArg(ctx, args[0]);
             ctx.Values.EnsureCollectionSize(n);   // n comes from the script: cap it before the array
+            ctx.Values.PreCharge(96L * n);         // a clone and its iterator object each
             var buf = new TeeBuffer(src);
             var tuple = new ScriptValue[n];
             for (int i = 0; i < n; i++)
             {
+                if ((i & 4095) == 4095)
+                    ctx.Budget.CheckDeadlineNow();   // ~1.5 us per clone: 1.5M of them took 2-3 s
                 var t = new TeeIterator(buf);
                 buf.Register(t);
-                tuple[i] = ctx.Values.Iterator(t, "itertools._tee");
+                tuple[i] = ctx.Values.EngineIterator(t, "itertools._tee");
             }
             return ctx.Values.Tuple(tuple);
         }
@@ -56,13 +60,14 @@ namespace Outbridge.PyLite.Modules
                 basePools[i] = Support.Iter.ToArray(ctx, args[i]);   // an infinite input stops on MaxCollectionItems here
             }
             long poolCount = (long)args.Length * repeat;
+            ctx.Values.EnsureCollectionSize(poolCount);   // every output is a poolCount-tuple
             ctx.Values.PreCharge(poolCount * 8 + 16);   // bounds poolCount before the (int) cast + alloc
             var pools = new ScriptValue[(int)poolCount][];
             int idx = 0;
             for (int r = 0; r < repeat; r++)
                 for (int i = 0; i < args.Length; i++)
                     pools[idx++] = basePools[i];
-            return ctx.Values.Iterator(new ProductIterator(pools), "itertools.product");
+            return ctx.Values.EngineIterator(new ProductIterator(pools), "itertools.product");
         }
 
         private static BigInteger AsCountInt(EvalContext ctx, ScriptValue v) { return Coerce.ToIndex(ctx, v, "count"); }
@@ -74,30 +79,39 @@ namespace Outbridge.PyLite.Modules
         private readonly IScriptIterator _src;
         private readonly List<ScriptValue> _ring = new List<ScriptValue>();
         private readonly List<TeeIterator> _clones = new List<TeeIterator>();
-        private long _baseIndex;    // absolute index of _ring[0]
+        private int _head;          // _ring[_head] is the element at _baseIndex; the slots before it are spent
+        private long _baseIndex;
         private long _producedTo;   // total elements pulled from the source
-        private bool _srcDone;
+        // The lowest clone position and how many clones are there. The clones are scanned only when the
+        // last of them leaves it, and every clone has moved past it by then: O(1) per element amortized
+        // for any clone count (the scan per element made tee(it, 1500000) quadratic).
+        private long _min;
+        private int _atMin;
 
         internal TeeBuffer(IScriptIterator src) { _src = src; }
 
-        internal void Register(TeeIterator t) { _clones.Add(t); }
+        internal void Register(TeeIterator t)
+        {
+            _clones.Add(t);
+            _atMin++;   // every clone starts at position 0, which is _min until a clone moves
+        }
 
         internal bool Get(EvalContext ctx, long absIdx, out ScriptValue v)
         {
-            while (absIdx >= _producedTo && !_srcDone)
+            // the source is asked again after its end, as CPython's tee asks it: one that resumes is read on
+            bool more = true;
+            while (absIdx >= _producedTo && more)
             {
                 ScriptValue nv;
-                if (_src.MoveNext(ctx, out nv))
+                more = _src.MoveNext(ctx, out nv);
+                if (more)
                 {
                     ctx.Values.PreCharge(16);
                     _ring.Add(nv);
                     _producedTo++;
-                    if (_ring.Count > ItertoolsModule.TeeBufferCap)
-                        throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "TeeBufferCap", ItertoolsModule.TeeBufferCap, _ring.Count);
-                }
-                else
-                {
-                    _srcDone = true;
+                    int live = _ring.Count - _head;
+                    if (live > ItertoolsModule.TeeBufferCap)
+                        throw ctx.Budget.CreateAbort(EngineAbortKind.Memory, "TeeBufferCap", ItertoolsModule.TeeBufferCap, live);
                 }
             }
             if (absIdx >= _producedTo)
@@ -105,20 +119,38 @@ namespace Outbridge.PyLite.Modules
                 v = null;
                 return false;
             }
-            v = _ring[(int)(absIdx - _baseIndex)];
+            v = _ring[_head + (int)(absIdx - _baseIndex)];
             return true;
         }
 
-        internal void RecomputeMinAndTrim()
+        // A clone moved from `from` to from + 1.
+        internal void Moved(long from)
         {
-            long min = long.MaxValue;
+            if (from != _min || --_atMin > 0)
+                return;
+            _min = long.MaxValue;
             for (int i = 0; i < _clones.Count; i++)
-                if (_clones[i].Pos < min)
-                    min = _clones[i].Pos;
-            while (_baseIndex < min && _ring.Count > 0)
             {
-                _ring.RemoveAt(0);
+                long p = _clones[i].Pos;
+                if (p < _min)
+                {
+                    _min = p;
+                    _atMin = 1;
+                }
+                else if (p == _min)
+                {
+                    _atMin++;
+                }
+            }
+            while (_baseIndex < _min && _head < _ring.Count)
+            {
+                _ring[_head++] = null;
                 _baseIndex++;
+            }
+            if (_head > 1024 && 2 * _head > _ring.Count)
+            {
+                _ring.RemoveRange(0, _head);
+                _head = 0;
             }
         }
     }
@@ -136,7 +168,7 @@ namespace Outbridge.PyLite.Modules
             if (!_buf.Get(ctx, Pos, out value))
                 return false;
             Pos += 1;
-            _buf.RecomputeMinAndTrim();
+            _buf.Moved(Pos - 1);
             return true;
         }
     }

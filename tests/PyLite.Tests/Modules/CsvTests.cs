@@ -41,7 +41,8 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = list(csv.reader(['a,b,']))", "[['a', 'b', '']]")]
         [InlineData("r = list(csv.reader([',']))", "[['', '']]")]
         [InlineData("r = list(csv.reader(['']))", "[[]]")]
-        [InlineData("r = list(csv.reader(['\"multi', 'line\",b']))", "[['multi\\nline', 'b']]")]
+        [InlineData("r = list(csv.reader(['\"multi', 'line\",b']))", "[['multiline', 'b']]")]   // lines without endings: CPython adds none
+        [InlineData("r = list(csv.reader(['\"multi\\n', 'line\",b']))", "[['multi\\nline', 'b']]")]
         [InlineData("r = list(csv.reader(StringIO('a,b\\nc,d\\n')))", "[['a', 'b'], ['c', 'd']]")]
         // ---- csv.writer ----
         [InlineData("s = StringIO()\nw = csv.writer(s)\nw.writerow(['a', 'b'])\nr = s.getvalue()", "'a,b\\r\\n'")]
@@ -66,7 +67,7 @@ namespace Outbridge.PyLite.Tests.Modules
 
         [Theory]
         [InlineData("x = list(csv.reader([1, 2]))", "Error")]
-        [InlineData("x = list(csv.reader(['\"unterminated']))", "Error")]
+        [InlineData("x = list(csv.reader(['\"unterminated'], strict=True))", "Error")]
         [InlineData("s = StringIO()\nw = csv.writer(s, quoting=csv.QUOTE_NONE)\nw.writerow(['a,b'])", "Error")]
         [InlineData("s = StringIO()\nw = csv.DictWriter(s, ['a'])\nw.writerow({'a': 1, 'zzz': 2})", "ValueError")]
         public void Errors(string body, string excType)
@@ -77,7 +78,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [Fact]
         public void ReaderErrorIsCatchable()
         {
-            string src = P + "caught = False\ntry:\n    list(csv.reader(['\"open']))\nexcept csv.Error:\n    caught = True\nr = caught\n";
+            string src = P + "caught = False\ntry:\n    list(csv.reader(['\"open'], strict=True))\nexcept csv.Error:\n    caught = True\nr = caught\n";
             Assert.Equal("True", Ev.Run(src).Repr("r"));
         }
 
@@ -96,7 +97,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("r = list(csv.reader(['\"a\"b']))", "[['ab']]")]                     // lenient by default
         [InlineData("r = list(csv.reader(['a\"b'], strict=True))", "[['a\"b']]")]        // literal mid-field quote
         [InlineData("r = list(csv.reader(['\"a\",b'], quoting=csv.QUOTE_NONE))", "[['\"a\"', 'b']]")]
-        [InlineData("r = list(csv.reader(['\"a', 'b\"']))", "[['a\\nb']]")]              // still spans lines
+        [InlineData("r = list(csv.reader(['\"a', 'b\"']))", "[['ab']]")]                 // still spans lines, adding no ending
         public void ReaderOptions(string body, string expected)
         {
             Assert.Equal(expected, Body(body));

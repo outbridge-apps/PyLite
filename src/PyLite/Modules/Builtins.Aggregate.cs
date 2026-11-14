@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
@@ -45,15 +46,85 @@ namespace Outbridge.PyLite.Modules
                 start = args.Length == 2 ? args[1] : c.Values.Int(0);
             if (start.Kind == ValueKind.Str)
                 throw Raise.TypeError(c, "sum() can't sum strings [use ''.join(seq) instead]");
+            if (start.Kind == ValueKind.Bytes)
+                throw Raise.TypeError(c, "sum() can't sum bytes [use b''.join(seq) instead]");
             ScriptValue fast = TrySumSmall(c, args[0], start);
             if (fast != null)
                 return fast;
             ScriptValue acc = start;
             IScriptIterator it = PyOps.GetIterator(args[0], c);
             ScriptValue v;
+            long small;
+            // CPython's phases: machine-word ints, then floats with Neumaier compensation, then generic adds.
+            // A bool start is not an exact int there: sum([], True) is True.
+            if (acc.Kind != ValueKind.Bool && TrySmallInt(acc, out small))
+            {
+                long total = small;
+                for (;;)
+                {
+                    if (!it.MoveNext(c, out v))
+                        return c.Values.Int(total);
+                    if (TrySmallInt(v, out small))
+                    {
+                        long r = unchecked(total + small);
+                        if (((total ^ r) & (small ^ r)) >= 0)
+                        {
+                            total = r;
+                            continue;
+                        }
+                    }
+                    acc = PyOps.BinaryOp(PyBinOp.Add, c.Values.Int(total), v, c);
+                    break;
+                }
+            }
+            if (acc.Kind == ValueKind.Float)
+            {
+                double hi = ((FloatValue)acc).Value, lo = 0.0;
+                for (;;)
+                {
+                    if (!it.MoveNext(c, out v))
+                        return c.Values.Float(CompensatedTotal(hi, lo));
+                    FloatValue fv = v as FloatValue;
+                    if (fv != null)
+                    {
+                        double x = fv.Value, t = hi + x;
+                        lo += Math.Abs(hi) >= Math.Abs(x) ? (hi - t) + x : (x - t) + hi;
+                        hi = t;
+                        continue;
+                    }
+                    if (TrySmallInt(v, out small))
+                    {
+                        double x = small, t = hi + x;   // 3.14 compensates these too
+                        lo += Math.Abs(hi) >= Math.Abs(x) ? (hi - t) + x : (x - t) + hi;
+                        hi = t;
+                        continue;
+                    }
+                    acc = PyOps.BinaryOp(PyBinOp.Add, c.Values.Float(CompensatedTotal(hi, lo)), v, c);
+                    break;
+                }
+            }
             while (it.MoveNext(c, out v))
                 acc = PyOps.BinaryOp(PyBinOp.Add, acc, v, c);
             return acc;
+        }
+
+        // A zero or non-finite compensation is dropped: it keeps -0.0's sign and an infinite sum from turning NaN.
+        private static double CompensatedTotal(double hi, double lo)
+        {
+            return lo != 0.0 && !double.IsNaN(lo) && !double.IsInfinity(lo) ? hi + lo : hi;
+        }
+
+        private static bool TrySmallInt(ScriptValue v, out long value)
+        {
+            IntValue iv = v as IntValue;
+            if (iv != null && iv.IsSmall)
+            {
+                value = iv.Small;
+                return true;
+            }
+            BoolValue bv = v as BoolValue;
+            value = bv != null && bv.Value ? 1 : 0;
+            return bv != null;
         }
 
         // sum() fast path: a list/tuple whose elements are all long-backed ints accumulates in long.
@@ -137,7 +208,7 @@ namespace Outbridge.PyLite.Modules
                 return best;
             if (hasDefault)
                 return dflt;
-            throw Raise.ValueError(c, name + "() arg is an empty sequence");
+            throw Raise.ValueError(c, name + "() iterable argument is empty");
         }
 
         // min/max fast path (no key): a non-empty list/tuple of long-backed ints compares in long,
@@ -174,7 +245,8 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue SortedBuiltin(EvalContext c, ScriptValue[] args, KwArgs kw)
         {
-            Args.Exactly(c, args, "sorted", 1);
+            if (args.Length != 1)
+                throw Raise.TypeError(c, "sorted expected 1 argument, got " + args.Length);
             ScriptValue key = null;
             bool reverse = false;
             var r = new KwReader(c, kw, "sorted");

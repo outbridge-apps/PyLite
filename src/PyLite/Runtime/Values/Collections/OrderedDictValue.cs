@@ -22,8 +22,8 @@ namespace Outbridge.PyLite.Runtime.Values
         private static IDictionary<string, SlotDescriptor> BuildSlots()
         {
             IDictionary<string, SlotDescriptor> slots = DictMethods.BuildSlots();   // inherit keys/values/items/get/pop/update/...
-            slots["move_to_end"] = SlotDescriptor.MakeMethod("move_to_end", MoveToEnd);
-            slots["popitem"] = SlotDescriptor.MakeMethod("popitem", PopItem);
+            slots["move_to_end"] = SlotDescriptor.MakeMethod("move_to_end", Args.BoundKeywords("move_to_end", 1, MoveToEnd, "key", "last"));
+            slots["popitem"] = SlotDescriptor.MakeMethod("popitem", Args.BoundKeywords("popitem", PopItem, "last"));
             slots["copy"] = SlotDescriptor.MakeMethod("copy", Args.Positional("copy", 0, 0, (self, a, kw, ctx) =>
             {
                 return ctx.Values.CopyDict((OrderedDictValue)self);
@@ -64,8 +64,7 @@ namespace Outbridge.PyLite.Runtime.Values
             long h = PyOps.Hash(key, ctx, 0);
             if (last)
             {
-                od.Table.Delete(key, h, ctx, 0);
-                od.Table.InsertOrUpdate(key, h, val, ctx, 0);
+                od.Table.MoveToEnd(key, h, ctx, 0);
             }
             else
             {

@@ -12,21 +12,46 @@ using Outbridge.PyLite.Modules.Support;
 namespace Outbridge.PyLite.Modules
 {
     // uuid: UUID over byte[16] big-endian; uuid1/3/4/5 and NAMESPACE_* constants.
-    // 2026-07-08 decision: MD5/SHA1 from System.Security.Cryptography (no managed MD5 port). RNG-dependent
-    // parts (uuid4, clock_seq, node) come from ctx.Random; time from ctx.Clock; per-context uuid1 state.
+    // MD5/SHA1 from System.Security.Cryptography (no managed MD5 port). uuid4 reads the OS generator, the uuid1
+    // node is drawn once per run and clock_seq from ctx.Random; time from ctx.Clock.
     internal static class UuidModule
     {
-        private static readonly BigInteger Uuid1582Offset = BigInteger.Parse("122192928000000000"); // 0x01b21dd213814000
+        private const long Uuid1582Offset = 122192928000000000L;   // 0x01b21dd213814000
+
+        // uuid1's state, per run: a node shared by the process told one tenant's script that another's ran in the same
+        // process. A random multicast node (the run's random.seed does not reach it) and the last timestamp handed out.
+        private sealed class Uuid1State
+        {
+            internal BigInteger Node;
+            internal long LastTimestamp;
+        }
+
+        private static Uuid1State RunState(EvalContext ctx)
+        {
+            object o;
+            if (ctx.ModuleState.TryGetValue("uuid1", out o))
+                return (Uuid1State)o;
+            var bytes = new byte[8];
+            using (var rng = new RNGCryptoServiceProvider())
+                rng.GetBytes(bytes);
+            var s = new Uuid1State
+            {
+                Node = (new BigInteger(BitConverter.ToUInt64(bytes, 0)) & new BigInteger(0xFFFFFFFFFFFF))
+                    | new BigInteger(0x010000000000),   // the multicast bit marks a node that is no real address
+            };
+            ctx.ModuleState["uuid1"] = s;
+            return s;
+        }
         private static readonly BigInteger TwoPow128 = BigInteger.One << 128;
 
         public static ModuleValue Create(EvalContext ctx)
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
-            m["UUID"] = ctx.Values.Type("UUID", UuidCtor, null, null);
-            m["uuid1"] = BuiltinFunctionValue.Make("uuid1", Uuid1);
-            m["uuid3"] = BuiltinFunctionValue.Make("uuid3", Uuid3);
-            m["uuid4"] = BuiltinFunctionValue.Make("uuid4", Uuid4);
-            m["uuid5"] = BuiltinFunctionValue.Make("uuid5", Uuid5);
+            m["UUID"] = ctx.Values.EngineType("UUID", Args.KnownKeywords("UUID", 6, UuidCtor, "hex", "bytes", "bytes_le", "fields", "int", "version", "is_safe"), null, null);
+            m["uuid1"] = BuiltinFunctionValue.Make("uuid1", Args.KnownKeywords("uuid1", 2, Uuid1, "node", "clock_seq"));
+            m["uuid3"] = BuiltinFunctionValue.Make("uuid3", Args.BoundKeywords("uuid3", 2, Uuid3, "namespace", "name"));
+            m["uuid4"] = BuiltinFunctionValue.Make("uuid4", Args.Positional("uuid4", 0, 0, Uuid4));
+            m["uuid5"] = BuiltinFunctionValue.Make("uuid5", Args.BoundKeywords("uuid5", 2, Uuid5, "namespace", "name"));
             m["NAMESPACE_DNS"] = FromHex("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
             m["NAMESPACE_URL"] = FromHex("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
             m["NAMESPACE_OID"] = FromHex("6ba7b812-9dad-11d1-80b4-00c04fd430c8");
@@ -46,8 +71,11 @@ namespace Outbridge.PyLite.Modules
         // UUID(hex=None, int=None, bytes=None, *, version=None). bytes_le/fields -> v2.
         private static ScriptValue UuidCtor(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
+            // UUID(hex, bytes, bytes_le, fields, int, version): the positions after the first were dropped
             ScriptValue hexArg = args.Length >= 1 ? args[0] : null;
-            ScriptValue intArg = null, bytesArg = null, bytesLeArg = null, fieldsArg = null, versionArg = null, v;
+            ScriptValue bytesArg = args.Length >= 2 ? args[1] : null, bytesLeArg = args.Length >= 3 ? args[2] : null;
+            ScriptValue fieldsArg = args.Length >= 4 ? args[3] : null, intArg = args.Length >= 5 ? args[4] : null;
+            ScriptValue versionArg = args.Length >= 6 ? args[5] : null, v;
             if (kw.TryGet("hex", out v)) hexArg = v;
             if (kw.TryGet("int", out v)) intArg = v;
             if (kw.TryGet("bytes", out v)) bytesArg = v;
@@ -118,7 +146,7 @@ namespace Outbridge.PyLite.Modules
 
         private static BigInteger ParseHexImpl(string hex, EvalContext ctx)
         {
-            string h = hex.Replace("urn:", "").Replace("uuid:", "").Trim().Trim('{', '}').Replace("-", "");
+            string h = hex.Replace("urn:", "").Replace("uuid:", "").Trim('{', '}').Replace("-", "");   // no whitespace is stripped
             if (h.Length != 32 || !IsHex(h))
             {
                 if (ctx != null)
@@ -182,19 +210,20 @@ namespace Outbridge.PyLite.Modules
 
         // ---- uuid1/3/4/5 ----
 
+        // CPython's uuid4 reads os.urandom, not the random module: a seeded run must not repeat its ids.
         private static ScriptValue Uuid4(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            RandomState r = Rand(ctx);
             var bytes = new byte[16];
-            r.NextBytes(bytes);
+            RandomState.OsBytes(bytes);
             BigInteger intval = BytesToInt(bytes);
+            ctx.Values.ChargeObject(2);
             return new UuidValue(UuidValue.FromInt(ApplyVariantVersion(intval, 4)));
         }
 
         private static ScriptValue Uuid3(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             byte[] digest;
-            using (var md5 = MD5.Create())
+            using (var md5 = new Md5Managed())   // refused on a FIPS-enforcing machine otherwise
                 digest = md5.ComputeHash(NamespacePlusName(ctx, args, "uuid3"));
             return HashUuid(digest, 3);
         }
@@ -254,13 +283,14 @@ namespace Outbridge.PyLite.Modules
 
             RandomState r = Rand(ctx);
 
-            // 60-bit timestamp: 100-ns intervals since 1582-10-15, with a per-context collision counter.
+            // 60-bit timestamp: 100-ns intervals since 1582-10-15, strictly increasing within the run as CPython's
+            // _last_timestamp is; runs differ by their node.
+            Uuid1State state = RunState(ctx);
             DateTime now = ctx.Clock.UtcNow;
-            BigInteger unix100ns = (now - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks;
-            BigInteger timestamp = unix100ns + Uuid1582Offset;
-            if (ctx.UuidLastTimestamp >= 0 && timestamp <= ctx.UuidLastTimestamp)
-                timestamp = ctx.UuidLastTimestamp + 1;
-            ctx.UuidLastTimestamp = timestamp;
+            long timestamp = (now - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks + Uuid1582Offset;
+            if (timestamp <= state.LastTimestamp)
+                timestamp = state.LastTimestamp + 1;
+            state.LastTimestamp = timestamp;
 
             BigInteger clockSeq;
             if (clockSeqArg != null && clockSeqArg.Kind != ValueKind.None)
@@ -275,14 +305,7 @@ namespace Outbridge.PyLite.Modules
             }
             else
             {
-                if (ctx.UuidNode < 0)
-                {
-                    var nb = new byte[8];
-                    r.NextBytes(nb);
-                    BigInteger rand48 = (new BigInteger(BitConverter.ToUInt64(nb, 0))) & new BigInteger(0xFFFFFFFFFFFF);
-                    ctx.UuidNode = rand48 | new BigInteger(0x010000000000);   // multicast bit
-                }
-                node = ctx.UuidNode;
+                node = state.Node;
             }
 
             BigInteger timeLow = timestamp & 0xffffffff;

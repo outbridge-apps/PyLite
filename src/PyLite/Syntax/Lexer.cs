@@ -4,10 +4,9 @@ using System.Text;
 
 namespace Outbridge.PyLite.Syntax
 {
-    // Documented differences from CPython (3.14 reference; feed the migration guide)
-    // f-strings as such; async/await reserved; no NFKC on identifiers; stricter tab rules
-    // (only spaces OR only tabs per block); special texts for _/j suffixes and bytes literals;
-    // escapes in f-strings never produce field delimiters; triple-string newlines normalized to \n.
+    // Documented differences from CPython (3.14 reference; feed the migration guide): async/await reserved;
+    // no complex or t-string literals; escapes in f-strings never produce field delimiters; triple-string
+    // newlines normalized to \n. Errors, their texts and positions are CPython's tokenizer's.
     internal sealed partial class Lexer
     {
         private readonly string _src;
@@ -16,18 +15,28 @@ namespace Outbridge.PyLite.Syntax
         private int _pos;
         private int _line;
         private int _lineStart;
-        private int _parenDepth;
+        private int _parenDepth;   // open brackets on _brackets, f-string field brackets included
         private bool _atLineStart;
         private bool _lineHasTokens;
         private long _tokenCount;
+        internal long TokenCount { get { return _tokenCount; } }
         private readonly Queue<Token> _pending = new Queue<Token>();
         private readonly StringBuilder _sb = new StringBuilder();
         private bool _eofEmitted;
         private Token _eofToken;
+        private int _lastTokenLine;
+        private bool _draining;
 
-        private struct IndentEntry { public int Offset; public int Length; }
+        private struct Bracket { public char Ch; public int Line; public int Col; }
+        private Bracket[] _brackets = new Bracket[16];
+
+        // CPython's two widths: tabs to multiples of 8 (Col) and tabs as one column (AltCol); they must agree.
+        private struct IndentEntry { public int Col; public int AltCol; }
         private readonly IndentEntry[] _indentStack;
         private int _indentTop;
+
+        // a lexer error was thrown: the parser's error handling must not tokenize further
+        public bool Failed { get; private set; }
 
         public Lexer(string source, SyntaxLimits limits)
         {
@@ -90,10 +99,82 @@ namespace Outbridge.PyLite.Syntax
             if (_fdepth > 0)
             {
                 var m = _fstack[_fdepth - 1].Mode;
-                if (m == FStringMode.Expr || m == FStringMode.ExprNested)
+                if (m == FStringMode.Expr)
                     _fstack[_fdepth - 1].ExprTokenCount++;
             }
-            return new Token(kind, text, value, line, col);
+            _lastTokenLine = line;
+            return new Token(kind, text, value, line, col, _pos - _lineStart + 1);
+        }
+
+        private void OpenBracket(char ch, int line, int col)
+        {
+            if (_parenDepth == _brackets.Length)
+                System.Array.Resize(ref _brackets, _parenDepth * 2);
+            _brackets[_parenDepth++] = new Bracket { Ch = ch, Line = line, Col = col };
+        }
+
+        // CPython's closing-bracket errors, at the closer
+        private void CloseBracket(char ch, int line, int col)
+        {
+            if (_parenDepth == 0)
+                throw PySyntaxErrorException.Syntax("unmatched '" + ch + "'", line, col);
+            Bracket open = _brackets[--_parenDepth];
+            if ((open.Ch == '(' ? ')' : open.Ch == '[' ? ']' : '}') != ch)
+                throw PySyntaxErrorException.Syntax("closing parenthesis '" + ch + "' does not match opening parenthesis '" + open.Ch + "'"
+                    + (open.Line != line ? " on line " + Num(open.Line) : ""), line, col);
+        }
+
+        private PySyntaxErrorException NeverClosed()
+        {
+            Bracket open = _brackets[_parenDepth - 1];
+            return PySyntaxErrorException.Syntax("'" + open.Ch + "' was never closed", open.Line, open.Col);
+        }
+
+        // Whether the end of the source was reached (its NEWLINE, DEDENTs and ENDMARKER are being handed out).
+        public bool AtEnd { get { return _eofEmitted; } }
+
+        // Where CPython puts an error at the end of the source: past the last character of its last line, the
+        // final line break not counted ("if x:\n\n" is line 2, column 1).
+        public void EndOfSource(out int line, out int col)
+        {
+            int end = _len;
+            if (end > 0 && _src[end - 1] == '\n')
+                end--;
+            if (end > 0 && _src[end - 1] == '\r')
+                end--;
+            line = 1;
+            int start = _len > 0 && _src[0] == (char)0xFEFF ? 1 : 0;   // a leading BOM is no column
+            for (int i = start; i < end; i++)
+            {
+                char c = _src[i];
+                if (c == '\n' || (c == '\r' && (i + 1 >= end || _src[i + 1] != '\n')))
+                {
+                    line++;
+                    start = i + 1;
+                }
+            }
+            col = end - start + 1;
+        }
+
+        // After a parser error CPython tokenizes the rest of the source: its first lexer error wins (unless it
+        // falls inside an f-string), and so does a bracket left open on a line before the error's last token.
+        public PySyntaxErrorException Drain(PySyntaxErrorException parserError)
+        {
+            int errLine = _lastTokenLine;
+            _draining = true;
+            try
+            {
+                while (NextToken().Kind != TokenKind.EndOfFile)
+                {
+                }
+            }
+            catch (PySyntaxErrorException e)
+            {
+                return _fdepth > 0 ? parserError : e;
+            }
+            if (_parenDepth > 0 && errLine > _brackets[_parenDepth - 1].Line)
+                return NeverClosed();
+            return parserError;
         }
 
         private void NewPhysicalLine() { _line++; _lineStart = _pos; }
@@ -119,6 +200,19 @@ namespace Outbridge.PyLite.Syntax
         }
 
         public Token Next()
+        {
+            try
+            {
+                return NextToken();
+            }
+            catch (PySyntaxErrorException)
+            {
+                Failed = true;
+                throw;
+            }
+        }
+
+        private Token NextToken()
         {
             if (_pending.Count > 0)
                 return _pending.Dequeue();
@@ -152,8 +246,6 @@ namespace Outbridge.PyLite.Syntax
 
                 if (c == '#')
                 {
-                    if (InFStringExpr)
-                        throw PySyntaxErrorException.Syntax("f-string expression part cannot include '#'", _line, CurCol);
                     while (Cur != '\0' && Cur != '\n' && Cur != '\r')
                         _pos++;
                     continue;
@@ -161,36 +253,25 @@ namespace Outbridge.PyLite.Syntax
 
                 if (c == '\\')
                 {
-                    if (InFStringExpr)
-                        throw PySyntaxErrorException.Syntax("f-string expression part cannot include a backslash", _line, CurCol);
                     char n = At(_pos + 1);
                     if (n == '\n' || n == '\r')
                     {
+                        int bl = _line, bc = CurCol;
                         _pos++;
                         ConsumeNewline();
+                        if (Cur == '\0')
+                            throw PySyntaxErrorException.Syntax("unexpected EOF while parsing", bl, bc + 1);
                         continue;
                     }
 
                     if (n == '\0')
-                        throw PySyntaxErrorException.Syntax("unexpected EOF while parsing", _line, CurCol);
+                        throw PySyntaxErrorException.Syntax("unexpected EOF while parsing", _line, CurCol + 1);
                     throw PySyntaxErrorException.Syntax("unexpected character after line continuation character", _line, CurCol + 1);
                 }
 
                 if (c == '\n' || c == '\r')
                 {
-                    if (InFStringExpr)
-                    {
-                        if (_fstack[_fdepth - 1].Triple)
-                        {
-                            ConsumeNewline();
-                            continue;
-                        }
-
-                        var f = _fstack[_fdepth - 1];
-                        throw PySyntaxErrorException.Syntax("EOL while scanning string literal", f.StartLine, f.StartCol);
-                    }
-
-                    if (_parenDepth > 0)
+                    if (_parenDepth > 0)   // a replacement field is a bracket too (PEP 701)
                     {
                         ConsumeNewline();
                         continue;
@@ -220,10 +301,10 @@ namespace Outbridge.PyLite.Syntax
             {
                 if (InFString)
                 {
+                    if (InFStringExpr)
+                        throw NeverClosed();
                     var f = _fstack[_fdepth - 1];
-                    throw f.Triple
-                        ? PySyntaxErrorException.Syntax("EOF in multi-line string", f.StartLine, f.StartCol)
-                        : PySyntaxErrorException.Syntax("EOL while scanning string literal", f.StartLine, f.StartCol);
+                    throw Unterminated(f.Triple, f.StartLine, f.StartCol, "f-string");
                 }
 
                 return HandleEof();
@@ -245,6 +326,8 @@ namespace Outbridge.PyLite.Syntax
 
         private Token HandleEof()
         {
+            if (_parenDepth > 0 && !_draining)
+                throw NeverClosed();
             int line = _line, col = CurCol;
             var tail = new List<Token>();
             if (_lineHasTokens && _parenDepth == 0)
@@ -265,15 +348,28 @@ namespace Outbridge.PyLite.Syntax
 
         private Token? HandleLineStart()
         {
-            int start;
+            int col, altCol;
             while (true)
             {
-                start = _pos;
+                col = 0;
+                altCol = 0;
                 while (Cur == ' ' || Cur == '\t')
+                {
+                    if (Cur == ' ')
+                    {
+                        col++;
+                        altCol++;
+                    }
+                    else
+                    {
+                        col = (col / 8 + 1) * 8;
+                        altCol++;
+                    }
                     _pos++;
+                }
                 if (Cur == '\f')
                 {
-                    _pos++;
+                    _pos++;   // a form feed resets the indentation (CPython, for Emacs)
                     continue;
                 }
 
@@ -295,61 +391,58 @@ namespace Outbridge.PyLite.Syntax
                 break;
             }
             _atLineStart = false;
-            return CompareIndent(start, _pos - start);
+            return CompareIndent(col, altCol);
         }
 
-        private Token? CompareIndent(int offset, int length)
+        // CPython's indentation check; its errors point past the end of the line. An INDENT sits where the
+        // statement starts.
+        private Token? CompareIndent(int col, int altCol)
         {
             int line = _line;
-            bool hasSpace = false, hasTab = false;
-            for (int i = offset; i < offset + length; i++)
+            IndentEntry top = _indentStack[_indentTop];
+            if (col == top.Col)
             {
-                if (_src[i] == ' ')
-                    hasSpace = true;
-                else if (_src[i] == '\t')
-                    hasTab = true;
-            }
-            if (hasSpace && hasTab)
-                throw PySyntaxErrorException.Tab(line, 1);
-            if (length > 0)
-            {
-                char kind = _src[offset];
-                for (int t = 1; t <= _indentTop; t++)
-                {
-                    var e = _indentStack[t];
-                    if (e.Length > 0 && _src[e.Offset] != kind)
-                        throw PySyntaxErrorException.Tab(line, 1);
-                }
-            }
-
-            int topLen = _indentStack[_indentTop].Length;
-            if (length == topLen)
+                if (altCol != top.AltCol)
+                    throw PySyntaxErrorException.Tab(line, 1);
                 return null;
-            if (length > topLen)
+            }
+            if (col > top.Col)
             {
+                if (altCol <= top.AltCol)
+                    throw PySyntaxErrorException.Tab(line, 1);
                 if (_indentTop + 1 >= _limits.MaxIndentLevels)
                     throw PySyntaxErrorException.Indentation("too many levels of indentation", line, 1);
                 _indentTop++;
                 _indentStack[_indentTop] = new IndentEntry
                 {
-                    Offset = offset,
-                    Length = length
+                    Col = col,
+                    AltCol = altCol
                 };
-                return Emit(TokenKind.Indent, null, null, line, 1);
+                return Emit(TokenKind.Indent, null, null, line, CurCol);
             }
 
             int count = 0;
-            while (_indentTop > 0 && _indentStack[_indentTop].Length > length)
+            while (_indentTop > 0 && _indentStack[_indentTop].Col > col)
             {
                 _indentTop--;
                 count++;
             }
-            if (_indentStack[_indentTop].Length != length)
-                throw PySyntaxErrorException.Indentation("unindent does not match any outer indentation level", line, 1);
+            if (_indentStack[_indentTop].Col != col)
+                throw PySyntaxErrorException.Indentation("unindent does not match any outer indentation level", line, LineEndCol());
+            if (_indentStack[_indentTop].AltCol != altCol)
+                throw PySyntaxErrorException.Tab(line, 1);
             Token first = Emit(TokenKind.Dedent, null, null, line, 1);
             for (int i = 1; i < count; i++)
                 _pending.Enqueue(Emit(TokenKind.Dedent, null, null, line, 1));
             return first;
+        }
+
+        private int LineEndCol()
+        {
+            int i = _pos;
+            while (i < _len && _src[i] != '\n' && _src[i] != '\r')
+                i++;
+            return i - _lineStart + 1;
         }
 
         private Token ScanOperator()
@@ -391,29 +484,20 @@ namespace Outbridge.PyLite.Syntax
                 case '^': return c1 == '=' ? Op(2, TokenKind.CaretAssign, line0, col0) : Op(1, TokenKind.Caret, line0, col0);
                 case '~': return Op(1, TokenKind.Tilde, line0, col0);
                 case '@': return Op(1, TokenKind.At, line0, col0);
-                case '(': _parenDepth++; return Op(1, TokenKind.LeftParen, line0, col0);
-                case '[': _parenDepth++; return Op(1, TokenKind.LeftBracket, line0, col0);
-                case '{': _parenDepth++; return Op(1, TokenKind.LeftBrace, line0, col0);
-                case ')':
-                    if (_parenDepth > 0)
-                        _parenDepth--;
-                    return Op(1, TokenKind.RightParen, line0, col0);
-                case ']':
-                    if (_parenDepth > 0)
-                        _parenDepth--;
-                    return Op(1, TokenKind.RightBracket, line0, col0);
-                case '}':
-                    if (_parenDepth > 0)
-                        _parenDepth--;
-                    return Op(1, TokenKind.RightBrace, line0, col0);
+                case '(': OpenBracket(c, line0, col0); return Op(1, TokenKind.LeftParen, line0, col0);
+                case '[': OpenBracket(c, line0, col0); return Op(1, TokenKind.LeftBracket, line0, col0);
+                case '{': OpenBracket(c, line0, col0); return Op(1, TokenKind.LeftBrace, line0, col0);
+                case ')': CloseBracket(c, line0, col0); return Op(1, TokenKind.RightParen, line0, col0);
+                case ']': CloseBracket(c, line0, col0); return Op(1, TokenKind.RightBracket, line0, col0);
+                case '}': CloseBracket(c, line0, col0); return Op(1, TokenKind.RightBrace, line0, col0);
                 case ',': return Op(1, TokenKind.Comma, line0, col0);
                 case ':': return c1 == '=' ? Op(2, TokenKind.ColonEqual, line0, col0) : Op(1, TokenKind.Colon, line0, col0);
                 case ';': return Op(1, TokenKind.Semicolon, line0, col0);
                 case '.': return c1 == '.' && c2 == '.' ? Op(3, TokenKind.Ellipsis, line0, col0) : Op(1, TokenKind.Dot, line0, col0);
                 default:
-                    if (c >= 0x80)
-                        throw PySyntaxErrorException.Syntax("invalid character in identifier", line0, col0);
-                    throw PySyntaxErrorException.Syntax("invalid syntax", line0, col0);
+                    if (c < ' ' || c == (char)0x7F)   // a control character: CPython names it
+                        throw PySyntaxErrorException.Syntax("invalid non-printable character U+" + ((int)c).ToString("X4", CultureInfo.InvariantCulture), line0, col0);
+                    throw PySyntaxErrorException.Syntax("invalid syntax", line0, col0);   // a non-ASCII char is a name's
             }
         }
 
@@ -423,12 +507,29 @@ namespace Outbridge.PyLite.Syntax
             return Emit(kind, null, null, line0, col0);
         }
 
+        // Token.Value of a Name spelled with non-ASCII letters: its text is the NFKC form, never a soft keyword.
+        internal static readonly object NonAsciiSpelling = new object();
+
         private Token ScanNameOrPrefixedString()
         {
             int start = _pos, line0 = _line, col0 = CurCol;
+            bool ascii = true;
             while (IsIdentCont(Cur))
+            {
+                ascii &= Cur < 0x80;
                 _pos++;
+            }
             string name = _src.Substring(start, _pos - start);
+            if (!ascii)
+            {
+                VerifyIdentifier(name, line0, col0);   // no keyword or string prefix is non-ASCII
+                // the parser's NFKC (PEP 3131): U+210C is H, U+FB01 x is fix. It names a variable: bold `match` is
+                // no soft keyword, bold `if` binds "if", and the three constants cannot be names at all.
+                string id = Modules.UnicodedataModule.NfkcIdentifier(name);
+                if (id == "True" || id == "False" || id == "None")
+                    throw PySyntaxErrorException.Syntax("identifier field can't represent '" + id + "' constant", line0, col0);
+                return Emit(TokenKind.Name, id, NonAsciiSpelling, line0, col0);
+            }
             if (Cur == '\'' || Cur == '"')
             {
                 switch (ClassifyPrefix(name))
@@ -446,6 +547,7 @@ namespace Outbridge.PyLite.Syntax
                     case Prefix.BytesRaw:
                         return ScanBytes(true, line0, col0);
                 }
+                CheckPrefixLetters(name, line0, col0);
             // NotAPrefix: fall through to Name; the quote becomes a separate literal.
             }
             if (Keywords.TryGet(name, out var kw))
@@ -481,9 +583,63 @@ namespace Outbridge.PyLite.Syntax
             return Prefix.NotAPrefix;
         }
 
+        // CPython's maybe_raise_syntax_error_for_string_prefixes: distinct prefix letters before a quote that
+        // do not combine. A t-string (PEP 750) is a valid prefix the dialect does not have.
+        private static void CheckPrefixLetters(string name, int line, int col)
+        {
+            bool b = false, u = false, r = false, f = false, t = false;
+            foreach (char ch in name)
+            {
+                switch (Lower(ch))
+                {
+                    case 'b': if (b) return; b = true; break;
+                    case 'u': if (u) return; u = true; break;
+                    case 'r': if (r) return; r = true; break;
+                    case 'f': if (f) return; f = true; break;
+                    case 't': if (t) return; t = true; break;
+                    default: return;
+                }
+            }
+            string bad = u && b ? "'u' and 'b'" : u && r ? "'u' and 'r'" : u && f ? "'u' and 'f'" : u && t ? "'u' and 't'"
+                : b && f ? "'b' and 'f'" : b && t ? "'b' and 't'" : f && t ? "'f' and 't'" : null;
+            if (bad != null)
+                throw PySyntaxErrorException.Syntax(bad + " prefixes are incompatible", line, col);
+            if (t)
+                throw PySyntaxErrorException.Syntax("t-strings are not supported in this dialect", line, col);
+        }
+
         private static char Lower(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
-        private static bool IsIdentStart(char c) { return c == '_' || char.IsLetter(c); }
-        private static bool IsIdentCont(char c) { return c == '_' || char.IsLetterOrDigit(c); }
+        // CPython's potential identifier: ASCII letters, digits and '_', and every non-ASCII char, which
+        // VerifyIdentifier then holds to PEP 3131 (char.IsLetterOrDigit refused the middle dot and the combining
+        // marks it takes, and an invalid char was "invalid character in identifier" at the name's start).
+        private static bool IsIdentStart(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c >= 0x80; }
+        private static bool IsIdentCont(char c) { return IsIdentStart(c) || (c >= '0' && c <= '9'); }
+
+        // verify_identifier: XID_Start or '_' first, XID_Continue after, on the raw text; the first char that
+        // is not is CPython's error, at its own column.
+        private static void VerifyIdentifier(string name, int line, int col0)
+        {
+            int i = 0;
+            while (i < name.Length)
+            {
+                int cp = name[i];
+                int width = 1;
+                if (char.IsHighSurrogate(name[i]) && i + 1 < name.Length && char.IsLowSurrogate(name[i + 1]))
+                {
+                    cp = char.ConvertToUtf32(name[i], name[i + 1]);
+                    width = 2;
+                }
+                bool ok = i == 0 ? cp == '_' || Runtime.Values.PyUnicodeCase.IsXidStart(cp) : Runtime.Values.PyUnicodeCase.IsXidContinue(cp);
+                if (!ok)
+                {
+                    string hex = cp.ToString("X4", CultureInfo.InvariantCulture);
+                    throw PySyntaxErrorException.Syntax(Runtime.Values.StrMethods.IsPrintable(cp)
+                        ? "invalid character '" + char.ConvertFromUtf32(cp) + "' (U+" + hex + ")"
+                        : "invalid non-printable character U+" + hex, line, col0 + i);
+                }
+                i += width;
+            }
+        }
         private static bool IsAsciiDigit(char c) { return c >= '0' && c <= '9'; }
     }
 }

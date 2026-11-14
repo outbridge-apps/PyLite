@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
 using Outbridge.PyLite.Runtime.Evaluator;
@@ -20,25 +19,34 @@ namespace Outbridge.PyLite.Modules
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal);
             m["reduce"] = BuiltinFunctionValue.Make("reduce", Reduce);
             m["partial"] = BuiltinFunctionValue.Make("partial", Partial);
-            m["lru_cache"] = BuiltinFunctionValue.Make("lru_cache", LruCache);
+            m["lru_cache"] = BuiltinFunctionValue.Make("lru_cache", Args.KnownKeywords("lru_cache", 2, LruCache, "maxsize", "typed"));
             m["cache"] = BuiltinFunctionValue.Make("cache", Cache);
             m["wraps"] = BuiltinFunctionValue.Make("wraps", Wraps);
             m["update_wrapper"] = BuiltinFunctionValue.Make("update_wrapper", UpdateWrapper);
-            m["cmp_to_key"] = BuiltinFunctionValue.Make("cmp_to_key", CmpToKey);
+            m["cmp_to_key"] = BuiltinFunctionValue.Make("cmp_to_key", Args.BoundKeywords("cmp_to_key", 1, CmpToKey, "mycmp"));
             return ctx.Values.Module("functools", m);
         }
 
         // reduce(function, iterable[, initializer])
         private static ScriptValue Reduce(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
+            ScriptValue initial = args.Length == 3 ? args[2] : null;
+            for (int j = 0; j < kw.Count; j++)
+            {
+                if (kw.NameAt(j) != "initial")
+                    throw KwReader.UnexpectedError(ctx, "reduce", kw.NameAt(j));
+                if (initial != null)
+                    throw Raise.TypeError(ctx, "reduce() takes at most 3 arguments (4 given)");
+                initial = kw.ValueAt(j);
+            }
             if (args.Length < 2 || args.Length > 3)
                 throw Raise.TypeError(ctx, "reduce expected 2 or 3 arguments, got " + args.Length);
             ScriptValue fn = args[0];
             IScriptIterator it = PyOps.GetIterator(args[1], ctx);
             ScriptValue acc;
-            if (args.Length == 3)
+            if (initial != null)
             {
-                acc = args[2];
+                acc = initial;
             }
             else if (!it.MoveNext(ctx, out acc))
             {
@@ -70,7 +78,7 @@ namespace Outbridge.PyLite.Modules
             if (!kw.TryGet("typed", out t))
                 t = args.Length >= 2 ? args[1] : null;
             bool typed = t != null && PyOps.Truth(t, ctx);
-            return BuiltinFunctionValue.Make("lru_cache", Args.Positional("lru_cache", 1, 1, (s2, a2, k2, c2) =>
+            return ctx.Values.Closure("lru_cache", Args.Positional("lru_cache", 1, 1, (s2, a2, k2, c2) =>
             {
                 if (a2.Length != 1 || !a2[0].IsCallable)
                     throw Raise.TypeError(c2, "the first argument to lru_cache must be a callable");
@@ -81,64 +89,27 @@ namespace Outbridge.PyLite.Modules
         // cache = lru_cache(maxsize=None) (Python 3.9).
         private static ScriptValue Cache(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
-            if (args.Length == 1 && kw.Count == 0 && args[0].IsCallable)
-                return MakeCachedWrapper(ctx, args[0], MaxCacheSize, false);
-            throw Raise.TypeError(ctx, "cache expected a callable");
+            // def cache(user_function, /): CPython's texts for each way to miss it
+            ScriptValue uf;
+            if (kw.TryGet("user_function", out uf))
+                throw Raise.TypeError(ctx, "cache() got some positional-only arguments passed as keyword arguments: 'user_function'");
+            if (kw.Count > 0)
+                throw KwReader.UnexpectedError(ctx, "cache", kw.NameAt(0));
+            if (args.Length == 0)
+                throw Raise.TypeError(ctx, "cache() missing 1 required positional argument: 'user_function'");
+            if (args.Length > 1)
+                throw Raise.TypeError(ctx, "cache() takes 1 positional argument but " + args.Length + " were given");
+            if (!args[0].IsCallable)
+                throw Raise.TypeError(ctx, "the first argument must be callable");
+            return MakeCachedWrapper(ctx, args[0], MaxCacheSize, false);
         }
 
+        // One cache per decorated function (LruCacheWrapperValue): cache_info, cache_clear, cache_parameters
+        // and __wrapped__ as in CPython.
         private static ScriptValue MakeCachedWrapper(EvalContext ctx, ScriptValue fn, int maxsize, bool typed)
         {
-            if (maxsize == 0)   // CPython: no caching at all, and the arguments need not be hashable
-                return BuiltinFunctionValue.Make("lru_cache_wrapper", (s, a, k, c) => c.CallHook(fn, a, k));
-            int cap = maxsize;
-            DictValue cache = ctx.Values.Dict(8);   // one cache per decorated function, LRU by insertion order
-            return BuiltinFunctionValue.Make("lru_cache_wrapper", (s, a, k, c) =>
-            {
-                ScriptValue key = MakeKey(c, a, k, typed);   // hashing an unhashable arg raises here (parity)
-                ScriptValue hit;
-                if (cache.TryGet(key, c, out hit))
-                {
-                    cache.DelItemOrThrow(key, c);   // move to most-recent
-                    cache.SetItem(key, hit, c);
-                    return hit;
-                }
-                ScriptValue result = c.CallHook(fn, a, k);
-                cache.SetItem(key, result, c);
-                if (cache.Count > cap)
-                    EvictOldest(cache, c);
-                return result;
-            });
-        }
-
-        private static ScriptValue MakeKey(EvalContext ctx, ScriptValue[] args, KwArgs kw, bool typed)
-        {
-            if (kw.Count == 0 && !typed)
-                return ctx.Values.Tuple((ScriptValue[])args.Clone());
-            var parts = new List<ScriptValue>(args.Length + 1 + kw.Count * 2);
-            parts.AddRange(args);
-            if (kw.Count > 0)
-                parts.Add(KwMark.Instance);   // CPython's kwd_mark: a private object no argument can equal
-            for (int i = 0; i < kw.Count; i++)
-            {
-                parts.Add(ctx.Values.Str(kw.NameAt(i)));
-                parts.Add(kw.ValueAt(i));
-            }
-            if (typed)   // CPython's _make_key appends the type of every argument: f(1) and f(1.0) differ
-            {
-                foreach (ScriptValue v in args)
-                    parts.Add(ctx.Values.Str(v.PyTypeName));
-                for (int i = 0; i < kw.Count; i++)
-                    parts.Add(ctx.Values.Str(kw.ValueAt(i).PyTypeName));
-            }
-            return ctx.Values.Tuple(parts.ToArray());
-        }
-
-        private static void EvictOldest(DictValue cache, EvalContext ctx)
-        {
-            IScriptIterator it = PyOps.GetIterator(cache, ctx);   // keys, insertion order
-            ScriptValue oldest;
-            if (it.MoveNext(ctx, out oldest))
-                cache.DelItemOrThrow(oldest, ctx);
+            ctx.Values.ChargeObject(2);
+            return new LruCacheWrapperValue(ctx, fn, maxsize, typed);
         }
 
         private static int ResolveMaxsize(ScriptValue[] args, KwArgs kw)
@@ -146,7 +117,9 @@ namespace Outbridge.PyLite.Modules
             ScriptValue ms;
             if (!kw.TryGet("maxsize", out ms))
                 ms = args.Length >= 1 ? args[0] : null;
-            if (ms == null || ms.Kind == ValueKind.None)
+            if (ms == null)
+                return 128;   // lru_cache() and lru_cache(typed=True): CPython's default, not unbounded
+            if (ms.Kind == ValueKind.None)
                 return MaxCacheSize;
             IntValue iv = ms as IntValue;
             if (iv == null)
@@ -157,18 +130,18 @@ namespace Outbridge.PyLite.Modules
         }
 
         // wraps(wrapped, assigned=..., updated=...) -> a decorator that copies the wrapped callable's __name__
-        // onto the wrapper (script functions only; __doc__/__dict__ do not exist in this dialect), unless
-        // `assigned` leaves __name__ out. `updated` names __dict__ entries, so there is nothing to update.
+        // onto the wrapper unless `assigned` leaves it out, and always sets __wrapped__ (script functions
+        // only; __doc__/__dict__ do not exist in this dialect). `updated` names __dict__ entries, so there is
+        // nothing to update.
         private static ScriptValue Wraps(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             ScriptValue[] a = Args.Named(ctx, args, kw, "wraps", "wrapped", "assigned", "updated");
             Args.AtLeast(ctx, a, "wraps", 1);
             ScriptValue wrapped = a[0];
             bool copyName = CopiesName(ctx, a.Length > 1 ? a[1] : null);
-            return BuiltinFunctionValue.Make("wraps", Args.Positional("wraps", 1, 1, (s2, a2, k2, c2) =>
+            return ctx.Values.Closure("wraps", Args.Positional("wraps", 1, 1, (s2, a2, k2, c2) =>
             {
-                if (copyName)
-                    CopyWrapperName(wrapped, a2[0]);
+                UpdateFrom(wrapped, a2[0], copyName);
                 return a2[0];
             }));
         }
@@ -177,8 +150,7 @@ namespace Outbridge.PyLite.Modules
         {
             ScriptValue[] a = Args.Named(ctx, args, kw, "update_wrapper", "wrapper", "wrapped", "assigned", "updated");
             Args.AtLeast(ctx, a, "update_wrapper", 2);
-            if (CopiesName(ctx, a.Length > 2 ? a[2] : null))
-                CopyWrapperName(a[1], a[0]);
+            UpdateFrom(a[1], a[0], CopiesName(ctx, a.Length > 2 ? a[2] : null));
             return a[0];
         }
 
@@ -198,12 +170,13 @@ namespace Outbridge.PyLite.Modules
             return false;
         }
 
-        private static void CopyWrapperName(ScriptValue wrapped, ScriptValue wrapper)
+        private static void UpdateFrom(ScriptValue wrapped, ScriptValue wrapper, bool copyName)
         {
             FunctionValue w = wrapper as FunctionValue;
-            if (w == null || wrapped == null)
+            if (w == null)
                 return;
-            string name = PyOps.CallableName(wrapped);
+            w.Wrapped = wrapped;   // CPython sets it last, whatever `assigned` says
+            string name = copyName ? PyOps.CallableName(wrapped) : null;
             if (name != null)
                 w.NameOverride = name;
         }
@@ -213,11 +186,12 @@ namespace Outbridge.PyLite.Modules
         {
             Args.Unpack(ctx, args, "cmp_to_key", 1, 1);
             ScriptValue cmp = args[0];
-            return BuiltinFunctionValue.Make("cmp_to_key.<locals>.K", (s2, a2, k2, c2) =>
+            return ctx.Values.Closure("cmp_to_key.<locals>.K", (s2, a2, k2, c2) =>
             {
                 Args.Exactly(c2, a2, "K", 1);
+                c2.Values.ChargeObject(2);
                 return new CmpKeyValue(cmp, a2[0]);
-            });
+            }, 1);
         }
     }
 
@@ -264,21 +238,5 @@ namespace Outbridge.PyLite.Modules
                 return bv.Value ? 1 : 0;
             throw Raise.TypeError(ctx, "comparison function must return an int");
         }
-    }
-
-    // Separates the positional arguments from the keyword pairs in an lru_cache key. A string marker could be
-    // passed as an argument (f('<marker>', 'a', 1) and f(a=1) shared a key); this object never reaches a script.
-    internal sealed class KwMark : ScriptValue
-    {
-        public static readonly KwMark Instance = new KwMark();
-        private static readonly ScriptTypeInfo Type = new ScriptTypeInfo("_kwd_mark", null);
-
-        private KwMark() { }
-
-        public override ScriptTypeInfo TypeInfo { get { return Type; } }
-        internal override ValueKind Kind { get { return ValueKind.Opaque; } }
-
-        protected internal override long HashLeafCore(EvalContext ctx, int depth) { return 0x6B77; }
-        protected internal override void ReprLeafCore(BudgetStringBuilder sb, EvalContext ctx, int depth) { sb.Append("<kwd_mark>"); }
     }
 }

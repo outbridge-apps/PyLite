@@ -20,6 +20,8 @@ namespace Outbridge.PyLite.Syntax.Ast
     {
         public readonly string Id;
         internal NameBinding Binding;   // baked by the Resolver — dictionary-free hot-path resolution
+        // A class-body read of a name the class binds later: CPython's LOAD_NAME skips enclosing functions.
+        internal bool ReadsGlobalFirst;
         public NameNode(SourceInfo src, string id) : base(src, NodeKind.Name) { Id = id; }
     }
 
@@ -90,13 +92,20 @@ namespace Outbridge.PyLite.Syntax.Ast
         public readonly IReadOnlyList<Arg> Args;
         internal object CachedCallSlot;   // monomorphic (TypeInfo -> descriptor) inline cache, set lazily
         public CallNode(SourceInfo src, ExprNode func, IReadOnlyList<Arg> args)
-            : base(src, NodeKind.Call, ChildDepth.Max(ChildDepth.Of(func), ChildDepth.OfArgs(args))) { Func = func; Args = args; }
+            : base(src, NodeKind.Call, ChildDepth.Max(ChildDepth.Of(func), ChildDepth.OfArgs(args)))
+        {
+            Func = func;
+            Args = args;
+            NameNode name = func as NameNode;
+            QuietValue = name != null && Modules.Builtins.HasQuietTwin(name.Id);
+        }
     }
 
     public sealed class AttributeNode : ExprNode
     {
         public readonly ExprNode Value;
         public readonly string Attr;
+        internal int SiteSlot = -1;   // its per-run record cache (field index or method), numbered by the resolver
         public AttributeNode(SourceInfo src, ExprNode value, string attr) : base(src, NodeKind.Attribute, ChildDepth.Of(value)) { Value = value; Attr = attr; }
     }
 
@@ -105,7 +114,12 @@ namespace Outbridge.PyLite.Syntax.Ast
         public readonly ExprNode Value;
         public readonly ExprNode Index;   // SliceNode | TupleNode | scalar
         public IndexNode(SourceInfo src, ExprNode value, ExprNode index)
-            : base(src, NodeKind.Index, ChildDepth.Max(ChildDepth.Of(value), ChildDepth.Of(index))) { Value = value; Index = index; }
+            : base(src, NodeKind.Index, ChildDepth.Max(ChildDepth.Of(value), ChildDepth.Of(index)))
+        {
+            Value = value;
+            Index = index;
+            QuietValue = true;
+        }
     }
 
     public sealed class SliceNode : ExprNode
@@ -129,6 +143,7 @@ namespace Outbridge.PyLite.Syntax.Ast
     public sealed class TupleNode : ExprNode
     {
         public readonly IReadOnlyList<ExprNode> Elts;   // empty tuple => Count == 0
+        internal int CacheSlot = -1;   // a tuple of literals: its per-run value's slot, numbered with the literals'
         public TupleNode(SourceInfo src, IReadOnlyList<ExprNode> elts) : base(src, NodeKind.Tuple, ChildDepth.OfList(elts)) { Elts = elts; }
     }
 

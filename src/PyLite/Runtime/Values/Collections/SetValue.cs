@@ -1,5 +1,4 @@
 using System;
-using Outbridge.PyLite.Runtime.Errors;
 
 namespace Outbridge.PyLite.Runtime.Values
 {
@@ -89,7 +88,7 @@ namespace Outbridge.PyLite.Runtime.Values
             unchecked
             {
                 ulong hash = 1927868237UL * (ulong)(Table.Count + 1);
-                for (int p = 0; p < Table.EntriesUsed; p++)
+                for (int p = Table.WalkStart(ctx); p < Table.EntriesUsed; p++)
                 {
                     long eh;
                     ScriptValue k, v;

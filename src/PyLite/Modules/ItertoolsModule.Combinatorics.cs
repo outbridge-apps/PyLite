@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
@@ -34,20 +33,22 @@ namespace Outbridge.PyLite.Modules
                     throw Raise.ValueError(ctx, "r must be non-negative");
                 r = ToSsize(ctx, rb);   // OverflowError (not a fault) when r cannot fit an int, like CPython
             }
-            return ctx.Values.Iterator(new PermutationsIterator(pool, r), "itertools.permutations");
+            return ctx.Values.EngineIterator(new PermutationsIterator(pool, r), "itertools.permutations");
         }
 
         private static ScriptValue Combinations(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             int r = RequiredR(ctx, args, kw, "combinations", out ScriptValue[] pool);
-            return ctx.Values.Iterator(new CombinationsIterator(pool, r), "itertools.combinations");
+            return ctx.Values.EngineIterator(new CombinationsIterator(pool, r), "itertools.combinations");
         }
 
         private static ScriptValue CombinationsWithReplacement(ScriptValue self, ScriptValue[] args, KwArgs kw, EvalContext ctx)
         {
             int r = RequiredR(ctx, args, kw, "combinations_with_replacement", out ScriptValue[] pool);
+            if (pool.Length > 0)
+                ctx.Values.EnsureCollectionSize(r);   // every output is an r-tuple (an empty pool yields none)
             ctx.Values.PreCharge((long)r * 4 + 16);   // cwr (unlike combinations) keeps an int[r] index vector
-            return ctx.Values.Iterator(new CwrIterator(pool, r), "itertools.combinations_with_replacement");
+            return ctx.Values.EngineIterator(new CwrIterator(pool, r), "itertools.combinations_with_replacement");
         }
 
         private static int RequiredR(EvalContext ctx, ScriptValue[] args, KwArgs kw, string name, out ScriptValue[] pool)

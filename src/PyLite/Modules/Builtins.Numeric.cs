@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
-using System.Text;
 using Outbridge.PyLite.Modules.Support;
 using Outbridge.PyLite.Runtime;
 using Outbridge.PyLite.Runtime.Errors;
@@ -37,6 +35,8 @@ namespace Outbridge.PyLite.Modules
             r.RejectInvalid();
             if (number == null)
                 throw Raise.TypeError(c, "round() missing required argument: 'number'");
+            if (ndigits != null && ndigits.Kind == ValueKind.None)
+                ndigits = null;   // round(x, None) is round(x)
 
             if (number.Kind == ValueKind.Int || number.Kind == ValueKind.Bool)
             {
@@ -94,7 +94,7 @@ namespace Outbridge.PyLite.Modules
             {
                 BigInteger x = NumericOps.AsBigInteger(a), y = NumericOps.AsBigInteger(b);
                 if (y.IsZero)
-                    throw Raise.ZeroDivision(c, "integer division or modulo by zero");
+                    throw Raise.ZeroDivision(c, "division by zero");
                 BigInteger r;
                 BigInteger q = NumericOps.FloorDiv(x, y, out r, c);
                 return c.Values.Tuple(new ScriptValue[] { c.Values.Int(q), c.Values.Int(r) });
@@ -103,7 +103,7 @@ namespace Outbridge.PyLite.Modules
             {
                 double x = Coerce.ToDouble(c, a, "divmod"), y = Coerce.ToDouble(c, b, "divmod");
                 if (y == 0.0)
-                    throw Raise.ZeroDivision(c, "float divmod()");
+                    throw Raise.ZeroDivision(c, "division by zero");
                 double mod;
                 double floordiv = NumericOps.FloatDivMod(x, y, out mod);
                 return c.Values.Tuple(new ScriptValue[] { c.Values.Float(floordiv), c.Values.Float(mod) });
@@ -153,40 +153,19 @@ namespace Outbridge.PyLite.Modules
             return v.Kind == ValueKind.Int || v.Kind == ValueKind.Bool;
         }
 
-        // ModPow is one native call of about bits(y) * words(m)^2 word products. Past ModPowChunkWork the
-        // exponent is taken from the top in chunks that cost about that much each (r = r^(2^len) * b^chunk),
-        // each charged and followed by a deadline check, so a huge exponent or modulus ends on the budget
-        // instead of running past the deadline. y >= 0, 0 <= b < m.
-        private const long ModPowChunkWork = 1L << 24;
+        // ModPow costs about bits(y) * words(m)^2 word products. Past ModPowChargedWork that is charged up front
+        // (2 steps per 64 of them, as the chunked version used to charge as it went), so a modpow the step
+        // budget cannot pay for ends before it starts; the kernel stops a long one at the deadline.
+        // y >= 0, 0 <= b < m.
+        private const long ModPowChargedWork = 1L << 24;
 
         private static BigInteger ModPowBounded(EvalContext c, BigInteger b, BigInteger y, BigInteger m)
         {
             long words = 1 + NumericOps.BitLength(m) / 64;
-            long perBit = words * words;
-            long ybits = NumericOps.BitLength(y);
-            if (ybits * perBit <= ModPowChunkWork)
-                return BigOps.ModPow(c, b, y, m, ybits * perBit);
-            int k = (int)Math.Max(1, Math.Min(4096, ModPowChunkWork / perBit));
-            BigInteger r = BigInteger.One;
-            for (long top = ybits; top > 0; top -= k)
-            {
-                int len = (int)Math.Min(k, top);
-                c.Budget.Step((int)Math.Min(int.MaxValue, 1 + 2 * len * perBit / 64));
-                c.Budget.CheckDeadlineNow();
-                BigInteger chunk = (y >> (int)(top - len)) & ((BigInteger.One << len) - 1);
-                r = BigOps.ModPow(c, r, BigInteger.One << len, m, len * perBit);   // past LongWork each call runs under BigOps
-                if (!chunk.IsZero)
-                    r = Mod(c, BigOps.Multiply(c, r, BigOps.ModPow(c, b, chunk, m, len * perBit)), m);
-            }
-            return r;
-        }
-
-        // x mod m for x >= 0, m > 0, deadline-bounded.
-        private static BigInteger Mod(EvalContext c, BigInteger x, BigInteger m)
-        {
-            BigInteger r;
-            BigOps.DivRem(c, x, m, out r);
-            return r;
+            long work = NumericOps.BitLength(y) * words * words;
+            if (work > ModPowChargedWork)
+                c.Budget.Step((int)Math.Min(int.MaxValue, 1 + 2 * work / 64));
+            return BigOps.ModPow(c, b, y, m, work);
         }
 
         // Extended Euclid; false when gcd(a, m) != 1. Result is in [0, m). A step and a deadline check per

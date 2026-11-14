@@ -12,6 +12,8 @@ namespace Outbridge.PyLite.Syntax.Ast
     {
         public readonly IReadOnlyList<ExprNode> Targets;
         public readonly ExprNode Value;
+        internal bool InClassBody;   // a class body's value hoisted before its class statement (the parser's)
+        internal string AnnotatedName;   // `x: int = 1` of a simple name (PEP 526): global and nonlocal check it
         public AssignNode(SourceInfo src, IReadOnlyList<ExprNode> targets, ExprNode value) : base(src, NodeKind.Assign)
         {
             Targets = targets; Value = value;
@@ -35,7 +37,11 @@ namespace Outbridge.PyLite.Syntax.Ast
         public DelNode(SourceInfo src, IReadOnlyList<ExprNode> targets) : base(src, NodeKind.Del) { Targets = targets; }
     }
 
-    public sealed class PassNode : StmtNode { public PassNode(SourceInfo src) : base(src, NodeKind.Pass) { } }
+    public sealed class PassNode : StmtNode
+    {
+        internal string AnnotatedName;   // a bare `x: int` of a simple name: no effect, but global and nonlocal check it
+        public PassNode(SourceInfo src) : base(src, NodeKind.Pass) { }
+    }
     public sealed class BreakNode : StmtNode { public BreakNode(SourceInfo src) : base(src, NodeKind.Break) { } }
     public sealed class ContinueNode : StmtNode { public ContinueNode(SourceInfo src) : base(src, NodeKind.Continue) { } }
 

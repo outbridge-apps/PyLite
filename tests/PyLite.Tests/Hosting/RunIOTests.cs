@@ -47,8 +47,9 @@ namespace Outbridge.PyLite.Tests.Hosting
             string atLimit = new string('7', RunIO.MaxNumericLiteralDigits);
             Assert.Equal("int", RunIO.CoerceScalar(atLimit, ctx).PyTypeName);
             Assert.Equal("int", RunIO.CoerceScalar("-" + atLimit, ctx).PyTypeName);
-            Assert.Equal("int", RunIO.CoerceScalar(atLimit + "7", ctx).PyTypeName);   // the +1 is a sign slot, not checked as one
+            Assert.Equal("str", RunIO.CoerceScalar(atLimit + "7", ctx).PyTypeName);   // 4,301 digits: the +1 is the sign's slot only
             Assert.Equal("str", RunIO.CoerceScalar(atLimit + "77", ctx).PyTypeName);
+            Assert.Equal("str", RunIO.CoerceScalar("1\0", ctx).PyTypeName);
         }
 
         [Theory]
@@ -96,9 +97,8 @@ namespace Outbridge.PyLite.Tests.Hosting
         public void AJsonInputThatDoesNotParseIsAHostMarshalFailure()
         {
             var ctx = Rt.Ctx();
-            var env = Outbridge.PyLite.Runtime.Environment.CreateModule(ctx, ctx.Values.Dict(4), HostFunctionTable.CreateDefault(), null);
             var req = new RunRequest { JsonIn = new Dictionary<string, string> { { "j", "{\"a\": [1, 2" } } };
-            var ex = Assert.Throws<HostMarshalFailure>(() => RunIO.PopulateJsonInputs(env, req, ctx));
+            var ex = Assert.Throws<HostMarshalFailure>(() => RunIO.ParseJsonInputs(req, ctx));
             Assert.StartsWith("invalid JSON in input variable 'j': ", ex.Message);
         }
 

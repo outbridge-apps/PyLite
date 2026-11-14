@@ -25,7 +25,6 @@ namespace Outbridge.PyLite.Tests.Builtins
         [InlineData("list(range(5))", "[0, 1, 2, 3, 4]")]
         [InlineData("list(range(2, 10, 3))", "[2, 5, 8]")]
         [InlineData("list(range(5, 0, -2))", "[5, 3, 1]")]
-        [InlineData("len(range(10**30))", "1000000000000000000000000000000")]
         [InlineData("10**29 * 2 in range(10**30)", "True")]
         [InlineData("range(10)[3]", "3")]
         [InlineData("range(10)[-1]", "9")]
@@ -40,6 +39,7 @@ namespace Outbridge.PyLite.Tests.Builtins
         [InlineData("range(1, 2, 0)", "range() arg 3 must not be zero")]
         [InlineData("range(1.0)", "'float' object cannot be interpreted as an integer")]
         [InlineData("range(10)[10]", "range object index out of range")]
+        [InlineData("len(range(10**30))", "Python int too large to convert to C ssize_t")]
         public void RangeErrors(string expr, string msg)
         {
             Assert.Equal(msg, Ev.Err("x = " + expr + "\n"));
@@ -118,7 +118,7 @@ namespace Outbridge.PyLite.Tests.Builtins
         }
 
         [Theory]
-        [InlineData("isinstance('a', 1)", "isinstance() arg 2 must be a type or tuple of types")]
+        [InlineData("isinstance('a', 1)", "isinstance() arg 2 must be a type, a tuple of types, or a union")]
         [InlineData("issubclass(1, int)", "issubclass() arg 1 must be a class")]
         public void InstanceCheckErrors(string expr, string msg)
         {
@@ -159,6 +159,39 @@ namespace Outbridge.PyLite.Tests.Builtins
         {
             var r = Ev.Run("r = 0\ntry:\n    1 / 0\nexcept ArithmeticError:\n    r = 1\n");
             Assert.Equal("1", r.Repr("r"));
+        }
+
+        // CPython checks that every item of an except tuple is an exception class before it matches; a nested
+        // tuple is not one. The engine recursed into nested tuples instead: 700,000 levels overflowed the stack.
+        [Theory]
+        [InlineData("(ValueError, KeyError)", "'caught'")]
+        [InlineData("(KeyError,) * 100000", "'caught'")]
+        [InlineData("(KeyError, (ValueError,))", "'TypeError'")]
+        [InlineData("(KeyError, 1)", "'TypeError'")]
+        [InlineData("1", "'TypeError'")]
+        public void AnExceptTupleHoldsExceptionClassesOnly(string handler, string expected)
+        {
+            string src = "t = " + handler + "\ntry:\n    try:\n        raise KeyError('k')\n    except t:\n        r = 'caught'\n"
+                + "except TypeError:\n    r = 'TypeError'\n";
+            Assert.Equal(expected, Ev.Run(src).Repr("r"));
+        }
+
+        // isinstance counted every nested tuple it visited against a limit of 16, so (int,) followed by twenty
+        // sibling tuples was a RecursionError; the limit is on the nesting.
+        [Fact]
+        public void IsinstanceTakesAnyNumberOfSiblingTuples()
+        {
+            var r = Ev.Run("t = tuple((str,) for _ in range(20))\n"
+                + "r = (isinstance(1, (int,) + t), isinstance(1.5, t + (float,)), isinstance(1, t), issubclass(bool, t + (int,)))\n");
+            Assert.Equal("(True, True, False, True)", r.Repr("r"));
+            Assert.Same(PyExceptionTypes.RecursionError, Ev.ErrType("t = int\nfor i in range(300):\n    t = (t,)\nisinstance(1, t)\n"));
+        }
+
+        // An unbound slot (str.lower) was a new function per access; it is now one per type and slot.
+        [Fact]
+        public void AnUnboundSlotIsOneObject()
+        {
+            Assert.Equal("(True, ['a', 'B'])", Ev.Run("r = (str.lower is str.lower, sorted(['B', 'a'], key=str.lower))\n").Repr("r"));
         }
     }
 }

@@ -143,7 +143,21 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData("x = ET.fromstring('<a>t<b>u</b>v</a>')\nr = list(x.find('b').itertext())", "['u']")]
         [InlineData("r = list(ET.Element('n').itertext())", "[]")]
         [InlineData("x = ET.fromstring('<a><b/></a>')\nr = list(x.itertext())", "[]")]
+        [InlineData("x = ET.Element('a')\nx.text = ''\nb = ET.SubElement(x, 'b')\nb.tail = ''\nr = list(x.itertext())", "[]")]   // only true texts, as CPython
         public void IterText(string body, string expected)
+        {
+            Assert.Equal(expected, Body(body));
+        }
+
+        // find/iterfind/iter/itertext are lazy and read children live, as CPython's generators do; '..' maps a
+        // child shared by several parents to the last of them in document order (CPython's parent map).
+        [Theory]
+        [InlineData("x = ET.fromstring('<r><a/><b/></r>')\nit = x.iterfind('*')\nn = next(it).tag\nx.remove(x[1])\nr = (n, [e.tag for e in it])", "('a', [])")]
+        [InlineData("x = ET.fromstring('<r><a/><b/></r>')\nit = x.iter()\nn = next(it).tag\nx.append(ET.Element('z'))\nr = (n, [e.tag for e in it])", "('r', ['a', 'b', 'z'])")]
+        [InlineData("p1 = ET.Element('p1')\np2 = ET.SubElement(p1, 'p2')\nc = ET.Element('c')\np1.append(c)\np2.append(c)\nr = [e.tag for e in p1.findall('.//c/..')]", "['p2']")]
+        [InlineData("q1 = ET.Element('q1')\nd = ET.Element('d')\nq1.append(d)\nq2 = ET.SubElement(q1, 'q2')\nq2.append(d)\nr = [e.tag for e in q1.findall('.//d/..')]", "['q2']")]
+        [InlineData("x = ET.fromstring('<r><a x=\"1\">t1<b>u</b>v</a><a>t2<b n=\"2\">w</b><b>q</b></a><c><a><b/></a></c></r>')\nr = ([e.tag for e in x.findall('./a/b[1]')], [e.text for e in x.findall('a/b[last()]')], [e.tag for e in x.findall('.//b/..')], [e.tag for e in x.findall(\".//a[b='u']\")], [e.tag for e in x.findall('*/*/b')], [e.tag for e in x.findall('a/b/../..')], len(list(x.iterfind('.//b'))))", "(['b', 'b'], ['u', 'q'], ['a', 'a', 'a'], ['a'], ['b'], ['r'], 4)")]
+        public void LazyWalksReadChildrenLive(string body, string expected)
         {
             Assert.Equal(expected, Body(body));
         }
@@ -160,7 +174,7 @@ namespace Outbridge.PyLite.Tests.Modules
         [InlineData(Nodes + "r = (r[0].tag is ET.Comment, r[1].tag is ET.ProcessingInstruction)", "(True, True)")]
         [InlineData(Nodes + "r = [e.tag for e in r.findall('x')]", "['x']")]
         [InlineData(Nodes + "r = len(list(r.iter()))", "4")]
-        [InlineData(Nodes + "r = ''.join(r.itertext())", "'v'")]
+        [InlineData(Nodes + "r = ''.join(r.itertext())", "' note php echov'")]   // CPython's C iterator reads no tag
         [InlineData("c = ET.Comment('t')\nr = (c.text, len(c), c.attrib)", "('t', 0, {})")]
         [InlineData("r = ET.tostring(ET.Comment('a<b'), encoding='unicode')", "'<!--a<b-->'")]
         [InlineData("r = ET.tostring(ET.ProcessingInstruction('t'), encoding='unicode')", "'<?t?>'")]

@@ -1,7 +1,5 @@
-using System;
 using System.Collections.Generic;
 using Outbridge.PyLite.Runtime.Errors;
-using Outbridge.PyLite.Runtime.Evaluator;
 using Outbridge.PyLite.Modules.Support;
 
 namespace Outbridge.PyLite.Runtime.Values

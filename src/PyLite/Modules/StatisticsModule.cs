@@ -16,25 +16,32 @@ namespace Outbridge.PyLite.Modules
         {
             var m = new Dictionary<string, ScriptValue>(StringComparer.Ordinal)
             {
-                ["mean"] = Fn("mean", (c, a) => Mean(c, Arg(c, a, 0))),
+                ["mean"] = Fn("mean", (c, a) => Mean(c, Arg(c, a, 0)), "data"),
                 ["variance"] = KwFn("variance", "xbar", (c, a) => Variance(c, Arg(c, a, 0), Opt(a, 1), true)),
                 ["pvariance"] = KwFn("pvariance", "mu", (c, a) => Variance(c, Arg(c, a, 0), Opt(a, 1), false)),
                 ["stdev"] = KwFn("stdev", "xbar", (c, a) => Stdev(c, Arg(c, a, 0), Opt(a, 1), true)),
                 ["pstdev"] = KwFn("pstdev", "mu", (c, a) => Stdev(c, Arg(c, a, 0), Opt(a, 1), false)),
-                ["median"] = Fn("median", (c, a) => Median(c, Arg(c, a, 0))),
-                ["median_low"] = Fn("median_low", (c, a) => MedianLowHigh(c, Arg(c, a, 0), false)),
-                ["median_high"] = Fn("median_high", (c, a) => MedianLowHigh(c, Arg(c, a, 0), true)),
+                ["median"] = Fn("median", (c, a) => Median(c, Arg(c, a, 0)), "data"),
+                ["median_low"] = Fn("median_low", (c, a) => MedianLowHigh(c, Arg(c, a, 0), false), "data"),
+                ["median_high"] = Fn("median_high", (c, a) => MedianLowHigh(c, Arg(c, a, 0), true), "data"),
                 ["median_grouped"] = KwFn("median_grouped", "interval", (c, a) => MedianGrouped(c, Arg(c, a, 0), Opt(a, 1))),
-                ["mode"] = Fn("mode", (c, a) => Mode(c, Arg(c, a, 0))),
+                ["mode"] = Fn("mode", (c, a) => Mode(c, Arg(c, a, 0)), "data"),
                 ["StatisticsError"] = ModuleKit.ExceptionClass(PyExceptionTypes.StatisticsError),
             };
             AddModern(ctx, m);
             return ctx.Values.Module("statistics", m);
         }
 
-        private static BuiltinFunctionValue Fn(string name, Func<EvalContext, ScriptValue[], ScriptValue> f)
+        // A Python function's surface: its parameters positional or by name, and no argument beyond them.
+        private static BuiltinFunctionValue Fn(string name, Func<EvalContext, ScriptValue[], ScriptValue> f, params string[] names)
         {
-            return BuiltinFunctionValue.Make(name, (self, args, kw, c) => f(c, args));
+            return BuiltinFunctionValue.Make(name, (self, args, kw, c) =>
+            {
+                if (args.Length > names.Length)
+                    throw Raise.TypeError(c, name + "() takes " + names.Length + " positional argument"
+                        + (names.Length == 1 ? "" : "s") + " but " + args.Length + " were given");
+                return f(c, StrMethods.WithKw(c, args, kw, name, names));
+            });
         }
 
         // (data, <second>) where the second parameter may also be passed by its keyword name.
@@ -78,7 +85,7 @@ namespace Outbridge.PyLite.Modules
                 + (info.SawFloat ? "float" : "Fraction") + " and Decimal");
         }
 
-        // CPython's _sum (P14): numerators accumulate per denominator, so an element costs an integer add, not
+        // CPython's _sum: numerators accumulate per denominator, so an element costs an integer add, not
         // a Fraction with its gcd; the few partials become one Fraction at the end. Exact, like the old way.
         private static SumInfo Sum(EvalContext ctx, List<ScriptValue> data)
         {
@@ -96,6 +103,12 @@ namespace Outbridge.PyLite.Modules
             return info;
         }
 
+        // num * num; a machine-size one, nearly every element, skips BigOps' two size checks.
+        private static BigInteger Square(EvalContext ctx, BigInteger num)
+        {
+            return num >= long.MinValue && num <= long.MaxValue ? num * num : BigOps.Multiply(ctx, num, num);
+        }
+
         private static void AddPartial(Dictionary<BigInteger, BigInteger> partials, BigInteger den, BigInteger num)
         {
             BigInteger acc;
@@ -109,7 +122,7 @@ namespace Outbridge.PyLite.Modules
             FractionValue total = FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);
             foreach (KeyValuePair<BigInteger, BigInteger> kv in partials)
             {
-                FractionValue part = FractionValue.Create(ctx, kv.Value, squaredDen ? kv.Key * kv.Key : kv.Key);
+                FractionValue part = FractionValue.Create(ctx, kv.Value, squaredDen ? BigOps.Multiply(ctx, kv.Key, kv.Key) : kv.Key);
                 total = (FractionValue)PyOps.BinaryOp(PyBinOp.Add, total, part, ctx);
             }
             return total;
@@ -167,6 +180,8 @@ namespace Outbridge.PyLite.Modules
                 dv.Coeff(out num, out exp, out neg);
                 if (neg)
                     num = -num;
+                if (num.IsZero)
+                    return true;   // 0/1 whatever the exponent, which a zero may carry up to ±10^9
                 if (exp >= 0)
                     num *= BigInteger.Pow(10, exp);
                 else
@@ -226,32 +241,66 @@ namespace Outbridge.PyLite.Modules
 
         private static ScriptValue Variance(EvalContext ctx, ScriptValue data, ScriptValue center, bool sample)
         {
+            SumInfo flags;
+            FractionValue result = MeanSquare(ctx, data, center, sample, sample ? "variance" : "pvariance", out flags);
+            if (flags.Dirty)
+                return ctx.Values.Float(NumericOps.PyNaN);
+            return Convert(ctx, result, flags);
+        }
+
+        // The mean squared deviation as an exact Fraction (null when a NaN or infinity was met).
+        private static FractionValue MeanSquare(EvalContext ctx, ScriptValue data, ScriptValue center, bool sample,
+            string name, out SumInfo flags)
+        {
             List<ScriptValue> lst = Materialize(ctx, data);
             int n = lst.Count;
             if (sample && n < 2)
-                throw Raise.Make(ctx, PyExceptionTypes.StatisticsError, "variance requires at least two data points");
+                throw Raise.Make(ctx, PyExceptionTypes.StatisticsError, name + " requires at least two data points");
             if (!sample && n < 1)
-                throw Raise.Make(ctx, PyExceptionTypes.StatisticsError, "pvariance requires at least one data point");
+                throw Raise.Make(ctx, PyExceptionTypes.StatisticsError, name + " requires at least one data point");
 
-            SumInfo flags;
             FractionValue ss = SumSquares(ctx, lst, center, out flags);
             if (flags.Dirty)
-                return ctx.Values.Float(double.NaN);
+                return null;
             int divisor = sample ? n - 1 : n;
-            FractionValue result = (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, ss, ctx.Values.Int(divisor), ctx);
-            return Convert(ctx, result, flags);
+            return (FractionValue)PyOps.BinaryOp(PyBinOp.TrueDiv, ss, ctx.Values.Int(divisor), ctx);
         }
 
         private static ScriptValue Stdev(EvalContext ctx, ScriptValue data, ScriptValue center, bool sample)
         {
-            ScriptValue v = Variance(ctx, data, center, sample);
-            DecimalValue dv = v as DecimalValue;
-            if (dv != null)
-                return DecimalMath.Sqrt(ctx, dv);   // Decimal data keeps a Decimal answer, as in CPython
-            double d = v is FloatValue ? ((FloatValue)v).Value
-                : v is IntValue ? (double)((IntValue)v).Value
-                : ((FractionValue)v).AsDouble(ctx);
-            return ctx.Values.Float(Math.Sqrt(d));
+            SumInfo flags;
+            FractionValue mss = MeanSquare(ctx, data, center, sample, sample ? "stdev" : "pstdev", out flags);
+            if (flags.Dirty)
+                throw Raise.ValueError(ctx, "inf or nan encountered in data");
+            if (flags.SawDecimal)
+                return DecimalMath.Sqrt(ctx, (DecimalValue)Convert(ctx, mss, flags));   // a Decimal answer, as in CPython
+            return SqrtOfFraction(ctx, mss.Num, mss.Den);
+        }
+
+        // CPython's _float_sqrt_of_frac: an integer root of 109 significant bits, rounded to odd, then one
+        // correctly rounded division; Math.Sqrt of the rounded variance was off by an ulp or overflowed.
+        private static ScriptValue SqrtOfFraction(EvalContext ctx, BigInteger n, BigInteger m)
+        {
+            const int Width = 2 * 53 + 3;
+            long q = NumericOps.BitLength(n) - NumericOps.BitLength(m) - Width;
+            q = q >= 0 ? q / 2 : -((1 - q) / 2);
+            BigInteger num, den = BigInteger.One;
+            if (q >= 0)
+            {
+                num = RootRoundToOdd(ctx, n, m << (int)(2 * q)) << (int)q;
+            }
+            else
+            {
+                num = RootRoundToOdd(ctx, n << (int)(-2 * q), m);
+                den <<= (int)-q;
+            }
+            return PyOps.BinaryOp(PyBinOp.TrueDiv, ctx.Values.Int(num), ctx.Values.Int(den), ctx);
+        }
+
+        private static BigInteger RootRoundToOdd(EvalContext ctx, BigInteger n, BigInteger m)
+        {
+            BigInteger a = MathModule.IntegerSqrt(ctx, BigOps.Divide(ctx, n, m));
+            return BigOps.Multiply(ctx, BigOps.Multiply(ctx, a, a), m) != n ? a | BigInteger.One : a;
         }
 
         // sum((x-c)^2) - sum(x-c)^2/n, in exact Fraction (port of _ss).
@@ -271,7 +320,7 @@ namespace Outbridge.PyLite.Modules
             }
             else
             {
-                // CPython 3.12's _ss (P14): one pass of value and square partials per denominator; then
+                // CPython 3.12's _ss: one pass of value and square partials per denominator; then
                 // (n*sxx - sx*sx)/n, which is the sum of squared deviations from the mean exactly.
                 var sx = new Dictionary<BigInteger, BigInteger>();
                 var sxx = new Dictionary<BigInteger, BigInteger>();
@@ -282,7 +331,7 @@ namespace Outbridge.PyLite.Modules
                     if (!ExactPair(ctx, x, out num, out den, ref flags))
                         continue;   // non-finite: Dirty is set, the rest still type-checks
                     AddPartial(sx, den, num);
-                    AddPartial(sxx, den, num * num);
+                    AddPartial(sxx, den, Square(ctx, num));
                 }
                 if (flags.Dirty)
                     return FractionValue.Create(ctx, BigInteger.Zero, BigInteger.One);

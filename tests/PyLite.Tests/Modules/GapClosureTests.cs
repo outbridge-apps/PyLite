@@ -54,6 +54,17 @@ namespace Outbridge.PyLite.Tests.Modern
             Assert.Equal("(None, None)", R("e = ValueError('x')\nr = (e.__cause__, e.__context__)\n"));
         }
 
+        // `raise ... from X` (X None or an exception) sets __suppress_context__; an implicit chain does not.
+        [Theory]
+        [InlineData("e = ValueError('x')\nr = e.__suppress_context__\n", "False")]
+        [InlineData("try:\n raise ValueError('a') from None\nexcept ValueError as e:\n r = (e.__suppress_context__, e.__cause__)\n", "(True, None)")]
+        [InlineData("try:\n raise ValueError('a') from KeyError('k')\nexcept ValueError as e:\n r = e.__suppress_context__\n", "True")]
+        [InlineData("try:\n try:\n  1 / 0\n except ZeroDivisionError:\n  raise KeyError('b')\nexcept KeyError as e:\n r = e.__suppress_context__\n", "False")]
+        public void SuppressContextExposed(string src, string expected)
+        {
+            Assert.Equal(expected, R(src));
+        }
+
         [Fact]
         public void ImplicitContextChain()
         {
@@ -395,7 +406,7 @@ namespace Outbridge.PyLite.Tests.Modern
         [InlineData("setattr('a', 'upper', 3)\n", "AttributeError", "attribute 'upper' of 'str' objects is not writable")]
         [InlineData("import math\nsetattr(math, 'pi', 3)\n", "AttributeError", "module 'math' is read-only in this environment")]
         [InlineData("from dataclasses import dataclass\n@dataclass(frozen=True)\nclass F:\n    v: int\nsetattr(F(1), 'v', 2)\n",
-            "AttributeError", "cannot assign to field 'v'")]
+            "FrozenInstanceError", "cannot assign to field 'v'")]
         public void AttrBuiltinErrors(string src, string excType, string message)
         {
             ExceptionValue e = Err(src);

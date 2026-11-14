@@ -68,7 +68,7 @@ namespace Outbridge.PyLite.Tests.Hosting
         {
             RunResult r = Engine.Run(statement + "\n", null);
             Assert.Equal(ScriptErrorKind.RuntimeError, r.Error.Kind);
-            Assert.Equal("ImportError", r.Error.PythonType);
+            Assert.Equal("ModuleNotFoundError", r.Error.PythonType);
         }
     }
 }

@@ -55,6 +55,7 @@ namespace Outbridge.PyLite.Runtime.Errors
 
         // copy.Error — a direct subclass of Exception, exposed only as `copy.Error`.
         public static readonly PyExceptionType CopyError;
+        public static readonly PyExceptionType FrozenInstanceError;   // dataclasses.FrozenInstanceError
 
         // SyntaxError exists for scripts to NAME - `except (ValueError, SyntaxError)` is ordinary portable
         // code - and as ParseError's parent, exactly as in CPython. The engine's own compile errors are
@@ -80,6 +81,16 @@ namespace Outbridge.PyLite.Runtime.Errors
         public static readonly PyExceptionType BadZipFile;
         public static readonly PyExceptionType LargeZipFile;
         public static readonly PyExceptionType EOFError;
+        public static readonly PyExceptionType ModuleNotFoundError;
+        public static readonly PyExceptionType TimeoutError;
+        public static readonly PyExceptionType FileNotFoundError;
+        public static readonly PyExceptionType PermissionError;
+        public static readonly PyExceptionType ConnectionError;
+        public static readonly PyExceptionType BufferError;
+        public static readonly PyExceptionType ReferenceError;
+        public static readonly PyExceptionType SystemError;
+        public static readonly PyExceptionType Warning;
+        public static readonly PyExceptionType UserWarning;
 
         private static readonly PyExceptionType[] AllArr;
         private static readonly Dictionary<string, PyExceptionType> ByName;
@@ -112,13 +123,14 @@ namespace Outbridge.PyLite.Runtime.Errors
             UnicodeEncodeError = new PyExceptionType("UnicodeEncodeError", UnicodeError);
             StatisticsError = new PyExceptionType("StatisticsError", ValueError);
             JSONDecodeError = new PyExceptionType("JSONDecodeError", ValueError);
-            ReError = new PyExceptionType("error", Exception_);   // re.error
+            ReError = new PyExceptionType("PatternError", Exception_);   // re.PatternError, re.error since 3.13
             DecimalException = new PyExceptionType("DecimalException", ArithmeticError);
             DecimalInvalidOperation = new PyExceptionType("InvalidOperation", DecimalException);
-            DecimalDivisionByZero = new PyExceptionType("DivisionByZero", DecimalException);
+            DecimalDivisionByZero = new PyExceptionType("DivisionByZero", DecimalException) { Also = ZeroDivisionError };
             DecimalOverflow = new PyExceptionType("Overflow", DecimalException);
             DecimalUnderflow = new PyExceptionType("Underflow", DecimalException);
             CopyError = new PyExceptionType("Error", Exception_);   // copy.Error
+            FrozenInstanceError = new PyExceptionType("FrozenInstanceError", AttributeError);
             SyntaxError = new PyExceptionType("SyntaxError", Exception_);
             XmlParseError = new PyExceptionType("ParseError", SyntaxError);   // xml ParseError
             BinasciiError = new PyExceptionType("Error", ValueError);       // binascii.Error
@@ -129,6 +141,17 @@ namespace Outbridge.PyLite.Runtime.Errors
             BadZipFile = new PyExceptionType("BadZipFile", Exception_);     // zipfile.BadZipFile
             LargeZipFile = new PyExceptionType("LargeZipFile", Exception_); // zipfile.LargeZipFile
             EOFError = new PyExceptionType("EOFError", Exception_);
+            // the rest of CPython's builtin tree a script names in an except clause; nothing here raises the OS ones
+            ModuleNotFoundError = new PyExceptionType("ModuleNotFoundError", ImportError);
+            TimeoutError = new PyExceptionType("TimeoutError", OSError);
+            FileNotFoundError = new PyExceptionType("FileNotFoundError", OSError);
+            PermissionError = new PyExceptionType("PermissionError", OSError);
+            ConnectionError = new PyExceptionType("ConnectionError", OSError);
+            BufferError = new PyExceptionType("BufferError", Exception_);
+            ReferenceError = new PyExceptionType("ReferenceError", Exception_);
+            SystemError = new PyExceptionType("SystemError", Exception_);
+            Warning = new PyExceptionType("Warning", Exception_);
+            UserWarning = new PyExceptionType("UserWarning", Warning);
             ZoneInfoNotFoundError = new PyExceptionType("ZoneInfoNotFoundError", KeyError);   // zoneinfo
             IllegalMonthError = new PyExceptionType("IllegalMonthError", ValueError);          // calendar
             IllegalWeekdayError = new PyExceptionType("IllegalWeekdayError", ValueError);      // calendar
@@ -139,11 +162,15 @@ namespace Outbridge.PyLite.Runtime.Errors
                 FloatingPointError, AssertionError, AttributeError, ImportError, OSError, LookupError,
                 IndexError, KeyError, NameError, UnboundLocalError, RuntimeError, RecursionError,
                 NotImplementedError, StopIteration, TypeError, ValueError, UnicodeError, UnicodeDecodeError,
-                UnicodeEncodeError, StatisticsError, JSONDecodeError, SyntaxError, EOFError
+                UnicodeEncodeError, StatisticsError, JSONDecodeError, SyntaxError, EOFError, ModuleNotFoundError,
+                TimeoutError, FileNotFoundError, PermissionError, ConnectionError, BufferError, ReferenceError,
+                SystemError, Warning, UserWarning
             };
             ByName = new Dictionary<string, PyExceptionType>(StringComparer.Ordinal);
             foreach (PyExceptionType t in AllArr)
                 ByName[t.Name] = t;
+            ByName["IOError"] = OSError;            // aliases of OSError since 3.3
+            ByName["EnvironmentError"] = OSError;
         }
 
         public static PyExceptionType GetByName(string name)

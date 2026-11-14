@@ -14,6 +14,7 @@ namespace Outbridge.PyLite.Syntax
                 if (_pendingAtom == null && _cur.Kind == TokenKind.Name && Peek2().Kind == TokenKind.ColonEqual)
                 {
                     Token nm = Take();
+                    ForbidDebug(nm.Text, Src(nm));
                     Take();   // ':='
                     ExprNode val = ParseTest();
                     return new NamedExprNode(Src(nm), new NameNode(Src(nm), nm.Text), val);
@@ -26,7 +27,11 @@ namespace Outbridge.PyLite.Syntax
                 {
                     Take();
                     ExprNode test = ParseOrTest();
-                    Expect(TokenKind.KwElse, "'else' in conditional expression");
+                    if (_cur.Kind != TokenKind.KwElse)
+                        throw _cur.Kind == TokenKind.Colon ? Unexpected(false) : ErrorAtSrc(body.Src, "expected 'else' after 'if' expression");
+                    Take();
+                    if (!StartsOperand(_cur.Kind))
+                        throw Error("expected expression after 'else', but statement is given");
                     ExprNode orelse = ParseTest();
                     return new IfExpNode(body.Src, body, test, orelse);
                 }
@@ -42,12 +47,16 @@ namespace Outbridge.PyLite.Syntax
         private ExprNode ParseOrTest()
         {
             ExprNode left = ParseAndTest();
-            if (_cur.Kind != TokenKind.KwOr)
-                return left;
-            var values = new List<ExprNode> { left };
-            while (Match(TokenKind.KwOr))
-                values.Add(ParseAndTest());
-            return new BoolOpNode(left.Src, BoolOp.Or, AstList.Freeze(values));
+            if (_cur.Kind == TokenKind.KwOr)
+            {
+                var values = new List<ExprNode> { left };
+                while (Match(TokenKind.KwOr))
+                    values.Add(ParseAndTest());
+                left = new BoolOpNode(left.Src, BoolOp.Or, AstList.Freeze(values));
+            }
+            _disj = left;
+            _disjNext = _cur;
+            return left;
         }
 
         private ExprNode ParseAndTest()

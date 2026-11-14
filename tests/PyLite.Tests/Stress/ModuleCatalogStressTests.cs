@@ -73,7 +73,8 @@ namespace Outbridge.PyLite.Tests.Stress
         [Fact]
         public void Textwrap_WrapMegabytes()
         {
-            AssertKind("import textwrap\nr = textwrap.wrap('word ' * 800000, width=70)\n", ScriptErrorKind.BudgetExceeded);
+            // the deadline or a result: warm, it fits 3 s since wrap stopped keeping every regex Match
+            AssertNoLeak("import textwrap\nr = textwrap.wrap('word ' * 800000, width=70)\n");
         }
 
         [Fact]
@@ -84,8 +85,8 @@ namespace Outbridge.PyLite.Tests.Stress
 
         // ---- unicodedata ----
 
-        // NormalizeString is quadratic in the length of one call: 256K expanding characters cost 11s.
-        // Chunking keeps it linear, and the result still has to fit MaxStrChars.
+        // The normalizer is linear (the OS's NormalizeString was quadratic in one call: 256K expanding
+        // characters cost 11 s), and the result still has to fit MaxStrChars.
         [Fact]
         public void Unicodedata_NormalizeExpansionBomb()
         {
@@ -95,15 +96,17 @@ namespace Outbridge.PyLite.Tests.Stress
             Assert.True(sw.ElapsedMilliseconds < 20000, "deadline overrun: " + sw.ElapsedMilliseconds + "ms");
         }
 
-        // A base character followed by thousands of marks has no safe break point, and reordering it is
-        // quadratic in the BCL, so it is refused rather than run (a documented divergence).
+        // A base character followed by 100,000 marks: the run is sorted, not inserted, so it normalizes as
+        // in CPython (the OS's reordering was quadratic and the old chunker refused it).
         [Fact]
-        public void Unicodedata_CombiningRunRefused()
+        public void Unicodedata_CombiningRunNormalizes()
         {
             var sw = Stopwatch.StartNew();
-            AssertKind("import unicodedata\nr = unicodedata.normalize('NFC', 'a' + (chr(0x334) + chr(0x301)) * 50000)\n",
-                ScriptErrorKind.RuntimeError);
-            Assert.True(sw.ElapsedMilliseconds < 10000, "refusal took " + sw.ElapsedMilliseconds + "ms");
+            RunResult r = RunGuarded("import unicodedata\n"
+                + "r = unicodedata.normalize('NFC', 'a' + (chr(0x334) + chr(0x301)) * 50000)\n"
+                + "assert r[0] == chr(0xE1) and len(r) == 100000\n");
+            Assert.True(r.Succeeded, r.Error != null ? r.Error.Message : "");
+            Assert.True(sw.ElapsedMilliseconds < 10000, "took " + sw.ElapsedMilliseconds + "ms");
         }
 
         // Ordinary text of the same size must still normalize well inside the deadline.

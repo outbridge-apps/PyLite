@@ -8,8 +8,13 @@ namespace Outbridge.PyLite.Runtime.Values
     // What io.StringIO and io.BytesIO share: the position, the closed state, the context-manager and line
     // protocols, and the methods whose bodies do not depend on the element type. Each kind adds its buffer,
     // getvalue/write/read/readline/seek, and CPython's own wording, which differs between the two.
-    internal abstract class MemoryFileValue : ScriptValue, ILineFile, IContextManager
+    internal abstract class MemoryFileValue : ScriptValue, ILineFile, IContextManager, Modules.IScriptCopyable
     {
+        public abstract ScriptValue CopyShallow(EvalContext ctx);
+        public ScriptValue EmptyClone(EvalContext ctx) { return CopyShallow(ctx); }
+        public IReadOnlyList<ScriptValue> DeepChildren() { return Array.Empty<ScriptValue>(); }
+        public void FillClone(EvalContext ctx, ScriptValue clone, Func<ScriptValue, ScriptValue> copyOf) { }
+
         protected long Pos;   // a BytesIO position may sit past the end: a later write pads the gap
         protected bool IsClosed;
 

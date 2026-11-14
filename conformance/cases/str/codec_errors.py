@@ -51,7 +51,7 @@ try:
     b'\x00\xd8'.decode('utf-16-le')
     assert False
 except UnicodeDecodeError as e:
-    assert str(e) == "'utf-16-le' codec can't decode bytes in position 0-1: illegal encoding"
+    assert str(e) == "'utf-16-le' codec can't decode bytes in position 0-1: unexpected end of data"
 assert '\ud800'.encode('utf-16-le', 'replace') == b'?\x00'   # the replacement is re-encoded as units
 assert '\U0001f600'.encode('utf-16-le').decode('utf-16-le') == '\U0001f600'   # valid pairs are untouched
 
