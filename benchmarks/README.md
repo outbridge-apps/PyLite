@@ -34,3 +34,4 @@ rather than one number, and why the ratios matter more than the milliseconds.
 | version | where |
 |---|---|
 | 1.1.0 | [results/1.1.0/summary.md](results/1.1.0/summary.md): three passes on the release commit, 2026-10-29 |
+| 1.2.0 | [results/1.2.0/summary.md](results/1.2.0/summary.md): three passes on the release commit, 2026-11-15, the same machine as 1.1.0 |

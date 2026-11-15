@@ -12,8 +12,9 @@ has to be able to run it too. Each benchmark is warmed up three times and then m
 times; a run reports the median of those fifteen.
 
 The whole set was run three times end to end, each pass in a fresh process, on the release commit of
-version 1.1.0; every sample, the allocations and the per-pass medians are in
-[benchmarks/results/1.1.0](../benchmarks/results/1.1.0/summary.md). The table gives the range across
+version 1.2.0; every sample, the allocations and the per-pass medians are in
+[benchmarks/results/1.2.0](../benchmarks/results/1.2.0/summary.md), and the 1.1.0 passes, on the same
+machine, in [benchmarks/results/1.1.0](../benchmarks/results/1.1.0/summary.md). The table gives the range across
 those three passes, not a single number, because a single run on this hardware is not reproducible:
 between two runs of unchanged code, individual benchmarks moved by up to a factor of two. Where the
 three passes disagree even about the direction, the verdict says so instead of inventing a multiple.
@@ -40,8 +41,8 @@ and reuses it pays it once.
 
 | | PyLite | IronPython 3.4.2 | |
 |---|---:|---:|---|
-| first run in a fresh process (JIT included) | 0.40–1.16 s | 3.1–4.8 s | ×4.2–7.6 faster |
-| new engine in a warm process | 0.53–0.65 ms | 120–122 ms | ×187–226 faster |
+| first run in a fresh process (JIT included) | 0.39–0.96 s | 3.0–4.5 s | ×4.7–7.7 faster |
+| new engine in a warm process | 0.50–0.61 ms | 91–114 ms | ×166–228 faster |
 
 The gap is structural rather than clever: IronPython stands up the DLR and its own compilation
 pipeline, PyLite allocates an object graph. The first row is one sample per run, so treat it as an
@@ -51,46 +52,49 @@ order of magnitude.
 
 | workload | PyLite | IronPython | verdict |
 |---|---:|---:|---|
-| money arithmetic in `decimal`: divide, multiply, quantize to cents, accumulate (5,000) | 30–34 ms | 2.18–2.21 s | **×65–73 faster** |
-| serialise, parse and total 10,000 JSON orders | 159–167 ms | 2.14–2.20 s | **×13–14 faster** |
-| write and read back 7,500 CSV rows | 79–80 ms | 198–209 ms | ×2.5–2.6 faster |
-| integer arithmetic in a loop (1,000,000) | 536–562 ms | 1.01–1.05 s | ×1.86–1.89 faster |
-| list comprehension with a filter (500,000) | 101–113 ms | 191–221 ms | ×1.84–1.95 faster |
-| dictionary insert and read-back (200,000) | 296–323 ms | 424–449 ms | ×1.33–1.51 faster |
-| calling a function in a loop (500,000) | 239–272 ms | 344–375 ms | ×1.27–1.52 faster |
-| parse 15,000 delimited lines into a report | 79–93 ms | 92–99 ms | ×1.07–1.18 faster |
-| datetime arithmetic and weekday filter (25,000) | 55–60 ms | 54–55 ms | about equal |
-| compile a regex and scan 10,000 log lines | 46–48 ms | 44–45 ms | about equal |
-| `sorted` with a `key` lambda (100,000) | 79–86 ms | 58–73 ms | ×1.08–1.36 slower |
-| build and join 100,000 strings | 174–226 ms | 155–162 ms | ×1.1–1.46 slower |
+| money arithmetic in `decimal`: divide, multiply, quantize to cents, accumulate (5,000) | 27–33 ms | 2.11–2.22 s | **×66–78 faster** |
+| serialise, parse and total 10,000 JSON orders | 122–137 ms | 2.07–2.17 s | **×15–18 faster** |
+| write and read back 7,500 CSV rows | 46–51 ms | 198–204 ms | ×4.0–4.5 faster |
+| list comprehension with a filter (500,000) | 90–101 ms | 175–255 ms | ×1.9–2.5 faster |
+| integer arithmetic in a loop (1,000,000) | 547–556 ms | 0.99–1.00 s | ×1.77–1.83 faster |
+| dictionary insert and read-back (200,000) | 243–250 ms | 433–469 ms | ×1.73–1.91 faster |
+| calling a function in a loop (500,000) | 254–264 ms | 352–368 ms | ×1.33–1.45 faster |
+| parse 15,000 delimited lines into a report | 75–84 ms | 92–96 ms | ×1.1–1.26 faster |
+| build and join 100,000 strings | 142–152 ms | 152–166 ms | ×1.06–1.15 faster |
+| compile a regex and scan 10,000 log lines | 41–46 ms | 42–50 ms | about equal, direction varies |
+| `sorted` with a `key` lambda (100,000) | 65–72 ms | 63–70 ms | about equal, direction varies |
+| datetime arithmetic and weekday filter (25,000) | 57–60 ms | 50–54 ms | ×1.06–1.18 slower |
 
-Against 1.0.0, three rows changed because the code did: `sorted` with a `key` went from ×2.6–3.3
-slower to ×1.08–1.36 (a merge sort that finds the runs already in the data, and keys compared
-without boxing), calling a function from about equal to faster (a one-line `def` now runs on the
-path lambdas use), and JSON from ×8.5–10 to ×13–14 faster.
+Against 1.1.0, on the same machine: of the two rows where PyLite was slower, `sorted` with a `key`
+(×1.08–1.36 then) is now about equal and string joining (×1.1–1.46 slower then) is ×1.06–1.15
+faster; CSV went from ×2.5–2.6 to ×4.0–4.5 faster, JSON from ×13–14 to ×15–18, and the dictionary
+row from ×1.33–1.51 to ×1.73–1.91. Datetime arithmetic went from about equal to ×1.06–1.18 slower,
+although PyLite's own time hardly moved (55–60 ms in 1.1.0, 57–60 ms now): the IronPython passes
+ran a little faster this time (54–55 ms then, 50–54 ms now), and a difference of this size is within
+what this machine moves between runs.
 
-PyLite allocates less than IronPython on seven of the twelve workloads (`decimal` 6.7 MB a run
-against 71 MB, JSON 22 MB against 147 MB) and more on the five that are mostly calls and small
-objects: function calls, the dictionary, string joining, `sorted` with a key and datetime. The
-allocations per run, both engines, are in the summary linked above.
+PyLite allocates less than IronPython on eight of the twelve workloads (`decimal` 6.7 MB a run
+against 71 MB, JSON 17 MB against 147 MB, integer arithmetic 122 MB against 245 MB) and more on the
+four that are mostly calls and small objects: function calls, string joining, `sorted` with a key and
+datetime. Against 1.1.0 it allocates less on eleven of the twelve, and as much on `decimal`: string
+joining 18 MB a run instead of 39, integer arithmetic 122 MB instead of 183. The allocations per run,
+both engines, are in the summaries linked above.
 
 ## Where PyLite loses, and why
 
 IronPython compiles Python to .NET code through the DLR. In a tight loop that calls back into a
-small function — which is exactly what `sorted(key=...)` is — that compiled call beats an
-interpreter's dispatch, and no amount of tuning inside an interpreter closes a gap of that shape.
-The same effect, much weaker, is what the string row shows.
+small function, that compiled call is the stronger shape, and an interpreter's dispatch can only
+narrow the gap: `sorted(key=...)` and string building, where 1.1.0 was slower, now come out equal or
+a little ahead, and datetime arithmetic, the one slower row, is 6–18% behind.
 
 This is the trade the design makes on purpose. An interpreter that never emits code is also an
 interpreter that can count steps, stop on a deadline, cap memory and refuse recursion — the
-properties the host needed in the first place. If your workload is a hot loop over a `key`
-function and nothing about resource limits matters to you, IronPython is the faster tool and this
-table says so.
+properties the host needed in the first place. If your workload is a hot loop and nothing about
+resource limits matters to you, measure it: IronPython may be the faster tool there.
 
 ## What it means in practice
 
 The rows that move by an order of magnitude are the ones integration scripts actually live on:
 money in `decimal`, JSON in and out, and the cost of having an engine at all. The rows where the
-two are within 20% of each other are the ones where the choice does not matter. The two rows
-where PyLite is slower cost 8–46%, on loops that call back into script code or build many small
-strings.
+two are within 20% of each other are the ones where the choice does not matter; the one row where
+PyLite is slower is among them.
